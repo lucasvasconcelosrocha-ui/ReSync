@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
 import com.resync.app.R
+import com.resync.app.data.model.AppBackupStatus
 import com.resync.app.data.model.AppInfo
 import com.resync.app.data.model.AppSelectionOptions
 import com.resync.app.data.model.BackupRecord
@@ -64,6 +65,7 @@ fun AppsListScreen(
     val currentAccent by viewModel.themeAccent.collectAsState()
     val primaryAccent = getAccentColor(currentAccent)
     val activeMode by viewModel.activeMode.collectAsState()
+    val backupStatusMap by viewModel.appBackupStatusMap.collectAsState()
 
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilter by remember { mutableStateOf("Todos") } // "Todos", "Usuário", "Sistema", "Com backup", "Sem backup", "Desatualizados"
@@ -90,6 +92,16 @@ fun AppsListScreen(
         }
     }
 
+    LaunchedEffect(Unit) {
+        viewModel.triggerAppBackupDetection(forceRefreshDrive = true)
+    }
+
+    LaunchedEffect(apps) {
+        if (apps.isNotEmpty()) {
+            viewModel.triggerAppBackupDetection(forceRefreshDrive = false)
+        }
+    }
+
     LaunchedEffect(selectedFilter) {
         if (selectedFilter == "Desatualizados") {
             viewModel.refreshPlayStoreUpdates()
@@ -97,15 +109,17 @@ fun AppsListScreen(
     }
 
     // Sort and filter pipeline
-    val processedApps = remember(apps, searchQuery, selectedFilter, sortBy) {
+    val processedApps = remember(apps, searchQuery, selectedFilter, sortBy, backupStatusMap) {
         val filtered = apps.filter { app ->
             val matchesSearch = app.appName.contains(searchQuery, ignoreCase = true) ||
                     app.packageName.contains(searchQuery, ignoreCase = true)
+            val status = backupStatusMap[app.packageName]
+            val hasBackup = status?.hasBackup ?: app.hasBackup
             val matchesFilter = when (selectedFilter) {
                 "Usuário" -> !app.isSystemApp
                 "Sistema" -> app.isSystemApp
-                "Com backup" -> app.hasBackup
-                "Sem backup" -> !app.hasBackup
+                "Com backup" -> hasBackup
+                "Sem backup" -> !hasBackup
                 "Desatualizados" -> app.isOutdatedBackup
                 else -> true
             }
@@ -116,10 +130,10 @@ fun AppsListScreen(
             "Nome A → Z" -> filtered.sortedBy { it.appName.lowercase() }
             "Nome Z → A" -> filtered.sortedByDescending { it.appName.lowercase() }
             "Tamanho" -> filtered.sortedByDescending { it.sizeBytes }
-            "Data do último backup" -> filtered.sortedByDescending { it.lastBackupDate ?: "" }
+            "Data do último backup" -> filtered.sortedByDescending { backupStatusMap[it.packageName]?.latestTimestamp ?: 0L }
             "Data de instalação" -> filtered.sortedByDescending { it.lastInstallTime }
-            "Com backup" -> filtered.sortedByDescending { it.hasBackup }
-            "Sem backup" -> filtered.sortedBy { it.hasBackup }
+            "Com backup" -> filtered.sortedByDescending { backupStatusMap[it.packageName]?.hasBackup ?: it.hasBackup }
+            "Sem backup" -> filtered.sortedBy { backupStatusMap[it.packageName]?.hasBackup ?: it.hasBackup }
             else -> filtered
         }
     }
@@ -618,6 +632,7 @@ fun AppsListScreen(
                         }
                         AppListItemCard(
                             app = app,
+                            backupStatus = backupStatusMap[app.packageName] ?: AppBackupStatus.none(app.packageName),
                             isMultiSelectMode = isMultiSelectMode,
                             isSelected = selectedPackages.contains(app.packageName),
                             accentColor = primaryAccent,
@@ -677,6 +692,7 @@ fun AppsListScreen(
                         }
                         AppListItemCard(
                             app = app,
+                            backupStatus = backupStatusMap[app.packageName] ?: AppBackupStatus.none(app.packageName),
                             isMultiSelectMode = isMultiSelectMode,
                             isSelected = selectedPackages.contains(app.packageName),
                             accentColor = primaryAccent,
@@ -736,6 +752,7 @@ fun AppsListScreen(
                     }
                     AppListItemCard(
                         app = app,
+                        backupStatus = backupStatusMap[app.packageName] ?: AppBackupStatus.none(app.packageName),
                         isMultiSelectMode = isMultiSelectMode,
                         isSelected = selectedPackages.contains(app.packageName),
                         accentColor = primaryAccent,
@@ -1076,6 +1093,7 @@ private fun SectionHeader(
 @Composable
 fun AppListItemCard(
     app: AppInfo,
+    backupStatus: AppBackupStatus,
     isMultiSelectMode: Boolean,
     isSelected: Boolean,
     accentColor: Color,
@@ -1213,10 +1231,14 @@ fun AppListItemCard(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        val hasBackup = backupStatus.hasBackup
+                        val backupText = if (hasBackup) backupStatus.formattedText else "Sem backup"
+                        val backupTextColor = if (hasBackup) StatusSuccess else TextMuted
+
                         Text(
-                            text = if (app.hasBackup) "Último: ${app.lastBackupDate ?: "Hoje"}" else "Sem backup",
-                            fontSize = 11.sp,
-                            color = if (app.hasBackup) (if (app.isOutdatedBackup) AccentSunsetOrange else StatusSuccess) else TextMuted,
+                            text = backupText,
+                            fontSize = 10.5.sp,
+                            color = backupTextColor,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f, fill = false)
@@ -1224,11 +1246,8 @@ fun AppListItemCard(
 
                         Spacer(modifier = Modifier.width(8.dp))
 
-                        val (statusBadgeText, statusBadgeColor) = when {
-                            app.isOutdatedBackup -> Pair("⚠ Desatualizado", AccentSunsetOrange)
-                            app.hasBackup -> Pair("✓ Com backup", StatusSuccess)
-                            else -> Pair("Sem backup", TextMuted)
-                        }
+                        val statusBadgeText = if (hasBackup) "Com backup" else "Sem backup"
+                        val statusBadgeColor = if (hasBackup) StatusSuccess else TextMuted
 
                         Box(
                             modifier = Modifier

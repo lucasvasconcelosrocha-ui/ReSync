@@ -29,6 +29,7 @@ import com.resync.app.cloud.gdrive.DriveAuthResult
 import com.resync.app.cloud.gdrive.DriveConstants
 import com.resync.app.cloud.gdrive.DriveRepository
 import com.resync.app.worker.FileUploadWorker
+import com.resync.app.data.room.AppRoomDatabase
 import com.resync.app.data.room.CloudAccount as RoomCloudAccount
 import java.io.File
 
@@ -113,8 +114,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val installedApps: StateFlow<List<AppInfo>> = installedAppsRepo.appsFlow
     val isLoadingInstalledApps: StateFlow<Boolean> = installedAppsRepo.isLoadingFlow
 
+    private val roomDb by lazy { AppRoomDatabase.getInstance(context) }
+    val appBackupDetector by lazy {
+        AppBackupDetector(context, roomDb, backupIndexManager, dbHelper)
+    }
+
+    private val _appBackupStatusMap = MutableStateFlow<Map<String, AppBackupStatus>>(emptyMap())
+    val appBackupStatusMap: StateFlow<Map<String, AppBackupStatus>> = _appBackupStatusMap.asStateFlow()
+
+    fun triggerAppBackupDetection(forceRefreshDrive: Boolean = false) {
+        viewModelScope.launch {
+            val pkgs = installedApps.value.map { it.packageName }
+            val remotes = _remoteDriveBackups.value
+            val result = appBackupDetector.detectBackups(
+                installedPackages = pkgs,
+                remoteDriveBackups = remotes,
+                triggerDriveRefresh = {
+                    val email = _activeAccountEmail.value ?: _multiCloudAccounts.value.firstOrNull()?.email
+                    if (!email.isNullOrBlank()) {
+                        refreshActiveAccountData(targetEmail = email, isManual = true)
+                    }
+                },
+                forceRefreshDrive = forceRefreshDrive
+            )
+            _appBackupStatusMap.value = result
+        }
+    }
+
     fun refreshInstalledApps(force: Boolean = true) {
         installedAppsRepo.refreshApps(force)
+        triggerAppBackupDetection(forceRefreshDrive = true)
     }
 
     // Toggle showing internal system packages (SDK Sandbox, AdServices, Overlays)
@@ -443,11 +472,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     init {
+        _appBackupStatusMap.value = appBackupDetector.loadPersistedCache()
         checkCrashLogOnStartup()
         loadData()
         observeDatabaseChanges()
         checkForUpdateOnStartup()
         refreshNotificationStatus()
+
+        viewModelScope.launch {
+            installedApps.collectLatest { apps ->
+                if (apps.isNotEmpty()) {
+                    triggerAppBackupDetection(forceRefreshDrive = false)
+                }
+            }
+        }
 
         viewModelScope.launch {
             driveRepository.allAccounts
@@ -767,6 +805,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         _backupRecords.value = validRecords
         preloadBackupIndexes(validRecords)
+        triggerAppBackupDetection(forceRefreshDrive = false)
     }
 
     private suspend fun loadCloudAccounts() = withContext(Dispatchers.IO) {
