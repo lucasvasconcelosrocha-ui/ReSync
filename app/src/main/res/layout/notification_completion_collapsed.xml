@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="4dp"
+    android:paddingEnd="4dp"
+    android:paddingTop="2dp"
+    android:paddingBottom="2dp">
+
+    <!-- Linha 1 (Título): Concluído em 14 min 51 s -->
+    <TextView
+        android:id="@+id/notif_comp_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:textColor="#FFFFFF"
+        android:text="Concluído em 0s" />
+
+    <!-- Linha 2 (Status): Backup concluído com sucesso -->
+    <TextView
+        android:id="@+id/notif_comp_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="1dp"
+        android:textSize="12sp"
+        android:textColor="#E2E8F0"
+        android:text="Backup concluído com sucesso" />
+
+    <!-- Linha 3 (Destino): Destino: Memória interna -->
+    <TextView
+        android:id="@+id/notif_comp_destination"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="1dp"
+        android:textSize="12sp"
+        android:textColor="#E2E8F0"
+        android:text="Destino: Memória interna" />
+
+    <!-- Linha 4 (Tamanho e Itens): Tamanho: 15,3 GB • Itens: 1969 -->
+    <TextView
+        android:id="@+id/notif_comp_size_items"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="1dp"
+        android:textSize="12sp"
+        android:textColor="#E2E8F0"
+        android:text="Tamanho: 0 B • Itens: 0" />
+
+</LinearLayout>

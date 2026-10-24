@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="4dp"
+    android:paddingEnd="4dp"
+    android:paddingTop="2dp"
+    android:paddingBottom="4dp">
+
+    <!-- Linha 1 (Título): Realizando Backup (99%) -->
+    <TextView
+        android:id="@+id/notif_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:textColor="#FFFFFF"
+        android:text="Realizando Backup (0%)" />
+
+    <!-- Linha 2 (Tamanho / Destino): 15,3 GB de 15,3 GB • Local -->
+    <TextView
+        android:id="@+id/notif_size_dest"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:textSize="12sp"
+        android:textColor="#E2E8F0"
+        android:text="0 B • Local" />
+
+    <!-- Linha 3 (Lote + Taxa): Lote: 1961/1969 • Taxa: 100% -->
+    <TextView
+        android:id="@+id/notif_batch_rate"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:textSize="12sp"
+        android:textColor="#E2E8F0"
+        android:text="Lote: 0/0 • Taxa: 0%" />
+
+    <!-- Linha 4 (Velocidade): Velocidade: 243,3 MB/s -->
+    <TextView
+        android:id="@+id/notif_speed"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:textSize="12sp"
+        android:textColor="#E2E8F0"
+        android:text="Velocidade: 0,0 MB/s" />
+
+    <!-- Linha 5 (Status detalhado) -->
+    <TextView
+        android:id="@+id/notif_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:textSize="12sp"
+        android:textColor="#94A3B8"
+        android:text="Status: Processando itens..." />
+
+    <!-- Linha 6 (Informações adicionais: ETA / Rede) -->
+    <TextView
+        android:id="@+id/notif_extra"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:textSize="12sp"
+        android:textColor="#94A3B8"
+        android:text="" />
+
+</LinearLayout>

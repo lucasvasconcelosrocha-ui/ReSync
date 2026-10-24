@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ReSync</string>
+    <string name="notification_channel_name">Operações de Backup e Restauração</string>
+    <string name="notification_channel_desc">Notificações de progresso e status de backups e restaurações do ReSync</string>
+    <string name="action_backups_restore">BACKUPS / RESTAURAR</string>
+</resources>
+

@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/data/user/0/com.agy/files/usr/bin/sh
 
 #
 # Copyright © 2015-2021 the original authors.

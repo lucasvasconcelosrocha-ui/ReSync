@@ -1,9 +1,10 @@
-name: Release SwiftVault
+name: Release ReSync
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -25,35 +26,36 @@ jobs:
           java-version: '17'
           cache: 'gradle'
 
-      - name: Extract Tag & Version Info
-        id: version_info
+      - name: Adapt gradle.properties for CI
         run: |
-          TAG_NAME="${GITHUB_REF#refs/tags/}"
-          echo "TAG_NAME=${TAG_NAME}" >> $GITHUB_ENV
-          
-          # Extrai versionCode e versionName do app/build.gradle.kts
-          VERSION_CODE=$(grep -oE 'versionCode\s*=\s*[0-9]+' app/build.gradle.kts | head -n1 | awk '{print $3}')
-          VERSION_NAME=$(grep -oE 'versionName\s*=\s*"[^"]+"' app/build.gradle.kts | head -n1 | cut -d'"' -f2)
+          sed -i '/aapt2FromMavenOverride/d' gradle.properties
+          sed -i 's|-Djava.io.tmpdir=[^ ]*||g' gradle.properties
+
+      - name: Set Version & Tag
+        run: |
+          VERSION_CODE="${{ github.run_number }}"
+          VERSION_NAME="1.0.${{ github.run_number }}"
+          TAG_NAME="v1.0.${{ github.run_number }}"
           
           echo "VERSION_CODE=${VERSION_CODE}" >> $GITHUB_ENV
           echo "VERSION_NAME=${VERSION_NAME}" >> $GITHUB_ENV
-          echo "Building SwiftVault ${TAG_NAME} (versionCode: ${VERSION_CODE}, versionName: ${VERSION_NAME})"
+          echo "TAG_NAME=${TAG_NAME}" >> $GITHUB_ENV
+          echo "Building ReSync ${TAG_NAME} (versionCode: ${VERSION_CODE}, versionName: ${VERSION_NAME})"
 
       - name: Generate Changelog
-        id: changelog
         run: |
-          PREV_TAG=$(git describe --tags --abbrev=0 "${TAG_NAME}^" 2>/dev/null || echo "")
+          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
           
           if [ -z "$PREV_TAG" ]; then
-            echo "Primeira release detectada. Gerando histórico completo de commits."
-            CHANGELOG=$(git log --pretty=format:"* %s (%h)" "$TAG_NAME")
+            echo "Primeira release automática. Gerando histórico de commits recentes."
+            CHANGELOG=$(git log -n 15 --pretty=format:"* %s (%h)")
           else
             echo "Commits desde a tag ${PREV_TAG}:"
-            CHANGELOG=$(git log --pretty=format:"* %s (%h)" "${PREV_TAG}..${TAG_NAME}")
+            CHANGELOG=$(git log --pretty=format:"* %s (%h)" "${PREV_TAG}..HEAD")
           fi
           
           if [ -z "$CHANGELOG" ]; then
-            CHANGELOG="* Atualização e melhorias do SwiftVault ${TAG_NAME}"
+            CHANGELOG="* Atualização e melhorias do ReSync ${TAG_NAME}"
           fi
           
           echo "$CHANGELOG" > release_notes.md
@@ -61,19 +63,21 @@ jobs:
 
       - name: Decode Keystore
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > /tmp/swiftvault-release.jks
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > /tmp/resync-release.jks
 
       - name: Grant Execute Permission for Gradle
         run: chmod +x ./gradlew
 
       - name: Build Signed Release APK
         env:
-          KEYSTORE_FILE: /tmp/swiftvault-release.jks
+          KEYSTORE_FILE: /tmp/resync-release.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          VERSION_CODE: ${{ env.VERSION_CODE }}
+          VERSION_NAME: ${{ env.VERSION_NAME }}
         run: |
-          ./gradlew assembleRelease
+          ./gradlew assembleRelease --no-daemon
 
       - name: Prepare Artifacts & Checksums
         run: |
@@ -83,7 +87,7 @@ jobs:
             exit 1
           fi
           
-          APK_DEST="SwiftVault-${TAG_NAME}.apk"
+          APK_DEST="ReSync-${TAG_NAME}.apk"
           cp "$APK_SRC" "$APK_DEST"
           
           # Calcula SHA-256 e gera arquivo .sha256 com hash puro
@@ -122,13 +126,13 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release create "$TAG_NAME" \
-            "SwiftVault-${TAG_NAME}.apk" \
-            "SwiftVault-${TAG_NAME}.apk.sha256" \
+            "ReSync-${TAG_NAME}.apk" \
+            "ReSync-${TAG_NAME}.apk.sha256" \
             "version.json" \
-            --title "SwiftVault ${TAG_NAME}" \
+            --title "ReSync ${TAG_NAME}" \
             --notes-file release_notes.md
 
       - name: Clean Up Keystore
         if: always()
         run: |
-          rm -f /tmp/swiftvault-release.jks
+          rm -f /tmp/resync-release.jks

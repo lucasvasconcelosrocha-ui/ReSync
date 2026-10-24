@@ -7,3 +7,4 @@
         <exclude domain="sharedpref" path="device_keys.xml" />
     </device-transfer>
 </data-extraction-rules>
+

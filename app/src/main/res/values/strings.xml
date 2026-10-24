@@ -1,5 +1,162 @@
 <resources>
-    <string name="app_name">ODIN_BACKUP</string>
+    <string name="app_name">ReSync</string>
     <string name="notification_channel_name">Operações de Backup e Restauração</string>
-    <string name="notification_channel_desc">Notificações de progresso e status de backups e restaurações do ODIN_BACKUP</string>
+    <string name="notification_channel_desc">Notificações de progresso e status de backups e restaurações do ReSync</string>
+
+    <!-- Navegação e Abas -->
+    <string name="nav_tab_apps">Aplicativos</string>
+    <string name="category_calls_title">Histórico de chamadas</string>
+    <string name="category_calls_empty_notice">Sem histórico de chamadas neste backup</string>
+    <string name="filter_origin_all">Todos</string>
+    <string name="filter_origin_device">Dispositivo</string>
+    <string name="filter_origin_drive">Google Drive</string>
+    <string name="origin_device">Dispositivo</string>
+    <string name="origin_drive">Google Drive</string>
+    <string name="origin_both">Ambos</string>
+
+    <!-- Seleção de Aplicativos -->
+    <string name="select_all">Marcar todos</string>
+    <string name="deselect_all">Desmarcar todos</string>
+    <string name="select_apps_title">SELECIONE OS APLICATIVOS</string>
+    <string name="finish_selection">Concluir Seleção (%1$d)</string>
+    <string name="search_apps_placeholder">Pesquisar aplicativo...</string>
+
+    <!-- Destino do Backup (Detalhes do App) -->
+    <string name="backup_destination">DESTINO DO BACKUP</string>
+    <string name="dest_internal">Memória interna</string>
+    <string name="dest_cloud_drive">Nuvem (Google Drive)</string>
+    <string name="dest_both">Ambos</string>
+    <string name="connect_drive_account">Conectar conta do Google Drive</string>
+    <string name="add_another_account">Adicionar outra conta</string>
+    <string name="send_to_account">Enviar para %1$s</string>
+    <string name="choose_drive_account">Escolha a conta do Google Drive</string>
+    <string name="dest_internal_plus_drive">Interna + Drive</string>
+    <string name="dest_drive_format">Drive • %1$s</string>
+    <string name="backup_location_title">Local do Backup</string>
+
+    <!-- Notificações e Segundo Plano -->
+    <string name="action_pause">Pausar</string>
+    <string name="action_resume">Retomar</string>
+    <string name="action_cancel">Cancelar</string>
+    <string name="backup_in_progress">Backup em andamento...</string>
+    <string name="backup_completed">Backup Concluído</string>
+    <string name="backup_failed">Falha no Backup</string>
+    <string name="backup_paused">Backup Pausado</string>
+    <string name="backup_canceled">Backup Cancelado</string>
+
+    <!-- Filtro por Tipo de Aplicativo -->
+    <string name="filter_installed">Instalados (%1$d)</string>
+    <string name="filter_system">Sistema (%1$d)</string>
+    <string name="filter_all">Todos (%1$d)</string>
+    <string name="system_app_warning">Backup de apps de sistema pode não restaurar em outro aparelho ou versão do Android.</string>
+
+    <!-- Exclusão de Backup e Limpeza de Órfãos -->
+    <string name="delete_backup_title">Excluir backup?</string>
+    <string name="delete_backup_confirm_message">Excluir este backup? Os arquivos também serão apagados do aparelho.</string>
+    <string name="delete_local_only">Só do aparelho</string>
+    <string name="delete_local_and_cloud">Aparelho e nuvem</string>
+    <string name="delete_action">Excluir</string>
+    <string name="cancel_action">Cancelar</string>
+
+    <!-- Estados do Backup e Ações Finais -->
+    <string name="backup_starting">Iniciando serviço de backup...</string>
+    <string name="backup_view_backup">Ver backup</string>
+    <string name="backup_finish_action">Concluir</string>
+    <string name="backup_retry_action">Tentar novamente</string>
+    <string name="backup_close_action">Fechar</string>
+    <string name="backup_timeout_error">O serviço de backup não respondeu a tempo. Verifique as permissões e tente novamente.</string>
+
+    <!-- DNS, Rede, Bluetooth e Dispositivo -->
+    <string name="tab_dns_private">DNS Privado</string>
+    <string name="tab_network">Rede</string>
+    <string name="tab_consumption">Consumo</string>
+    <string name="tab_bluetooth">Bluetooth</string>
+    <string name="tab_device">Dispositivo</string>
+
+    <string name="permission_required_phone">Permissão de telefone necessária para ler dados da operadora e rede móvel.</string>
+    <string name="permission_required_location">Permissão de localização necessária para exibir o SSID e dados da célula.</string>
+    <string name="permission_required_bluetooth">Permissão de Bluetooth necessária para listar dispositivos.</string>
+    <string name="grant_permission">Conceder Permissão</string>
+    <string name="turn_on_bluetooth">Ativar Bluetooth</string>
+    <string name="bluetooth_disabled">O Bluetooth está desligado.</string>
+    <string name="connected_now">Conectados agora</string>
+    <string name="saved_paired">Salvos/Pareados</string>
+    <string name="search_bluetooth_placeholder">Pesquisar dispositivo Bluetooth...</string>
+    <string name="copy_all">Copiar tudo</string>
+    <string name="export_text">Exportar em texto</string>
+    <string name="device_info_copied">Informações do dispositivo copiadas!</string>
+    <string name="bt_info_copied">Informações de Bluetooth copiadas!</string>
+    <string name="unavailable">Indisponível</string>
+
+    <!-- Restauração e Locais de Backup -->
+    <string name="restore_completed_title">Concluído 100% - Aplicativo restaurado com sucesso!</string>
+    <string name="restore_in_progress">Restauração em andamento...</string>
+    <string name="restore_failed_title">Falha na Restauração</string>
+    <string name="action_backups_restore">BACKUPS / RESTAURAR</string>
+    <string name="restore_action_close">Fechar</string>
+    <string name="restore_action_retry">Tentar novamente</string>
+    <string name="restore_source_prompt">Restaurar de:</string>
+    <string name="restore_source_internal">Memória interna (padrão, mais rápido)</string>
+    <string name="restore_source_drive">Google Drive</string>
+    <string name="cloud_unavailable_offline">Nuvem indisponível (sem conexão)</string>
+    <string name="stage_locating_backup">Localizando backup...</string>
+    <string name="stage_downloading_drive">Baixando do Google Drive...</string>
+    <string name="stage_verifying_integrity">Verificando integridade (SHA-256 / MD5)...</string>
+    <string name="stage_decrypting">Descriptografando container (AES-256-GCM)...</string>
+    <string name="stage_restoring_apk">Restaurando APKs...</string>
+    <string name="stage_restoring_data">Restaurando dados do aplicativo...</string>
+    <string name="stage_applying_permissions">Aplicando permissões e configurações...</string>
+    <string name="stage_cleanup">Finalizando e limpando arquivos temporários...</string>
+    <string name="integrity_check_failed">Falha na verificação de integridade: checksum inválido ou corrompido.</string>
+    <string name="decryption_failed">Falha na descriptografia: chave ou arquivo incorreto.</string>
+    <string name="restore_canceled">Restauração cancelada pelo usuário.</string>
+    <string name="restore_summary_format">%1$d item(ns) restaurado(s) com sucesso (%2$d falha(s)).</string>
+    <string name="permission_location_needed_ssid">Permissão de localização necessária para exibir o SSID</string>
+    <string name="bluetooth_disabled_status">Desconectado / Bluetooth desligado</string>
+
+    <!-- Operações em andamento & Velocidade -->
+    <string name="active_backups_title">Operações em andamento</string>
+    <string name="active_backups_subtitle">Acompanhe e gerencie transferências ativas</string>
+    <string name="active_backups_none">Nenhuma operação em execução no momento</string>
+    <string name="active_backups_empty_desc">Os backups e restaurações em andamento aparecerão aqui com progresso, velocidade e controles em tempo real.</string>
+    <string name="active_backups_running">1 operação ativa em segundo plano</string>
+    <string name="transfer_speed_format">↑ %1$s · ↓ %2$s</string>
+    <string name="compression_speed_format">Compactando a %1$s</string>
+    <string name="eta_format">Restam %1$s</string>
+    <string name="backup_completed_with_warnings">Concluído com Avisos</string>
+    <string name="item_error_details_title">Detalhes do Erro no Item</string>
+    <string name="item_stage_label">Etapa da falha</string>
+    <string name="item_cause_label">Causa técnica</string>
+    <string name="item_suggestion_label">Sugestão de correção</string>
+    <string name="item_timestamp_label">Horário</string>
+    <string name="copy_report_details">Copiar Detalhes do Relatório</string>
+    <string name="report_copied">Relatório completo copiado para a área de transferência!</string>
+    <string name="active_data_sim_indicator">CHIP %1$d (Dados ativos) - %2$s</string>
+    <string name="cellular_connected_status">● Conectado</string>
+    <string name="cellular_standby_status">○ Em Espera</string>
+    <string name="wifi_disconnected_status">○ Desconectado</string>
+
+    <!-- Teste de Velocidade de Internet -->
+    <string name="speed_test_measure_button">Medir velocidade</string>
+    <string name="speed_test_measuring">Medindo velocidade...</string>
+    <string name="speed_test_ping">Ping (Latência)</string>
+    <string name="speed_test_jitter">Jitter</string>
+    <string name="speed_test_download">Download</string>
+    <string name="speed_test_upload">Upload</string>
+    <string name="speed_test_cancel">Cancelar teste</string>
+    <string name="speed_test_completed">Teste concluído</string>
+    <string name="speed_test_history">Histórico de medições</string>
+    <string name="speed_test_no_history">Nenhuma medição realizada ainda</string>
+    <string name="speed_test_failed">Falha ao medir velocidade. Verifique sua conexão.</string>
+
+    <!-- Download e Restauração da Nuvem -->
+    <string name="downloading_backup_from_drive">Baixando backup do Google Drive…</string>
+    <string name="reading_backup_manifest">Lendo informações do container…</string>
+    <string name="error_loading_manifest">Não foi possível carregar o índice deste container.</string>
+    <string name="drive_file_not_found">Arquivo não encontrado no Google Drive.</string>
+    <string name="drive_session_expired">Sessão do Google Drive expirada. Reconecte sua conta.</string>
+    <string name="no_internet_for_download">Sem conexão com a internet para baixar o backup.</string>
+    <string name="insufficient_storage_download">Espaço insuficiente na memória interna para baixar o backup.</string>
+    <string name="action_retry">Tentar novamente</string>
 </resources>
+

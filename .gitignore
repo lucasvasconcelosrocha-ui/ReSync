@@ -58,6 +58,7 @@ captures/
 *.jks
 *.keystore
 *.p12
+keystore.properties
 *.pem
 *.key
 *.pk8
