@@ -261,7 +261,7 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Versão Atual: v$installedVersionName", fontWeight = FontWeight.SemiBold, color = TextPrimary, fontSize = 13.sp)
+                            Text("Versão Atual: v$installedVersionName (teste de atualização)", fontWeight = FontWeight.SemiBold, color = TextPrimary, fontSize = 13.sp)
                             Text("Build $installedVersionCode", fontSize = 11.sp, color = TextSecondary)
                         }
                         Button(
@@ -319,7 +319,7 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text("ReSync", fontWeight = FontWeight.ExtraBold, color = TextPrimary, fontSize = 16.sp)
-                            Text("Versão $installedVersionName — API 35 (Android 17 Ready)", fontSize = 12.sp, color = primaryAccent, fontWeight = FontWeight.SemiBold)
+                            Text("Versão $installedVersionName (teste de atualização) — API 35 (Android 17 Ready)", fontSize = 12.sp, color = primaryAccent, fontWeight = FontWeight.SemiBold)
                         }
                     }
                     Spacer(modifier = Modifier.height(12.dp))
