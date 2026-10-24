@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <group
+        android:scaleX="2.85"
+        android:scaleY="2.85"
+        android:translateX="19.8"
+        android:translateY="20.5">
+
+        <!-- Left Phone Body -->
+        <path
+            android:pathData="M3.5,4 h4 c0.8,0 1.5,0.7 1.5,1.5 v13 c0,0.8 -0.7,1.5 -1.5,1.5 h-4 c-0.8,0 -1.5,-0.7 -1.5,-1.5 v-13 c0,-0.8 0.7,-1.5 1.5,-1.5 z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="2"
+                    android:startY="12"
+                    android:endX="22"
+                    android:endY="12"
+                    android:startColor="#0069E9"
+                    android:endColor="#01D7B6" />
+            </aapt:attr>
+        </path>
+
+        <!-- Left Phone Screen Cutout (Colored with background color for hollow screen effect) -->
+        <path
+            android:fillColor="#0B1F3A"
+            android:pathData="M3,7 h5 v9 h-5 z" />
+
+        <!-- Right Phone Body -->
+        <path
+            android:pathData="M16.5,4 h4 c0.8,0 1.5,0.7 1.5,1.5 v13 c0,0.8 -0.7,1.5 -1.5,1.5 h-4 c-0.8,0 -1.5,-0.7 -1.5,-1.5 v-13 c0,-0.8 0.7,-1.5 1.5,-1.5 z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="2"
+                    android:startY="12"
+                    android:endX="22"
+                    android:endY="12"
+                    android:startColor="#0069E9"
+                    android:endColor="#01D7B6" />
+            </aapt:attr>
+        </path>
+
+        <!-- Right Phone Screen Cutout -->
+        <path
+            android:fillColor="#0B1F3A"
+            android:pathData="M16,7 h5 v9 h-5 z" />
+
+        <!-- Top Sync Arrow -->
+        <path
+            android:pathData="M9.5,7 C10.5,5.5 11.5,4.8 12,4.8 C12.8,4.8 13.8,5.5 14.5,7 L13.8,7.3 C13.2,6.1 12.6,5.6 12,5.6 C11.4,5.6 10.8,6.1 10.2,7.3 Z M14,5.5 L15.5,7 L13.5,8 Z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="2"
+                    android:startY="12"
+                    android:endX="22"
+                    android:endY="12"
+                    android:startColor="#0069E9"
+                    android:endColor="#01D7B6" />
+            </aapt:attr>
+        </path>
+
+        <!-- Bottom Sync Arrow -->
+        <path
+            android:pathData="M14.5,17 C13.5,18.5 12.5,19.2 12,19.2 C11.2,19.2 10.2,18.5 9.5,17 L10.2,16.7 C10.8,17.9 11.4,18.4 12,18.4 C12.6,18.4 13.2,17.9 13.8,16.7 Z M10,18.5 L8.5,17 L10.5,16 Z">
+            <aapt:attr name="android:fillColor">
+                <gradient
+                    android:type="linear"
+                    android:startX="2"
+                    android:startY="12"
+                    android:endX="22"
+                    android:endY="12"
+                    android:startColor="#0069E9"
+                    android:endColor="#01D7B6" />
+            </aapt:attr>
+        </path>
+
+    </group>
+
+</vector>
