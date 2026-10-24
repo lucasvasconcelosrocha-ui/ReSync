@@ -40,7 +40,7 @@ class AppUpdateManager(private val context: Context) {
 
         private const val PREF_AUTO_CHECK = "auto_check_updates"
         private const val PREF_LAST_CHECK_TIME = "last_check_timestamp"
-        private const val CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000L // 6 hours
+        private const val CHECK_INTERVAL_MS = 10 * 60 * 1000L // 10 minutes
     }
 
     private val httpClient: OkHttpClient = OkHttpClient.Builder()
@@ -103,45 +103,42 @@ class AppUpdateManager(private val context: Context) {
     }
 
     /**
-     * Checks whether an update is available from GitHub releases.
-     * Enforces 6-hour interval for automatic checks; forceManual bypasses the timer.
-     * Silent failure: network errors and missing releases do not throw or freeze UI.
+     * Checks whether an update is available from GitHub releases by downloading version.json directly.
+     * Enforces 10-minute interval for automatic checks; forceManual bypasses the timer.
+     * Silent failure: network errors and invalid JSON do not throw or freeze UI.
      */
     suspend fun checkForUpdate(forceManual: Boolean = false): Result<AppReleaseInfo?> = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
         val lastCheck = prefs.getLong(PREF_LAST_CHECK_TIME, 0L)
 
-        if (!forceManual && (now - lastCheck) < CHECK_INTERVAL_MS && cachedReleaseInfo == null) {
+        if (!forceManual && (now - lastCheck) < CHECK_INTERVAL_MS) {
             return@withContext Result.success(null)
         }
 
         try {
-            var releaseInfo = fetchFromGitHubApiFallback()
-            if (releaseInfo == null) {
-                releaseInfo = fetchVersionJsonDirect()
-            }
+            val releaseInfo = fetchVersionJsonDirect()
 
             if (releaseInfo == null) {
-                Log.d(TAG, "Nenhuma release encontrada no GitHub no momento.")
+                Log.d(TAG, "version.json não encontrado ou inválido no momento.")
                 return@withContext Result.success(null)
             }
 
-            cachedReleaseInfo = releaseInfo
             prefs.edit().putLong(PREF_LAST_CHECK_TIME, now).apply()
 
-            val isNewer = isNewerVersion(releaseInfo.versionName, getInstalledVersionName()) ||
-                    releaseInfo.versionCode > getInstalledVersionCode()
+            val currentCode = getInstalledVersionCode()
+            val isNewer = releaseInfo.versionCode > currentCode ||
+                    isNewerVersion(releaseInfo.versionName, getInstalledVersionName())
 
             if (isNewer) {
-                Log.i(TAG, "Nova atualização detectada: ${releaseInfo.versionName} (build ${releaseInfo.versionCode}) vs instalado (${getInstalledVersionName()})")
+                Log.i(TAG, "Nova atualização detectada: ${releaseInfo.versionName} (build ${releaseInfo.versionCode}) vs instalado (${getInstalledVersionName()} - $currentCode)")
                 Result.success(releaseInfo)
             } else {
-                Log.d(TAG, "Aplicativo atualizado. Versão instalada: ${getInstalledVersionName()}, Remota: ${releaseInfo.versionName}")
+                Log.d(TAG, "Aplicativo atualizado. Versão instalada: ${getInstalledVersionName()} ($currentCode), Remota: ${releaseInfo.versionName} (${releaseInfo.versionCode})")
                 Result.success(null)
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Falha discreta ao checar atualizações no GitHub: ${e.message}")
-            Result.failure(e)
+            Log.d(TAG, "Falha discreta ao checar atualizações no GitHub: ${e.message}")
+            Result.success(null)
         }
     }
 
@@ -275,6 +272,32 @@ class AppUpdateManager(private val context: Context) {
             val sha256 = obj.get("sha256")?.asString ?: ""
             val releaseNotes = obj.get("releaseNotes")?.asString ?: ""
 
+            val functionsList = mutableListOf<String>()
+            if (obj.has("functions") && obj.get("functions").isJsonArray) {
+                obj.getAsJsonArray("functions").forEach { el ->
+                    val s = el.asString.trim()
+                    if (s.isNotBlank()) functionsList.add(s)
+                }
+            }
+
+            val fixesList = mutableListOf<String>()
+            if (obj.has("fixes") && obj.get("fixes").isJsonArray) {
+                obj.getAsJsonArray("fixes").forEach { el ->
+                    val s = el.asString.trim()
+                    if (s.isNotBlank()) fixesList.add(s)
+                }
+            }
+
+            // Fallback: se não existirem functions nem fixes, use releaseNotes como lista única
+            if (functionsList.isEmpty() && fixesList.isEmpty() && releaseNotes.isNotBlank()) {
+                val lines = releaseNotes.lines()
+                    .map { it.trim().removePrefix("*").removePrefix("-").trim() }
+                    .filter { it.isNotBlank() && !it.startsWith("#") }
+                if (lines.isNotEmpty()) {
+                    fixesList.addAll(lines)
+                }
+            }
+
             val resolvedApkUrl = overrideApkUrl
                 ?: obj.get("apkUrl")?.asString
                 ?: "https://github.com/$GITHUB_OWNER/$GITHUB_REPO/releases/download/$tag/$apkName"
@@ -287,7 +310,9 @@ class AppUpdateManager(private val context: Context) {
                 apkSize = apkSize,
                 sha256 = sha256,
                 releaseNotes = releaseNotes,
-                apkUrl = resolvedApkUrl
+                apkUrl = resolvedApkUrl,
+                functions = functionsList,
+                fixes = fixesList
             )
         } catch (e: Exception) {
             Log.w(TAG, "Erro ao processar JSON de versão: ${e.message}")

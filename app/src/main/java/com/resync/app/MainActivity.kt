@@ -56,6 +56,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         viewModel.refreshAllPermissions()
         viewModel.refreshRootStatus(forceNewShell = false)
+        viewModel.checkForUpdateOnResume()
     }
 
     override fun onNewIntent(intent: android.content.Intent) {

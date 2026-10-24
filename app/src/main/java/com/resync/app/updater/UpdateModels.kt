@@ -13,7 +13,9 @@ data class AppReleaseInfo(
     val apkSize: Long,
     val sha256: String,
     val releaseNotes: String,
-    val apkUrl: String
+    val apkUrl: String,
+    val functions: List<String> = emptyList(),
+    val fixes: List<String> = emptyList()
 )
 
 /**

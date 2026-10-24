@@ -2219,16 +2219,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _isAutoUpdateCheckEnabled.value = enabled
     }
 
+    private var dismissedVersionForSession: Int? = null
+
     fun checkForUpdateOnStartup() {
+        checkForUpdateOnResume()
+    }
+
+    fun checkForUpdateOnResume() {
         if (!appUpdateManager.isAutoCheckEnabled()) return
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             val result = appUpdateManager.checkForUpdate(forceManual = false)
             result.onSuccess { releaseInfo ->
                 if (releaseInfo != null) {
-                    _updateState.value = UpdateState.Available(releaseInfo)
+                    if (dismissedVersionForSession != releaseInfo.versionCode) {
+                        _updateState.value = UpdateState.Available(releaseInfo)
+                    }
                 }
             }.onFailure { e ->
-                Log.d("MainViewModel", "Checagem automática de versão em background concluída discretamente: ${e.message}")
+                Log.d("MainViewModel", "Checagem automática de versão em background ignorada em silêncio: ${e.message}")
             }
         }
     }
@@ -2253,11 +2261,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * "Agora não": Dismisses the dialog for this session.
-     * Crucial: Does NOT persist any "ignore version" setting,
-     * ensuring the dialog reappears on the next app launch if the update is still pending.
+     * "Depois": Dismisses the dialog for this session.
+     * Does NOT persist to SharedPreferences, so on the next app restart
+     * the dialog will show again if the update is still pending.
      */
-    fun dismissUpdatePrompt() {
+    fun dismissUpdatePrompt(versionCode: Int? = null) {
+        if (versionCode != null) {
+            dismissedVersionForSession = versionCode
+        }
         _updateState.value = UpdateState.Idle
     }
 

@@ -14,7 +14,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -41,7 +43,8 @@ fun AppUpdateDialog(
     Dialog(
         onDismissRequest = {
             if (updateState !is UpdateState.Downloading && updateState !is UpdateState.Installing) {
-                viewModel.dismissUpdatePrompt()
+                val code = (updateState as? UpdateState.Available)?.releaseInfo?.versionCode
+                viewModel.dismissUpdatePrompt(code)
             }
         },
         properties = DialogProperties(
@@ -85,120 +88,155 @@ fun AppUpdateDialog(
 
                     is UpdateState.Available -> {
                         val release = state.releaseInfo
-                        val sizeMb = release.apkSize.toDouble() / (1024.0 * 1024.0)
-                        val formattedSize = if (sizeMb > 0) String.format(Locale.US, "%.1f MB", sizeMb) else "Tamanho não especificado"
+                        val currentVersionName = viewModel.appUpdateManager.getInstalledVersionName().trim().removePrefix("v").removePrefix("V")
+                        val newVersionName = release.versionName.trim().removePrefix("v").removePrefix("V")
 
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.SystemUpdate,
-                                contentDescription = null,
-                                tint = primaryAccent,
-                                modifier = Modifier.size(28.dp)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text(
-                                    text = "Nova atualização disponível",
-                                    color = TextPrimary,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 17.sp
-                                )
-                                Text(
-                                    text = "${release.tag} (Build ${release.versionCode}) • $formattedSize",
-                                    color = primaryAccent,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(14.dp))
-
+                        // Título centralizado
                         Text(
-                            text = "Notas da Versão:",
-                            color = TextSecondary,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 12.sp
+                            text = "Nova versão disponível",
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                            color = TextPrimary,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
                         )
 
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 160.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(DarkSurfaceVariant)
-                                .border(1.dp, DarkCardBorder, RoundedCornerShape(10.dp))
-                                .padding(12.dp)
-                                .verticalScroll(rememberScrollState())
-                        ) {
-                            Text(
-                                text = release.releaseNotes.ifBlank { "Melhorias de desempenho e estabilidade." },
-                                color = TextPrimary,
-                                fontSize = 12.sp,
-                                lineHeight = 18.sp
-                            )
-                        }
+                        // Versão atual e Versão mais recente em fonte grande e em negrito
+                        Text(
+                            text = "Versão atual: v$currentVersionName",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextSecondary,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Versão mais recente: v$newVersionName",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = primaryAccent,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
 
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        // Opção de instalação Root se disponível
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
+                        // Um divisor fino
+                        HorizontalDivider(
+                            thickness = 1.dp,
+                            color = DarkCardBorder
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Conteúdo rolável se for longo
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 280.dp)
+                                .verticalScroll(rememberScrollState())
                         ) {
-                            Checkbox(
-                                checked = preferSilentRoot,
-                                onCheckedChange = { preferSilentRoot = it },
-                                colors = CheckboxDefaults.colors(
-                                    checkedColor = primaryAccent,
-                                    uncheckedColor = TextSecondary
-                                )
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Column {
+                            if (release.functions.isNotEmpty()) {
                                 Text(
-                                    text = "Instalar silenciosamente (Root)",
-                                    color = TextPrimary,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold
+                                    text = "Função",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
                                 )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                release.functions.forEach { item ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 3.dp),
+                                        verticalAlignment = Alignment.Top
+                                    ) {
+                                        Text(
+                                            text = "•",
+                                            color = primaryAccent,
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(end = 8.dp)
+                                        )
+                                        Text(
+                                            text = item,
+                                            color = TextSecondary,
+                                            fontSize = 13.5.sp,
+                                            lineHeight = 19.sp,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                }
+                            }
+
+                            if (release.fixes.isNotEmpty()) {
+                                if (release.functions.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.height(14.dp))
+                                }
                                 Text(
-                                    text = if (preferSilentRoot)
-                                        "Usa 'pm install -r' e reinicia o app automaticamente."
-                                    else
-                                        "O Android exibirá a confirmação do instalador padrão.",
-                                    color = TextSecondary,
-                                    fontSize = 10.sp
+                                    text = "Otimização e reparo",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
                                 )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                release.fixes.forEach { item ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 3.dp),
+                                        verticalAlignment = Alignment.Top
+                                    ) {
+                                        Text(
+                                            text = "•",
+                                            color = primaryAccent,
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(end = 8.dp)
+                                        )
+                                        Text(
+                                            text = item,
+                                            color = TextSecondary,
+                                            fontSize = 13.5.sp,
+                                            lineHeight = 19.sp,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                }
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(18.dp))
+                        Spacer(modifier = Modifier.height(20.dp))
 
+                        // Botões "Depois" e "Atualizar agora"
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             OutlinedButton(
-                                onClick = { viewModel.dismissUpdatePrompt() },
+                                onClick = { viewModel.dismissUpdatePrompt(release.versionCode) },
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = TextSecondary),
-                                shape = RoundedCornerShape(10.dp)
+                                border = BorderStroke(1.dp, DarkCardBorder),
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(44.dp)
                             ) {
-                                Text("Agora não", fontSize = 13.sp)
+                                Text("Depois", fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold)
                             }
-
-                            Spacer(modifier = Modifier.width(10.dp))
 
                             Button(
                                 onClick = { viewModel.startUpdateDownload(release) },
                                 colors = ButtonDefaults.buttonColors(containerColor = primaryAccent),
-                                shape = RoundedCornerShape(10.dp)
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(44.dp)
                             ) {
-                                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Atualizar agora", fontSize = 13.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                                Text("Atualizar agora", fontSize = 13.5.sp, color = Color.Black, fontWeight = FontWeight.Bold)
                             }
                         }
                     }

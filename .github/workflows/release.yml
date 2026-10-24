@@ -44,22 +44,87 @@ jobs:
 
       - name: Generate Changelog
         run: |
-          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          
-          if [ -z "$PREV_TAG" ]; then
-            echo "Primeira release automática. Gerando histórico de commits recentes."
-            CHANGELOG=$(git log -n 15 --pretty=format:"* %s (%h)")
-          else
-            echo "Commits desde a tag ${PREV_TAG}:"
-            CHANGELOG=$(git log --pretty=format:"* %s (%h)" "${PREV_TAG}..HEAD")
-          fi
-          
-          if [ -z "$CHANGELOG" ]; then
-            CHANGELOG="* Atualização e melhorias do ReSync ${TAG_NAME}"
-          fi
-          
-          echo "$CHANGELOG" > release_notes.md
-          cat release_notes.md
+          python3 - << 'EOF'
+          import subprocess
+          import re
+          import json
+          import os
+
+          prev_tag = ""
+          try:
+              prev_tag = subprocess.check_output(
+                  ["git", "describe", "--tags", "--abbrev=0"],
+                  stderr=subprocess.DEVNULL
+              ).decode().strip()
+          except Exception:
+              pass
+
+          if prev_tag:
+              print(f"Commits desde a tag {prev_tag}:")
+              cmd = ["git", "log", "--pretty=format:%s", f"{prev_tag}..HEAD"]
+          else:
+              print("Primeira release automática. Buscando últimos commits:")
+              cmd = ["git", "log", "-n", "15", "--pretty=format:%s"]
+
+          raw_commits = subprocess.check_output(cmd).decode().splitlines()
+
+          # Ignora commits de merge e vazios
+          commits = [c.strip() for c in raw_commits if c.strip() and not re.match(r'(?i)^merge\b', c.strip())]
+
+          feat_pattern = re.compile(r'^(?:feat|novo)\s*:\s*(.*)', re.IGNORECASE)
+          fix_pattern = re.compile(r'^(?:fix|perf|melhoria|corre[cç][aã]o)\s*:\s*(.*)', re.IGNORECASE)
+
+          has_any_prefix = any(feat_pattern.match(c) or fix_pattern.match(c) for c in commits)
+
+          functions = []
+          fixes = []
+
+          if not has_any_prefix:
+              fixes = commits[:]
+          else:
+              for c in commits:
+                  m_feat = feat_pattern.match(c)
+                  if m_feat:
+                      functions.append(m_feat.group(1).strip())
+                      continue
+                  m_fix = fix_pattern.match(c)
+                  if m_fix:
+                      fixes.append(m_fix.group(1).strip())
+                      continue
+                  cleaned = re.sub(r'^[a-zA-Z0-9_\-]+:\s*', '', c).strip()
+                  fixes.append(cleaned if cleaned else c)
+
+          if not functions and not fixes:
+              fixes.append("Atualizações e melhorias gerais")
+
+          changelog_data = {
+              "functions": functions,
+              "fixes": fixes
+          }
+
+          with open("changelog.json", "w", encoding="utf-8") as f:
+              json.dump(changelog_data, f, ensure_ascii=False, indent=2)
+
+          notes_lines = []
+          if functions:
+              notes_lines.append("### Função")
+              for item in functions:
+                  notes_lines.append(f"- {item}")
+              notes_lines.append("")
+
+          if fixes:
+              notes_lines.append("### Otimização e reparo")
+              for item in fixes:
+                  notes_lines.append(f"- {item}")
+              notes_lines.append("")
+
+          notes_content = "\n".join(notes_lines).strip() + "\n"
+          with open("release_notes.md", "w", encoding="utf-8") as f:
+              f.write(notes_content)
+
+          print("=== release_notes.md ===")
+          print(notes_content)
+          EOF
 
       - name: Decode Keystore
         run: |
@@ -87,36 +152,44 @@ jobs:
             exit 1
           fi
           
-          APK_DEST="ReSync-${TAG_NAME}.apk"
+          export APK_DEST="ReSync-${TAG_NAME}.apk"
           cp "$APK_SRC" "$APK_DEST"
           
           # Calcula SHA-256 e gera arquivo .sha256 com hash puro
-          SHA256_HASH=$(sha256sum "$APK_DEST" | awk '{print $1}')
+          export SHA256_HASH=$(sha256sum "$APK_DEST" | awk '{print $1}')
           echo "$SHA256_HASH" > "${APK_DEST}.sha256"
           
-          APK_SIZE=$(stat -c%s "$APK_DEST")
+          export APK_SIZE=$(stat -c%s "$APK_DEST")
           
           echo "SHA256: $SHA256_HASH"
           echo "Size: $APK_SIZE bytes"
           
-          # Gera o version.json estruturado
-          jq -n \
-            --arg vc "$VERSION_CODE" \
-            --arg vn "$VERSION_NAME" \
-            --arg tag "$TAG_NAME" \
-            --arg name "$APK_DEST" \
-            --arg size "$APK_SIZE" \
-            --arg sha "$SHA256_HASH" \
-            --arg notes "$(<release_notes.md)" \
-            '{
-              versionCode: ($vc | tonumber),
-              versionName: $vn,
-              tag: $tag,
-              apkName: $name,
-              apkSize: ($size | tonumber),
-              sha256: $sha,
-              releaseNotes: $notes
-            }' > version.json
+          # Gera o version.json estruturado com functions e fixes
+          python3 - << 'EOF'
+          import json
+          import os
+
+          with open("changelog.json", "r", encoding="utf-8") as f:
+              changelog = json.load(f)
+
+          with open("release_notes.md", "r", encoding="utf-8") as f:
+              release_notes = f.read()
+
+          version_data = {
+              "versionCode": int(os.environ["VERSION_CODE"]),
+              "versionName": os.environ["VERSION_NAME"],
+              "tag": os.environ["TAG_NAME"],
+              "apkName": os.environ["APK_DEST"],
+              "apkSize": int(os.environ["APK_SIZE"]),
+              "sha256": os.environ["SHA256_HASH"],
+              "releaseNotes": release_notes,
+              "functions": changelog.get("functions", []),
+              "fixes": changelog.get("fixes", [])
+          }
+
+          with open("version.json", "w", encoding="utf-8") as f:
+              json.dump(version_data, f, ensure_ascii=False, indent=2)
+          EOF
             
           echo "=== version.json ==="
           cat version.json
