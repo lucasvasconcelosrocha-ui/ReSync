@@ -1,6 +1,6 @@
-# Rodin_Backup (Android 17)
+# ReSync
 
-**Rodin_Backup** é um gerenciador de backup e restauração profissional, granular, de alta performance e 100% gratuito desenvolvido nativamente para Android (com suporte integral ao Android 17 / API 35+ e arquitetura Baklava).
+**ReSync** é um gerenciador de backup e restauração profissional, granular, de alta performance e 100% gratuito desenvolvido nativamente para Android (com suporte integral do Android 8.0 até Android 15/16).
 
 ---
 
@@ -180,3 +180,6 @@ RodinBackup/
 
 O binário final gerado estará disponível em:
 `app/build/outputs/apk/debug/app-debug.apk`
+ou para versão Release assinada:
+`app/build/outputs/apk/release/app-release.apk`
+
