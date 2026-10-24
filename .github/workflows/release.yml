@@ -77,7 +77,7 @@ jobs:
           VERSION_CODE: ${{ env.VERSION_CODE }}
           VERSION_NAME: ${{ env.VERSION_NAME }}
         run: |
-          ./gradlew assembleRelease --no-daemon
+           bash ./gradlew assembleRelease --no-daemon
 
       - name: Prepare Artifacts & Checksums
         run: |
