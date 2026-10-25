@@ -248,7 +248,26 @@ class BackupEngine(private val context: Context) {
             !ProcessControlManager.isPackageProtected(app.packageName, context)
         }
 
-        // 1. Pré-calcular total fixo de bytes e lotes/itens UMA VEZ antes de começar, e manter rigorosamente fixo
+        // 1. Detectar o modo de acesso antes de iniciar qualquer backup
+        val capabilityManager = CapabilityManager(context)
+        val isRootActive = capabilityManager.verifyRootAccess()
+        val detectedModeLabel = if (isRootActive) "Root" else "Sem root"
+        dbHelper.insertLog(
+            LogLevel.INFO,
+            "BackupEngine",
+            "Modo de acesso detectado para backup: $detectedModeLabel (uid=${if (isRootActive) 0 else android.os.Process.myUid()})"
+        )
+
+        val anyAppDataRequested = safeSelectedApps.any { it.second.includeData || it.second.includeInternalData }
+        if (!isRootActive && anyAppDataRequested) {
+            dbHelper.insertLog(
+                LogLevel.WARN,
+                "BackupEngine",
+                "Dados de apps exigem root. Fazendo backup só dos APKs"
+            )
+        }
+
+        // 2. Pré-calcular total fixo de bytes e lotes/itens UMA VEZ antes de começar, e manter rigorosamente fixo
         var precalcItems = 0
         var precalcBytes = 0L
 
@@ -267,17 +286,18 @@ class BackupEngine(private val context: Context) {
                     appItemCount++
                 }
             }
-            if (options.includeData) {
+            // Dados só entram no cálculo se o modo Root estiver ativo
+            if (isRootActive && (options.includeData || options.includeInternalData)) {
                 val dLen = app.sizeBytes.takeIf { it > 0 } ?: 15_000_000L
                 appBytes += dLen
                 appItemCount++
             }
-            if (options.includeExternalData) {
+            if (isRootActive && options.includeExternalData) {
                 val edLen = 10_000_000L
                 appBytes += edLen
                 appItemCount++
             }
-            if (options.includeObb) {
+            if (isRootActive && options.includeObb) {
                 val obbLen = 20_000_000L
                 appBytes += obbLen
                 appItemCount++
@@ -354,18 +374,27 @@ class BackupEngine(private val context: Context) {
             }
         }
 
+        val initialStatusMessage = if (!isRootActive && anyAppDataRequested) {
+            "Dados de apps exigem root. Fazendo backup só dos APKs"
+        } else if (isRootActive) {
+            "Modo Root detectado: acesso completo a APKs e dados de apps."
+        } else {
+            "Modo Sem root detectado: backup de APKs e mídias públicas."
+        }
+
         val initialProgress = BackupProgress(
-            stage = "Iniciando",
-            currentItemName = "Verificando permissões e espaço de armazenamento...",
+            stage = "Iniciando ($detectedModeLabel)",
+            currentItemName = initialStatusMessage,
             progressPercent = 0.02f,
             bytesProcessed = 0L,
             totalBytesEstimated = fixedTotalBytes,
             currentItemIndex = 0,
             totalItems = fixedTotalItems,
-            estimatedRemainingSeconds = FormatUtils.ESTIMATE_CALCULATING
+            estimatedRemainingSeconds = FormatUtils.ESTIMATE_CALCULATING,
+            localStage = detectedModeLabel
         )
         emitProgress(initialProgress)
-        dbHelper.insertLog(LogLevel.INFO, "BackupEngine", "Iniciando backup: $backupTitle")
+        dbHelper.insertLog(LogLevel.INFO, "BackupEngine", "Iniciando backup: $backupTitle [$detectedModeLabel]")
 
         // 0. Verify broad file access permissions if saving to internal storage root
         var effectiveVaultDir: File? = destinationDir
@@ -551,12 +580,12 @@ class BackupEngine(private val context: Context) {
                     }
                 }
 
-                // Internal Data: /data/data/<pkg> (excluding cache and code_cache)
+                // Internal Data: /data/data/<pkg> or /data/user/0/<pkg> (excluding cache and code_cache)
                 if (options.includeData || options.includeInternalData) {
                     emitProgress(
                         BackupProgress(
                             stage = "Aplicativos",
-                            currentItemName = "Gerando backup de dados de ${app.appName}...",
+                            currentItemName = if (isRootActive) "Gerando backup de dados de ${app.appName}..." else "Backup de dados de ${app.appName} (exige root - ignorado)",
                             progressPercent = appProgressPercent,
                             bytesProcessed = estimatedProcessedSoFar.coerceAtMost(fixedTotalBytes),
                             totalBytesEstimated = fixedTotalBytes,
@@ -568,8 +597,26 @@ class BackupEngine(private val context: Context) {
                         )
                     )
 
-                    if (PackageIgnorePolicy.isAlwaysIgnoredForData(app.packageName)) {
-                        dbHelper.insertLog(LogLevel.INFO, "BackupEngine", "Dados de ${app.packageName} ignorados por política de componentes internos/sandbox.")
+                    if (!isRootActive) {
+                        // Sem root: dados ignorados com aviso registrado. Não conta como falha e não gera 127 erros!
+                        dbHelper.insertLog(
+                            LogLevel.INFO,
+                            "BackupEngine",
+                            "App ${app.packageName}: modo=Sem root, caminho=/data/data/${app.packageName}, bytes=0, código de saída=0, erro=Nenhum (dados ignorados - apenas APK arquivado)"
+                        )
+                        completedItemsList.add(
+                            CompletedItemInfo(
+                                name = "${app.appName} (Dados)",
+                                type = BackupItemType.APP_DATA,
+                                success = true,
+                                isIgnored = true,
+                                stage = "Compactação de Dados",
+                                statusText = "Sem dados (exige root)",
+                                packageName = app.packageName
+                            )
+                        )
+                    } else if (PackageIgnorePolicy.isAlwaysIgnoredForData(app.packageName)) {
+                        dbHelper.insertLog(LogLevel.INFO, "BackupEngine", "App ${app.packageName}: modo=Root, caminho=/data/data/${app.packageName}, bytes=0, código de saída=0, ignorados por política de sandbox.")
                         completedItemsList.add(
                             CompletedItemInfo(
                                 name = "${app.appName} (Dados)",
@@ -582,115 +629,99 @@ class BackupEngine(private val context: Context) {
                             )
                         )
                     } else {
-                        val dataTarFile = File(stagingDir, "${app.packageName}_data.tar")
-                        try {
-                            val tarCmd = com.topjohnwu.superuser.Shell.cmd(
-                                "nice -n 19 ionice -c 3 tar -cf \"${dataTarFile.absolutePath}\" --exclude \"cache\" --exclude \"code_cache\" --exclude \"./cache\" --exclude \"./code_cache\" -C \"/data/data/${app.packageName}\" ."
-                            ).exec()
-                            val tarOutErr = (tarCmd.out + tarCmd.err).filter { it.isNotBlank() }.joinToString(" ")
-
-                            if (dataTarFile.exists() && dataTarFile.length() >= 100L) {
-                                val dataSha256 = SecurityManager.computeFileSha256(dataTarFile)
-                                val dataEntryName = "apps/${app.packageName}/data.tar"
-                                val dataItem = ManifestItem(
-                                    id = UUID.randomUUID().toString(),
+                        val dataResult = backupAppDataRoot(app, stagingDir)
+                        if (dataResult.isNoData) {
+                            // Apps sem pasta de dados ou realmente vazios: marque como "sem dados", não como falha
+                            dbHelper.insertLog(
+                                LogLevel.INFO,
+                                "BackupEngine",
+                                "App ${app.packageName}: modo=Root, caminho=${dataResult.path}, bytes=0, código de saída=0, sem dados na pasta."
+                            )
+                            completedItemsList.add(
+                                CompletedItemInfo(
+                                    name = "${app.appName} (Dados)",
                                     type = BackupItemType.APP_DATA,
-                                    name = "${app.appName} (Dados Internos)",
-                                    originalPath = "/data/data/${app.packageName}",
-                                    archiveEntryPath = dataEntryName,
-                                    sizeBytes = dataTarFile.length(),
-                                    sha256Checksum = dataSha256,
-                                    compressionMethod = "STORED",
-                                    metadata = mapOf("packageName" to app.packageName, "dataType" to "internal_data")
+                                    success = true,
+                                    isIgnored = true,
+                                    stage = "Compactação de Dados",
+                                    statusText = "Sem dados",
+                                    packageName = app.packageName
                                 )
-                                packEntries.add(ArchiveEngine.PackEntry(dataEntryName, sourceFile = dataTarFile, manifestItem = dataItem, isStoreOnly = true))
-                                manifestItems.add(dataItem)
-                                totalEstimatedSize += dataTarFile.length()
-                                appFileEntries.add(AppBackupFileEntry("data.tar", dataEntryName, dataTarFile.length(), dataSha256, "internal_data"))
-                                dbHelper.insertLog(LogLevel.INFO, "BackupEngine", "Dados de ${app.packageName} arquivados com sucesso (tar uncompressed): ${dataTarFile.length()} bytes.")
-                            } else {
-                                if (PackageIgnorePolicy.shouldIgnoreIfEmptyData(app.packageName, app.isSystemApp)) {
-                                    val infoMsg = "Dados de ${app.appName} vazios ou inacessíveis em componente do sistema (${if (dataTarFile.exists()) dataTarFile.length() else 0} bytes). Ignorado conforme política."
-                                    dbHelper.insertLog(LogLevel.INFO, "BackupEngine", infoMsg)
-                                    completedItemsList.add(
-                                        CompletedItemInfo(
-                                            name = "${app.appName} (Dados)",
-                                            type = BackupItemType.APP_DATA,
-                                            success = true,
-                                            isIgnored = true,
-                                            stage = "Compactação de Dados",
-                                            statusText = "Ignorado (sem dados)",
-                                            packageName = app.packageName
-                                        )
-                                    )
-                                } else {
-                                    val warnMsg = "Dados de ${app.appName} vazios ou inacessíveis (${if (dataTarFile.exists()) dataTarFile.length() else 0} bytes). ${tarOutErr.take(120)}"
-                                    dbHelper.insertLog(LogLevel.WARN, "BackupEngine", warnMsg)
-                                    completedItemsList.add(
-                                        CompletedItemInfo(
-                                            name = "${app.appName} (Dados)",
-                                            type = BackupItemType.APP_DATA,
-                                            success = false,
-                                            isIgnored = false,
-                                            error = warnMsg,
-                                            stage = "Compactação de Dados",
-                                            causeException = tarOutErr.ifBlank { "Falha ao executar comando tar em /data/data/${app.packageName}" },
-                                            suggestedFix = "Permissão negada ao ler /data/data. Conceda acesso root via Magisk/KernelSU."
-                                        )
-                                    )
-                                }
-                            }
-                        } catch (e: Exception) {
-                            if (PackageIgnorePolicy.shouldIgnoreIfEmptyData(app.packageName, app.isSystemApp)) {
-                                val infoMsg = "Exceção ao gerar tar de dados de componente do sistema ${app.appName}: ${e.message}. Ignorado conforme política."
-                                dbHelper.insertLog(LogLevel.INFO, "BackupEngine", infoMsg)
-                                completedItemsList.add(
-                                    CompletedItemInfo(
-                                        name = "${app.appName} (Dados)",
-                                        type = BackupItemType.APP_DATA,
-                                        success = true,
-                                        isIgnored = true,
-                                        stage = "Compactação de Dados",
-                                        statusText = "Ignorado (sem dados)",
-                                        packageName = app.packageName
-                                    )
+                            )
+                        } else if (dataResult.success && dataResult.tarFile != null) {
+                            val dataTarFile = dataResult.tarFile
+                            val dataSha256 = SecurityManager.computeFileSha256(dataTarFile)
+                            val dataEntryName = "apps/${app.packageName}/data.tar"
+                            val dataItem = ManifestItem(
+                                id = UUID.randomUUID().toString(),
+                                type = BackupItemType.APP_DATA,
+                                name = "${app.appName} (Dados Internos)",
+                                originalPath = dataResult.path,
+                                archiveEntryPath = dataEntryName,
+                                sizeBytes = dataTarFile.length(),
+                                sha256Checksum = dataSha256,
+                                compressionMethod = "STORED",
+                                metadata = mapOf("packageName" to app.packageName, "dataType" to "internal_data", "sourcePath" to dataResult.path)
+                            )
+                            packEntries.add(ArchiveEngine.PackEntry(dataEntryName, sourceFile = dataTarFile, manifestItem = dataItem, isStoreOnly = true))
+                            manifestItems.add(dataItem)
+                            totalEstimatedSize += dataTarFile.length()
+                            appFileEntries.add(AppBackupFileEntry("data.tar", dataEntryName, dataTarFile.length(), dataSha256, "internal_data"))
+                            dbHelper.insertLog(
+                                LogLevel.INFO,
+                                "BackupEngine",
+                                "App ${app.packageName}: modo=Root, caminho=${dataResult.path}, bytes=${dataTarFile.length()}, código de saída=0, erro=Nenhum"
+                            )
+                            completedItemsList.add(
+                                CompletedItemInfo(
+                                    name = "${app.appName} (Dados)",
+                                    type = BackupItemType.APP_DATA,
+                                    success = true,
+                                    isIgnored = false,
+                                    stage = "Compactação de Dados",
+                                    statusText = FormatUtils.formatBytes(dataTarFile.length()),
+                                    packageName = app.packageName
                                 )
-                            } else {
-                                val warnMsg = "Exceção ao gerar tar de dados de ${app.appName}: ${e.message}"
-                                dbHelper.insertLog(LogLevel.WARN, "BackupEngine", warnMsg)
-                                completedItemsList.add(
-                                    CompletedItemInfo(
-                                        name = "${app.appName} (Dados)",
-                                        type = BackupItemType.APP_DATA,
-                                        success = false,
-                                        isIgnored = false,
-                                        error = warnMsg,
-                                        stage = "Compactação de Dados",
-                                        causeException = "${e.javaClass.simpleName}: ${e.message}",
-                                        suggestedFix = "Conceda acesso root ou verifique se o aplicativo não possui restrições do sistema."
-                                    )
+                            )
+                        } else {
+                            // Falha na leitura com código de saída != 0
+                            val warnMsg = "Falha ao ler dados de ${app.appName} (${dataResult.path}): saída ${dataResult.exitCode} - ${dataResult.error}"
+                            dbHelper.insertLog(
+                                LogLevel.ERROR,
+                                "BackupEngine",
+                                "App ${app.packageName}: modo=Root, caminho=${dataResult.path}, bytes=${dataResult.bytesRead}, código de saída=${dataResult.exitCode}, erro=${dataResult.error}"
+                            )
+                            completedItemsList.add(
+                                CompletedItemInfo(
+                                    name = "${app.appName} (Dados)",
+                                    type = BackupItemType.APP_DATA,
+                                    success = false,
+                                    isIgnored = false,
+                                    error = warnMsg,
+                                    stage = "Compactação de Dados",
+                                    causeException = dataResult.error ?: "Falha ao executar comando tar em ${dataResult.path}",
+                                    suggestedFix = "Verifique permissões SELinux ou namespace no KernelSU/Magisk."
                                 )
-                            }
+                            )
                         }
                     }
                 }
 
                 // Device Protected Data: /data/user_de/0/<pkg>
                 if (options.includeUserDe) {
-                    val checkDe = com.topjohnwu.superuser.Shell.cmd("[ -d \"/data/user_de/0/${app.packageName}\" ] && [ \"$(ls -A /data/user_de/0/${app.packageName} 2>/dev/null)\" ]").exec()
-                    if (checkDe.isSuccess) {
-                        val userDeTarFile = File(stagingDir, "${app.packageName}_user_de.tar")
-                        val deCmd = com.topjohnwu.superuser.Shell.cmd(
-                            "nice -n 19 ionice -c 3 tar -cf \"${userDeTarFile.absolutePath}\" --exclude \"cache\" --exclude \"code_cache\" -C \"/data/user_de/0/${app.packageName}\" ."
-                        ).exec()
-                        if (userDeTarFile.exists() && userDeTarFile.length() >= 100L) {
+                    if (!isRootActive) {
+                        dbHelper.insertLog(LogLevel.INFO, "BackupEngine", "App ${app.packageName}: modo=Sem root, user_de ignorado.")
+                    } else {
+                        val deResult = backupUserDeRoot(app, stagingDir)
+                        if (deResult.success && !deResult.isNoData && deResult.tarFile != null) {
+                            val userDeTarFile = deResult.tarFile
                             val deSha256 = SecurityManager.computeFileSha256(userDeTarFile)
                             val deEntryName = "apps/${app.packageName}/user_de.tar"
                             val deItem = ManifestItem(
                                 id = UUID.randomUUID().toString(),
                                 type = BackupItemType.APP_DATA,
                                 name = "${app.appName} (Dados Criptografia do Dispositivo)",
-                                originalPath = "/data/user_de/0/${app.packageName}",
+                                originalPath = deResult.path,
                                 archiveEntryPath = deEntryName,
                                 sizeBytes = userDeTarFile.length(),
                                 sha256Checksum = deSha256,
@@ -701,6 +732,19 @@ class BackupEngine(private val context: Context) {
                             manifestItems.add(deItem)
                             totalEstimatedSize += userDeTarFile.length()
                             appFileEntries.add(AppBackupFileEntry("user_de.tar", deEntryName, userDeTarFile.length(), deSha256, "user_de"))
+                            dbHelper.insertLog(
+                                LogLevel.INFO,
+                                "BackupEngine",
+                                "App ${app.packageName}: modo=Root, caminho=${deResult.path}, bytes=${userDeTarFile.length()}, código de saída=0, erro=Nenhum"
+                            )
+                        } else if (deResult.isNoData) {
+                            dbHelper.insertLog(LogLevel.INFO, "BackupEngine", "App ${app.packageName}: modo=Root, caminho=${deResult.path}, bytes=0, código de saída=0, sem dados (user_de)")
+                        } else {
+                            dbHelper.insertLog(
+                                LogLevel.WARN,
+                                "BackupEngine",
+                                "App ${app.packageName}: modo=Root, caminho=${deResult.path}, bytes=${deResult.bytesRead}, código de saída=${deResult.exitCode}, erro=${deResult.error}"
+                            )
                         }
                     }
                 }
@@ -2877,6 +2921,256 @@ class BackupEngine(private val context: Context) {
         }
 
         return results
+    }
+
+    data class AppDataBackupResult(
+        val success: Boolean,
+        val isNoData: Boolean,
+        val bytesRead: Long,
+        val exitCode: Int,
+        val path: String,
+        val error: String?,
+        val tarFile: File?
+    )
+
+    private suspend fun backupAppDataRoot(app: AppInfo, stagingDir: File): AppDataBackupResult = withContext(Dispatchers.IO) {
+        val pkg = app.packageName
+        val candidatePaths = listOf("/data/data/$pkg", "/data/user/0/$pkg")
+        var chosenPath: String? = null
+
+        // 1. Verificar qual dos caminhos candidatos existe via root
+        for (candidate in candidatePaths) {
+            val checkExist = Shell.cmd("[ -d \"$candidate\" ]").exec()
+            if (checkExist.isSuccess) {
+                chosenPath = candidate
+                break
+            }
+        }
+
+        if (chosenPath == null) {
+            for (candidate in candidatePaths) {
+                try {
+                    val p = Runtime.getRuntime().exec(arrayOf("su", "-c", "[ -d \"$candidate\" ]"))
+                    if (p.waitFor() == 0) {
+                        chosenPath = candidate
+                        break
+                    }
+                } catch (_: Throwable) {}
+            }
+        }
+
+        // Se a pasta não existir em nenhum caminho candidato
+        if (chosenPath == null) {
+            return@withContext AppDataBackupResult(
+                success = true,
+                isNoData = true,
+                bytesRead = 0L,
+                exitCode = 0,
+                path = "/data/data/$pkg",
+                error = null,
+                tarFile = null
+            )
+        }
+
+        // 2. Verificar se o diretório está vazio (desconsiderando cache e code_cache)
+        val checkFilesCmd = Shell.cmd("find \"$chosenPath\" -mindepth 1 -maxdepth 2 ! -name \"cache\" ! -name \"code_cache\" 2>/dev/null | head -n 1").exec()
+        val hasFiles = checkFilesCmd.isSuccess && checkFilesCmd.out.any { it.isNotBlank() }
+        if (!hasFiles) {
+            return@withContext AppDataBackupResult(
+                success = true,
+                isNoData = true,
+                bytesRead = 0L,
+                exitCode = 0,
+                path = chosenPath,
+                error = null,
+                tarFile = null
+            )
+        }
+
+        // 3. Executar compactação tar com root
+        val dataTarFile = File(stagingDir, "${pkg}_data.tar")
+        if (dataTarFile.exists()) dataTarFile.delete()
+
+        // Tentativa 1: Preservando dono numérico (--numeric-owner), permissões (-p) e contexto SELinux (--selinux)
+        val cmd1 = "nice -n 19 ionice -c 3 tar -cf \"${dataTarFile.absolutePath}\" -p --numeric-owner --selinux --exclude \"cache\" --exclude \"code_cache\" --exclude \"no_backup\" --exclude \"./cache\" --exclude \"./code_cache\" --exclude \"./no_backup\" -C \"$chosenPath\" ."
+        var tarExec = Shell.cmd(cmd1).exec()
+        var outErr = (tarExec.out + tarExec.err).filter { it.isNotBlank() }.joinToString(" ")
+        var exitCode = tarExec.code
+
+        // Se falhar devido a flag --selinux não suportada pelo binário toybox/tar, tentar sem --selinux
+        if (!tarExec.isSuccess && (outErr.contains("selinux", ignoreCase = true) || outErr.contains("unrecognized", ignoreCase = true) || outErr.contains("unknown", ignoreCase = true))) {
+            val cmd2 = "nice -n 19 ionice -c 3 tar -cf \"${dataTarFile.absolutePath}\" -p --numeric-owner --exclude \"cache\" --exclude \"code_cache\" --exclude \"no_backup\" --exclude \"./cache\" --exclude \"./code_cache\" --exclude \"./no_backup\" -C \"$chosenPath\" ."
+            tarExec = Shell.cmd(cmd2).exec()
+            outErr = (tarExec.out + tarExec.err).filter { it.isNotBlank() }.joinToString(" ")
+            exitCode = tarExec.code
+        }
+
+        // Se ainda falhar, testar namespace mount master ("su -mm" no KernelSU / Magisk)
+        if (!tarExec.isSuccess || !dataTarFile.exists() || dataTarFile.length() == 0L) {
+            try {
+                val pMm = Runtime.getRuntime().exec(arrayOf(
+                    "su", "-mm", "-c",
+                    "tar -cf \"${dataTarFile.absolutePath}\" -p --numeric-owner --exclude 'cache' --exclude 'code_cache' --exclude 'no_backup' -C \"$chosenPath\" ."
+                ))
+                val mmErr = pMm.errorStream.bufferedReader().use { it.readText() }
+                val mmExit = pMm.waitFor()
+                if (mmExit == 0 && dataTarFile.exists() && dataTarFile.length() > 0L) {
+                    exitCode = 0
+                    outErr = ""
+                } else if (mmExit != 0 && outErr.isBlank()) {
+                    exitCode = mmExit
+                    outErr = mmErr
+                }
+            } catch (_: Throwable) {}
+        }
+
+        // Se ainda falhar e o caminho tentado foi /data/data, tentar o caminho alternativo /data/user/0
+        if ((exitCode != 0 || !dataTarFile.exists() || dataTarFile.length() == 0L) && chosenPath != "/data/user/0/$pkg") {
+            val altPath = "/data/user/0/$pkg"
+            val altCmd = "nice -n 19 ionice -c 3 tar -cf \"${dataTarFile.absolutePath}\" -p --numeric-owner --exclude \"cache\" --exclude \"code_cache\" --exclude \"no_backup\" -C \"$altPath\" ."
+            val altExec = Shell.cmd(altCmd).exec()
+            if (altExec.isSuccess && dataTarFile.exists() && dataTarFile.length() > 0L) {
+                chosenPath = altPath
+                exitCode = 0
+                outErr = ""
+            }
+        }
+
+        val bytes = if (dataTarFile.exists()) dataTarFile.length() else 0L
+
+        if (exitCode == 0 && bytes > 0L) {
+            AppDataBackupResult(
+                success = true,
+                isNoData = false,
+                bytesRead = bytes,
+                exitCode = 0,
+                path = chosenPath,
+                error = null,
+                tarFile = dataTarFile
+            )
+        } else if (exitCode == 0 && bytes == 0L) {
+            AppDataBackupResult(
+                success = true,
+                isNoData = true,
+                bytesRead = 0L,
+                exitCode = 0,
+                path = chosenPath,
+                error = null,
+                tarFile = null
+            )
+        } else {
+            val selinuxInfo = CapabilityManager(context).getSelinuxStatus()
+            val detailedError = if (outErr.isNotBlank()) "$outErr (SELinux: $selinuxInfo)" else "Código de saída: $exitCode (SELinux: $selinuxInfo)"
+            AppDataBackupResult(
+                success = false,
+                isNoData = false,
+                bytesRead = bytes,
+                exitCode = exitCode,
+                path = chosenPath,
+                error = detailedError,
+                tarFile = null
+            )
+        }
+    }
+
+    private suspend fun backupUserDeRoot(app: AppInfo, stagingDir: File): AppDataBackupResult = withContext(Dispatchers.IO) {
+        val pkg = app.packageName
+        val dePath = "/data/user_de/0/$pkg"
+
+        val checkExist = Shell.cmd("[ -d \"$dePath\" ]").exec()
+        if (!checkExist.isSuccess) {
+            return@withContext AppDataBackupResult(
+                success = true,
+                isNoData = true,
+                bytesRead = 0L,
+                exitCode = 0,
+                path = dePath,
+                error = null,
+                tarFile = null
+            )
+        }
+
+        val checkFilesCmd = Shell.cmd("find \"$dePath\" -mindepth 1 -maxdepth 2 ! -name \"cache\" ! -name \"code_cache\" 2>/dev/null | head -n 1").exec()
+        val hasFiles = checkFilesCmd.isSuccess && checkFilesCmd.out.any { it.isNotBlank() }
+        if (!hasFiles) {
+            return@withContext AppDataBackupResult(
+                success = true,
+                isNoData = true,
+                bytesRead = 0L,
+                exitCode = 0,
+                path = dePath,
+                error = null,
+                tarFile = null
+            )
+        }
+
+        val userDeTarFile = File(stagingDir, "${pkg}_user_de.tar")
+        if (userDeTarFile.exists()) userDeTarFile.delete()
+
+        val cmd1 = "nice -n 19 ionice -c 3 tar -cf \"${userDeTarFile.absolutePath}\" -p --numeric-owner --selinux --exclude \"cache\" --exclude \"code_cache\" -C \"$dePath\" ."
+        var tarExec = Shell.cmd(cmd1).exec()
+        var outErr = (tarExec.out + tarExec.err).filter { it.isNotBlank() }.joinToString(" ")
+        var exitCode = tarExec.code
+
+        if (!tarExec.isSuccess && (outErr.contains("selinux", ignoreCase = true) || outErr.contains("unrecognized", ignoreCase = true) || outErr.contains("unknown", ignoreCase = true))) {
+            val cmd2 = "nice -n 19 ionice -c 3 tar -cf \"${userDeTarFile.absolutePath}\" -p --numeric-owner --exclude \"cache\" --exclude \"code_cache\" -C \"$dePath\" ."
+            tarExec = Shell.cmd(cmd2).exec()
+            outErr = (tarExec.out + tarExec.err).filter { it.isNotBlank() }.joinToString(" ")
+            exitCode = tarExec.code
+        }
+
+        if (!tarExec.isSuccess || !userDeTarFile.exists() || userDeTarFile.length() == 0L) {
+            try {
+                val pMm = Runtime.getRuntime().exec(arrayOf(
+                    "su", "-mm", "-c",
+                    "tar -cf \"${userDeTarFile.absolutePath}\" -p --numeric-owner --exclude 'cache' --exclude 'code_cache' -C \"$dePath\" ."
+                ))
+                val mmErr = pMm.errorStream.bufferedReader().use { it.readText() }
+                val mmExit = pMm.waitFor()
+                if (mmExit == 0 && userDeTarFile.exists() && userDeTarFile.length() > 0L) {
+                    exitCode = 0
+                    outErr = ""
+                } else if (mmExit != 0 && outErr.isBlank()) {
+                    exitCode = mmExit
+                    outErr = mmErr
+                }
+            } catch (_: Throwable) {}
+        }
+
+        val bytes = if (userDeTarFile.exists()) userDeTarFile.length() else 0L
+        if (exitCode == 0 && bytes > 0L) {
+            AppDataBackupResult(
+                success = true,
+                isNoData = false,
+                bytesRead = bytes,
+                exitCode = 0,
+                path = dePath,
+                error = null,
+                tarFile = userDeTarFile
+            )
+        } else if (exitCode == 0 && bytes == 0L) {
+            AppDataBackupResult(
+                success = true,
+                isNoData = true,
+                bytesRead = 0L,
+                exitCode = 0,
+                path = dePath,
+                error = null,
+                tarFile = null
+            )
+        } else {
+            val selinuxInfo = CapabilityManager(context).getSelinuxStatus()
+            val detailedError = if (outErr.isNotBlank()) "$outErr (SELinux: $selinuxInfo)" else "Código de saída: $exitCode (SELinux: $selinuxInfo)"
+            AppDataBackupResult(
+                success = false,
+                isNoData = false,
+                bytesRead = bytes,
+                exitCode = exitCode,
+                path = dePath,
+                error = detailedError,
+                tarFile = null
+            )
+        }
     }
 
     fun getOrCreateDefaultVaultDir(): File {

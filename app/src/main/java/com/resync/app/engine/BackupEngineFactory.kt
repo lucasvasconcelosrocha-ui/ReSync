@@ -24,11 +24,15 @@ object BackupEngineFactory {
      * Deteção silenciosa e segura da disponibilidade de privilégios de Superusuário.
      * Verifica se o binário su está disponível e se a shell atual possui privilégios de root (uid=0).
      */
-    suspend fun isRootAvailable(): Boolean = withContext(Dispatchers.IO) {
+    suspend fun isRootAvailable(context: Context? = null): Boolean = withContext(Dispatchers.IO) {
         cachedHasRoot?.let { return@withContext it }
 
         val hasRoot = try {
-            Shell.isAppGrantedRoot() == true || (try { Shell.getShell().isRoot } catch (_: Throwable) { false })
+            if (context != null) {
+                CapabilityManager(context).verifyRootAccess(timeoutMs = 3000L)
+            } else {
+                Shell.isAppGrantedRoot() == true || (try { Shell.getShell().isRoot } catch (_: Throwable) { false })
+            }
         } catch (e: Throwable) {
             Log.w(TAG, "Falha na verificação silenciosa de Root: ${e.message}")
             false
@@ -55,7 +59,7 @@ object BackupEngineFactory {
         context: Context,
         forceRootMode: Boolean? = null
     ): IBackupEngine {
-        val rootActive = forceRootMode ?: isRootAvailable()
+        val rootActive = forceRootMode ?: isRootAvailable(context)
         return if (rootActive) {
             Log.i(TAG, "Dispositivo possui privilégios de Superusuário ativos. Utilizando RootBackupEngine.")
             RootBackupEngine(context.applicationContext)

@@ -501,6 +501,10 @@ fun BackupWizardScreen(
     val permissionsState by viewModel.permissionsState.collectAsStateWithLifecycle()
     val isRootActive = activeMode == CapabilityManager.ExecutionMode.ROOT || permissionsState.isRootGranted || com.topjohnwu.superuser.Shell.isAppGrantedRoot() == true
 
+    // Non-root App Data Warning & Confirmation Dialog
+    var showNonRootConfirmationDialog by remember { mutableStateOf(false) }
+    var pendingNonRootConfirmationAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+
     // Modals & Choosers
     var showStoragePickerModal by remember { mutableStateOf(false) }
     var showFolderSourceChoiceDialog by remember { mutableStateOf(false) }
@@ -822,11 +826,31 @@ fun BackupWizardScreen(
                         Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar", tint = TextPrimary)
                     }
 
-                    Text(
-                        text = "Backup Rápido (${currentStep.stepNumber}/${AssistantStep.values().size})",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = TextPrimary
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "Backup Rápido (${currentStep.stepNumber}/${AssistantStep.values().size})",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = TextPrimary
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                            modifier = Modifier.padding(top = 2.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isRootActive) StatusSuccess else StatusWarning)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (isRootActive) "Modo: Root (Superusuário)" else "Modo: Sem root",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (isRootActive) StatusSuccess else StatusWarning
+                            )
+                        }
+                    }
 
                     TextButton(onClick = onBack) {
                         Text("Fechar", color = TextMuted)
@@ -1009,13 +1033,22 @@ fun BackupWizardScreen(
                                                 onStartBackup()
                                             }
 
-                                            if (targetProvider != null) {
-                                                pendingCloudBackupLauncher = { chosenEmail ->
-                                                    selectedDriveAccount = chosenEmail
-                                                    startBackupJob(chosenEmail)
+                                            val proceedWithLaunch = {
+                                                if (targetProvider != null) {
+                                                    pendingCloudBackupLauncher = { chosenEmail ->
+                                                        selectedDriveAccount = chosenEmail
+                                                        startBackupJob(chosenEmail)
+                                                    }
+                                                } else {
+                                                    startBackupJob(null)
                                                 }
+                                            }
+
+                                            if (!isRootActive && includeAppData) {
+                                                pendingNonRootConfirmationAction = proceedWithLaunch
+                                                showNonRootConfirmationDialog = true
                                             } else {
-                                                startBackupJob(null)
+                                                proceedWithLaunch()
                                             }
                                         }
                                     },
@@ -1329,8 +1362,12 @@ fun BackupWizardScreen(
                                     item {
                                         SubOptionItem(
                                             icon = Icons.Default.Storage,
-                                            label = "Dados internos",
-                                            description = "Bancos de dados e preferências (/data/data) • $internalDataCount pastas (${FormatUtils.formatBytes(internalDataTotalBytes)})",
+                                            label = if (isRootActive) "Dados internos" else "Dados internos (Requer Root)",
+                                            description = if (isRootActive) {
+                                                "Bancos de dados e preferências (/data/data) • $internalDataCount pastas (${FormatUtils.formatBytes(internalDataTotalBytes)})"
+                                            } else {
+                                                "Requer Root. Em modo sem root, apenas APKs serão copiados • $internalDataCount pastas"
+                                            },
                                             checked = includeAppData,
                                             onCheckedChange = {
                                                 includeAppData = it
@@ -2774,6 +2811,58 @@ fun BackupWizardScreen(
                     )
                 }
             }
+        )
+    }
+
+    // Non-root confirmation dialog for App Data
+    if (showNonRootConfirmationDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showNonRootConfirmationDialog = false
+                pendingNonRootConfirmationAction = null
+            },
+            icon = { Icon(Icons.Default.Warning, contentDescription = null, tint = StatusWarning, modifier = Modifier.size(28.dp)) },
+            title = {
+                Text(
+                    text = "Modo Sem Root Detectado",
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+            },
+            text = {
+                Text(
+                    text = "O backup de dados internos de aplicativos (/data/data) exige privilégios de Root.\n\nComo o dispositivo está em Modo Sem Root, o ReSync fará o backup apenas dos APKs dos aplicativos selecionados, sem gerar falhas.\n\nDeseja continuar com o backup dos APKs?",
+                    color = TextSecondary,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showNonRootConfirmationDialog = false
+                        includeAppData = false
+                        persistCurrentSelection()
+                        val action = pendingNonRootConfirmationAction
+                        pendingNonRootConfirmationAction = null
+                        action?.invoke()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = primaryAccent),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Continuar (Apenas APKs)", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showNonRootConfirmationDialog = false
+                    pendingNonRootConfirmationAction = null
+                }) {
+                    Text("Cancelar", color = TextMuted, fontSize = 12.sp)
+                }
+            },
+            containerColor = DarkSurface,
+            shape = RoundedCornerShape(16.dp)
         )
     }
 

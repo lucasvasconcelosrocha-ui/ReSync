@@ -90,7 +90,72 @@ class CapabilityManager(private val context: Context) {
      * Check if device has Superuser binary and if app was explicitly granted root access.
      */
     suspend fun isRootGranted(): Boolean = withContext(Dispatchers.IO) {
-        checkRootAccess() == RootStatus.AUTHORIZED
+        verifyRootAccess()
+    }
+
+    /**
+     * Validação rigorosa e segura de privilégios de Root.
+     * Testa Shell.isAppGrantedRoot(), comando direto "su -c id" (uid=0),
+     * mount master "su -mm -c id" (KernelSU / Magisk) e Shell.cmd("id").
+     */
+    suspend fun verifyRootAccess(timeoutMs: Long = 4000L): Boolean = withContext(Dispatchers.IO) {
+        kotlinx.coroutines.withTimeoutOrNull(timeoutMs) {
+            try {
+                // 1. Verifica flag do libsu
+                if (Shell.isAppGrantedRoot() == true) return@withTimeoutOrNull true
+
+                // 2. Testa comando direto via Runtime "su -c id" (uid=0)
+                try {
+                    val p = Runtime.getRuntime().exec(arrayOf("su", "-c", "id"))
+                    val line = p.inputStream.bufferedReader().readLine()
+                    p.waitFor()
+                    if (p.exitValue() == 0 && line != null && line.contains("uid=0")) {
+                        return@withTimeoutOrNull true
+                    }
+                } catch (_: Throwable) {}
+
+                // 3. Testa comando direto com mount master "su -mm -c id" (KernelSU / Magisk)
+                try {
+                    val pMm = Runtime.getRuntime().exec(arrayOf("su", "-mm", "-c", "id"))
+                    val lineMm = pMm.inputStream.bufferedReader().readLine()
+                    pMm.waitFor()
+                    if (pMm.exitValue() == 0 && lineMm != null && lineMm.contains("uid=0")) {
+                        return@withTimeoutOrNull true
+                    }
+                } catch (_: Throwable) {}
+
+                // 4. Testa Shell libsu executando id
+                try {
+                    val res = Shell.cmd("id").exec()
+                    if (res.isSuccess && res.out.any { it.contains("uid=0") }) {
+                        return@withTimeoutOrNull true
+                    }
+                } catch (_: Throwable) {}
+
+                false
+            } catch (_: Throwable) {
+                false
+            }
+        } ?: false
+    }
+
+    /**
+     * Consulta o status do SELinux do dispositivo (Enforcing, Permissive ou Disabled).
+     */
+    fun getSelinuxStatus(): String {
+        return try {
+            val p = Runtime.getRuntime().exec(arrayOf("sh", "-c", "getenforce 2>/dev/null || cat /sys/fs/selinux/enforce 2>/dev/null"))
+            val out = p.inputStream.bufferedReader().readLine()?.trim() ?: ""
+            p.waitFor()
+            when (out) {
+                "1", "Enforcing" -> "Enforcing"
+                "0", "Permissive" -> "Permissive"
+                "" -> "Desconhecido"
+                else -> out
+            }
+        } catch (_: Throwable) {
+            "Desconhecido"
+        }
     }
 
     /**
@@ -98,38 +163,10 @@ class CapabilityManager(private val context: Context) {
      */
     suspend fun checkRootAccess(): RootStatus = withContext(Dispatchers.IO) {
         try {
-            // 1. Check if already granted in libsu
-            if (Shell.isAppGrantedRoot() == true) {
+            if (verifyRootAccess()) {
                 return@withContext RootStatus.AUTHORIZED
             }
 
-            // 2. Attempt privileged execution via libsu
-            val libsuRes = try {
-                val res = Shell.cmd("id").exec()
-                res.isSuccess && res.out.any { it.contains("uid=0") }
-            } catch (_: Exception) {
-                false
-            }
-
-            if (libsuRes) {
-                return@withContext RootStatus.AUTHORIZED
-            }
-
-            // 3. Fallback direct execution check (e.g. prompt or existing grant)
-            val directRes = try {
-                val p = Runtime.getRuntime().exec(arrayOf("su", "-c", "id"))
-                val line = p.inputStream.bufferedReader().readLine()
-                p.waitFor()
-                p.exitValue() == 0 && line != null && line.contains("uid=0")
-            } catch (_: Exception) {
-                false
-            }
-
-            if (directRes) {
-                return@withContext RootStatus.AUTHORIZED
-            }
-
-            // 4. Distinguish between Root present but needing grant vs No root at all
             val hasBinary = hasSuBinary()
             val hasManager = getInstalledRootManagers().isNotEmpty()
 

@@ -242,22 +242,11 @@ class PermissionsRepository(private val context: Context) {
                     try {
                         Shell.getCachedShell()?.close()
                     } catch (_: Throwable) {}
-                    Shell.getShell()
+                    try {
+                        Shell.getShell()
+                    } catch (_: Throwable) {}
                 }
-
-                if (Shell.isAppGrantedRoot() == true) {
-                    return@withTimeoutOrNull true
-                }
-
-                val cmdRes = Shell.cmd("id").exec()
-                if (cmdRes.isSuccess && cmdRes.out.any { it.contains("uid=0") }) {
-                    return@withTimeoutOrNull true
-                }
-
-                val p = Runtime.getRuntime().exec(arrayOf("su", "-c", "id"))
-                val line = p.inputStream.bufferedReader().readLine()
-                p.waitFor()
-                p.exitValue() == 0 && line != null && line.contains("uid=0")
+                CapabilityManager(context).verifyRootAccess(timeoutMs = 4000L)
             } catch (_: Throwable) {
                 false
             }

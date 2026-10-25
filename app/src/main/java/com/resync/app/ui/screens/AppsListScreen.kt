@@ -65,6 +65,7 @@ fun AppsListScreen(
     val currentAccent by viewModel.themeAccent.collectAsState()
     val primaryAccent = getAccentColor(currentAccent)
     val activeMode by viewModel.activeMode.collectAsState()
+    val isRootActive = activeMode == CapabilityManager.ExecutionMode.ROOT || com.topjohnwu.superuser.Shell.isAppGrantedRoot() == true
     val backupStatusMap by viewModel.appBackupStatusMap.collectAsState()
 
     var searchQuery by remember { mutableStateOf("") }
@@ -75,6 +76,8 @@ fun AppsListScreen(
     val selectedPackages = remember { mutableStateListOf<String>() }
 
     var showCustomizeBottomSheet by remember { mutableStateOf(false) }
+    var showNonRootConfirmDialog by remember { mutableStateOf(false) }
+    var pendingCustomBackupLaunch by remember { mutableStateOf<((Boolean) -> Unit)?>(null) }
     var backupToRestore by remember { mutableStateOf<BackupRecord?>(null) }
     var backupToDelete by remember { mutableStateOf<BackupRecord?>(null) }
 
@@ -845,7 +848,7 @@ fun AppsListScreen(
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { includeInternalData = !includeInternalData }) {
                     Checkbox(checked = includeInternalData, onCheckedChange = { includeInternalData = it }, colors = CheckboxDefaults.colors(checkedColor = primaryAccent))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Dados Internos (/data/data)", fontSize = 13.sp, color = TextPrimary)
+                    Text(if (isRootActive) "Dados Internos (/data/data)" else "Dados Internos (/data/data) • Requer Root", fontSize = 13.sp, color = if (isRootActive) TextPrimary else TextMuted)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { includeExternalData = !includeExternalData }) {
                     Checkbox(checked = includeExternalData, onCheckedChange = { includeExternalData = it }, colors = CheckboxDefaults.colors(checkedColor = primaryAccent))
@@ -931,26 +934,35 @@ fun AppsListScreen(
                 Spacer(modifier = Modifier.height(20.dp))
                 Button(
                     onClick = {
-                        val opts = AppSelectionOptions(
-                            includeBaseApk = includeBaseApk,
-                            includeSplits = includeSplits,
-                            includeData = includeInternalData || includeExternalData || includeObb,
-                            includeInternalData = includeInternalData,
-                            includeExternalData = includeExternalData,
-                            includeObb = includeObb,
-                            includeUserDe = includeInternalData
-                        )
-                        viewModel.launchCustomAppBackup(
-                            packages = selectedPackages.toList(),
-                            options = opts,
-                            destination = selectedDestination,
-                            driveAccountEmail = if (selectedDestination != "Local") selectedDriveAccount else null,
-                            compression = selectedCompression
-                        )
-                        showCustomizeBottomSheet = false
-                        isMultiSelectMode = false
-                        selectedPackages.clear()
-                        Toast.makeText(context, "Iniciando Backup Personalizado...", Toast.LENGTH_SHORT).show()
+                        val launchAction = { skipInternalData: Boolean ->
+                            val opts = AppSelectionOptions(
+                                includeBaseApk = includeBaseApk,
+                                includeSplits = includeSplits,
+                                includeData = (!skipInternalData && includeInternalData) || includeExternalData || includeObb,
+                                includeInternalData = if (skipInternalData) false else includeInternalData,
+                                includeExternalData = includeExternalData,
+                                includeObb = includeObb,
+                                includeUserDe = if (skipInternalData) false else includeInternalData
+                            )
+                            viewModel.launchCustomAppBackup(
+                                packages = selectedPackages.toList(),
+                                options = opts,
+                                destination = selectedDestination,
+                                driveAccountEmail = if (selectedDestination != "Local") selectedDriveAccount else null,
+                                compression = selectedCompression
+                            )
+                            showCustomizeBottomSheet = false
+                            isMultiSelectMode = false
+                            selectedPackages.clear()
+                            Toast.makeText(context, "Iniciando Backup Personalizado...", Toast.LENGTH_SHORT).show()
+                        }
+
+                        if (!isRootActive && includeInternalData) {
+                            pendingCustomBackupLaunch = launchAction
+                            showNonRootConfirmDialog = true
+                        } else {
+                            launchAction(false)
+                        }
                     },
                     modifier = Modifier.fillMaxWidth().height(48.dp),
                     shape = RoundedCornerShape(12.dp),
@@ -963,6 +975,49 @@ fun AppsListScreen(
                 Spacer(modifier = Modifier.height(20.dp))
             }
         }
+    }
+
+    if (showNonRootConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showNonRootConfirmDialog = false
+                pendingCustomBackupLaunch = null
+            },
+            icon = { Icon(Icons.Default.Warning, contentDescription = null, tint = StatusWarning, modifier = Modifier.size(28.dp)) },
+            title = { Text("Modo Sem Root Detectado", fontWeight = FontWeight.Bold, color = TextPrimary) },
+            text = {
+                Text(
+                    text = "O backup de dados internos de aplicativos (/data/data) exige privilégios de Root.\n\nComo o dispositivo está em Modo Sem Root, o ReSync fará o backup apenas dos APKs dos aplicativos selecionados, sem registrar erros de dados.\n\nDeseja prosseguir com o backup dos APKs?",
+                    color = TextSecondary,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showNonRootConfirmDialog = false
+                        val act = pendingCustomBackupLaunch
+                        pendingCustomBackupLaunch = null
+                        act?.invoke(true)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = primaryAccent),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Continuar (Apenas APKs)", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showNonRootConfirmDialog = false
+                    pendingCustomBackupLaunch = null
+                }) {
+                    Text("Cancelar", color = TextMuted, fontSize = 12.sp)
+                }
+            },
+            containerColor = DarkSurface,
+            shape = RoundedCornerShape(16.dp)
+        )
     }
 
     if (backupToRestore != null) {

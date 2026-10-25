@@ -222,7 +222,25 @@ class RestoreEngine(private val context: Context) {
             )
 
             val totalApps = validAppGroups.size
-            val hasRoot = Shell.isAppGrantedRoot() == true
+            val capabilityManager = CapabilityManager(context)
+            val hasRoot = capabilityManager.verifyRootAccess()
+            val modeLabel = if (hasRoot) "Root" else "Sem root"
+            dbHelper.insertLog(
+                LogLevel.INFO,
+                "RestoreEngine",
+                "Modo de acesso detectado para restauração: $modeLabel (uid=${if (hasRoot) 0 else android.os.Process.myUid()})"
+            )
+
+            val anyAppDataInBackup = validAppGroups.values.any { items ->
+                items.any { it.type == BackupItemType.APP_DATA || it.archiveEntryPath.endsWith(".tar") || it.archiveEntryPath.endsWith(".tar.gz") }
+            }
+            if (!hasRoot && anyAppDataInBackup) {
+                dbHelper.insertLog(
+                    LogLevel.WARN,
+                    "RestoreEngine",
+                    "Dados de apps exigem root. Restaurando apenas os APKs"
+                )
+            }
 
             // If non-root and there are apps to install, verify unknown sources permission
             if (!hasRoot && totalApps > 0 && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -236,7 +254,8 @@ class RestoreEngine(private val context: Context) {
                             currentItemIndex = currentItemIdx,
                             totalItems = totalRestoreItems,
                             currentItemType = BackupItemType.APP_APK,
-                            completedItems = completedItemsList.toList()
+                            completedItems = completedItemsList.toList(),
+                            localStage = modeLabel
                         )
                     )
                     try {
@@ -322,6 +341,7 @@ class RestoreEngine(private val context: Context) {
                     RestoreInstallResult(true, 0)
                 }
 
+                val hasDataItems = appItems.any { it.type == BackupItemType.APP_DATA || it.archiveEntryPath.endsWith(".tar") || it.archiveEntryPath.endsWith(".tar.gz") }
                 val finalResult = if (installResult.success) {
                     if (hasRoot) {
                         send(
@@ -332,18 +352,28 @@ class RestoreEngine(private val context: Context) {
                                 currentItemIndex = currentItemIdx,
                                 totalItems = totalRestoreItems,
                                 currentItemType = BackupItemType.APP_DATA,
-                                completedItems = completedItemsList.toList()
+                                completedItems = completedItemsList.toList(),
+                                localStage = modeLabel
                             )
                         )
                         restoreAppDataViaRoot(pkgName, tempRestoreDir, appItems)
                     } else {
-                        installResult
+                        if (hasDataItems) {
+                            dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "App $pkgName: modo=Sem root, dados ignorados (exige Root). APK instalado com sucesso.")
+                        }
+                        RestoreInstallResult(true, 0, if (hasDataItems) "APK instalado (dados exigem Root)" else null)
                     }
                 } else {
                     installResult
                 }
 
                 appResults.add(pkgName to finalResult)
+                val statusTextDesc = if (finalResult.success) {
+                    if (!hasRoot && hasDataItems) "APK restaurado (dados exigem Root)" else "Restaurado e verificado ($modeLabel)"
+                } else {
+                    "Falha na instalação"
+                }
+
                 completedItemsList.add(
                     CompletedItemInfo(
                         id = pkgName,
@@ -354,7 +384,7 @@ class RestoreEngine(private val context: Context) {
                         packageName = pkgName,
                         detailCount = if (finalResult.success) "Restaurado ($modeLabel)" else "Falha",
                         verified = finalResult.success,
-                        statusText = if (finalResult.success) "Restaurado e verificado" else "Falha na instalação"
+                        statusText = statusTextDesc
                     )
                 )
 
@@ -744,11 +774,34 @@ class RestoreEngine(private val context: Context) {
             }
 
             // 6. Extract tar in /data/data/<pkg> (tar -xf works for both uncompressed tar and gzip tar.gz)
-            val extractCmd = Shell.cmd("nice -n 19 ionice -c 3 tar -xf \"${dataTar.absolutePath}\" -C \"/data/data/$pkgName\"").exec()
-            if (!extractCmd.isSuccess) {
-                val err = "Falha ao extrair tar de dados em /data/data/$pkgName: ${(extractCmd.out + extractCmd.err).joinToString(" ")}"
-                dbHelper.insertLog(LogLevel.ERROR, "RestoreEngine", err)
+            var extractCmd = Shell.cmd("nice -n 19 ionice -c 3 tar -xf \"${dataTar.absolutePath}\" -C \"/data/data/$pkgName\"").exec()
+            var extractSuccess = extractCmd.isSuccess
+            var extractErr = (extractCmd.out + extractCmd.err).filter { it.isNotBlank() }.joinToString(" ")
+            var exitCode = extractCmd.code
+
+            // Se falhar, tenta com mount master ("su -mm" no KernelSU / Magisk)
+            if (!extractSuccess) {
+                try {
+                    val pMm = Runtime.getRuntime().exec(arrayOf("su", "-mm", "-c", "tar -xf \"${dataTar.absolutePath}\" -C \"/data/data/$pkgName\""))
+                    val mmErr = pMm.errorStream.bufferedReader().use { it.readText() }
+                    val mmExit = pMm.waitFor()
+                    if (mmExit == 0) {
+                        extractSuccess = true
+                        exitCode = 0
+                        extractErr = ""
+                    } else if (mmExit != 0) {
+                        exitCode = mmExit
+                        extractErr = mmErr.ifBlank { extractErr }
+                    }
+                } catch (_: Throwable) {}
+            }
+
+            if (!extractSuccess) {
+                val err = "Falha ao extrair tar de dados em /data/data/$pkgName: $extractErr"
+                dbHelper.insertLog(LogLevel.ERROR, "RestoreEngine", "App $pkgName: modo=Root, caminho=/data/data/$pkgName, bytes=${dataTar.length()}, saída=$exitCode, erro=$extractErr")
                 return@withContext RestoreInstallResult(false, -1, err)
+            } else {
+                dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "App $pkgName: modo=Root, caminho=/data/data/$pkgName, bytes=${dataTar.length()}, saída=0, erro=Nenhum")
             }
         }
 
@@ -766,10 +819,12 @@ class RestoreEngine(private val context: Context) {
 
         // 8. Batch apply chown and restorecon
         batchCommands.add("chown -R $currentUid:$currentUid /data/data/$pkgName")
+        batchCommands.add("chown -R $currentUid:$currentUid /data/user/0/$pkgName 2>/dev/null")
         if (userDeTar != null) batchCommands.add("chown -R $currentUid:$currentUid /data/user_de/0/$pkgName")
         if (extDataTar != null) batchCommands.add("chown -R $currentUid:$currentUid /sdcard/Android/data/$pkgName 2>/dev/null")
         if (obbTar != null) batchCommands.add("chown -R $currentUid:$currentUid /sdcard/Android/obb/$pkgName 2>/dev/null")
         batchCommands.add("restorecon -R /data/data/$pkgName")
+        batchCommands.add("restorecon -R /data/user/0/$pkgName 2>/dev/null")
         if (userDeTar != null) batchCommands.add("restorecon -R /data/user_de/0/$pkgName")
 
         if (batchCommands.isNotEmpty()) {
