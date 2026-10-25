@@ -120,8 +120,18 @@ class GoogleDriveProvider(private val context: Context) : CloudStorageProvider {
         onProgress: (bytesTransferred: Long, totalBytes: Long) -> Unit
     ): Result<String> = withContext(Dispatchers.IO) {
         // Ensure folder hierarchy
-        val hierarchy = driveFileManager.ensureBackupHierarchy().getOrNull()
-        val targetFolderId = hierarchy?.backupsFolderId
+        val hierarchyRes = driveFileManager.ensureBackupHierarchy()
+        if (hierarchyRes.isFailure) {
+            val err = hierarchyRes.exceptionOrNull() ?: Exception("Falha ao resolver hierarquia de pastas no Google Drive.")
+            com.resync.app.data.database.AppDatabaseHelper.getInstance(context).insertLog(LogLevel.ERROR, "GoogleDrive", err.message ?: "")
+            return@withContext Result.failure(err)
+        }
+        val targetFolderId = hierarchyRes.getOrThrow().backupsFolderId
+        if (targetFolderId.isBlank()) {
+            val err = Exception("targetFolderId inválido retornado para backups rápidos.")
+            com.resync.app.data.database.AppDatabaseHelper.getInstance(context).insertLog(LogLevel.ERROR, "GoogleDrive", err.message ?: "")
+            return@withContext Result.failure(err)
+        }
 
         val metadata = mapOf("title" to localFile.name, "app" to "ReSync")
 
@@ -152,6 +162,11 @@ class GoogleDriveProvider(private val context: Context) : CloudStorageProvider {
                 com.resync.app.data.database.AppDatabaseHelper.getInstance(context).insertLog(LogLevel.ERROR, "GoogleDrive", err)
                 return@withContext Result.failure(IllegalStateException(err))
             }
+            com.resync.app.data.database.AppDatabaseHelper.getInstance(context).insertLog(
+                LogLevel.INFO,
+                "GoogleDrive",
+                "arquivo '${localFile.name}' enviado para pasta '$targetFolderId'"
+            )
             Result.success(driveFile.id)
         } else {
             val ex = result.exceptionOrNull()

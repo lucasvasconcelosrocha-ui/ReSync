@@ -2,7 +2,12 @@ package com.resync.app.cloud.gdrive
 
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import com.resync.app.data.database.AppDatabaseHelper
+import com.resync.app.data.model.LogLevel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -10,6 +15,8 @@ import java.io.OutputStreamWriter
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import java.util.concurrent.ConcurrentHashMap
+import kotlin.random.Random
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
 
@@ -57,6 +64,18 @@ class DriveFileManager(private val oAuthManager: OAuthManager) {
 
     companion object {
         private const val API_BASE = "https://www.googleapis.com/drive/v3"
+
+        /**
+         * Escapes single quotes and backslashes for Google Drive API v3 query terms (e.g. name = '...').
+         */
+        fun escapeDriveQuery(value: String): String = value.replace("\\", "\\\\").replace("'", "\\'")
+    }
+
+    private val folderMutexes = ConcurrentHashMap<String, Mutex>()
+    private val folderIdCache = ConcurrentHashMap<String, String>()
+
+    private fun getFolderMutex(pathKey: String): Mutex {
+        return folderMutexes.computeIfAbsent(pathKey) { Mutex() }
     }
 
     /**
@@ -170,11 +189,16 @@ class DriveFileManager(private val oAuthManager: OAuthManager) {
         // 2. Search for existing "ReSync" or recognized legacy folders
         var resyncId: String? = null
         for (folderCandidate in DriveConstants.ALL_ROOT_FOLDER_NAMES) {
-            val searchRes = searchFolder(folderCandidate, token)
+            val searchRes = searchFolderWithBackoff(folderCandidate, token, accountEmail = accountEmail)
+            if (searchRes.isFailure) {
+                val ex = searchRes.exceptionOrNull()
+                dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", "Falha ao buscar pasta raiz '$folderCandidate': ${ex?.message}")
+                return@withContext Result.failure(ex ?: Exception("Falha ao buscar pasta raiz '$folderCandidate'."))
+            }
             val candidateId = searchRes.getOrNull()
             if (!candidateId.isNullOrBlank()) {
                 resyncId = candidateId
-                dbHelper.insertLog(com.resync.app.data.model.LogLevel.INFO, "GoogleDrive", "Pasta raiz '$folderCandidate' localizada no Google Drive (ID: $resyncId)")
+                dbHelper.insertLog(LogLevel.INFO, "GoogleDrive", "pasta '$folderCandidate' resolvida (id: $resyncId, pai: root)")
                 break
             }
         }
@@ -210,11 +234,11 @@ class DriveFileManager(private val oAuthManager: OAuthManager) {
             if (accountEmail == null || accountEmail == oAuthManager.getConnectedAccountEmail()) {
                 oAuthManager.setCachedRootFolderId(createdId)
             }
-            dbHelper.insertLog(com.resync.app.data.model.LogLevel.INFO, "GoogleDrive", "Pasta raiz 'ReSync' criada com sucesso no Google Drive (ID: $createdId)")
+            dbHelper.insertLog(LogLevel.INFO, "GoogleDrive", "pasta '${DriveConstants.ROOT_FOLDER_NAME}' resolvida (id: $createdId, pai: root)")
             return@withContext Result.success(createdId)
         } else {
             val err = createResult.exceptionOrNull() ?: Exception("Falha ao criar pasta '${DriveConstants.ROOT_FOLDER_NAME}' no Google Drive.")
-            dbHelper.insertLog(com.resync.app.data.model.LogLevel.ERROR, "GoogleDrive", "Falha ao criar pasta raiz '${DriveConstants.ROOT_FOLDER_NAME}': ${err.message}")
+            dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", "Falha ao criar pasta raiz '${DriveConstants.ROOT_FOLDER_NAME}': ${err.message}")
             return@withContext Result.failure(err)
         }
     }
@@ -227,17 +251,38 @@ class DriveFileManager(private val oAuthManager: OAuthManager) {
      *  └── Arquivos
      */
     suspend fun ensureBackupHierarchy(accountEmail: String? = null): Result<BackupFolderHierarchy> = withContext(Dispatchers.IO) {
+        val dbHelper = AppDatabaseHelper.getInstance(oAuthManager.context)
         val rootResult = getOrCreateRootBackupFolder(accountEmail)
         if (rootResult.isFailure) {
-            return@withContext Result.failure(rootResult.exceptionOrNull() ?: Exception("Falha ao acessar pasta no Google Drive."))
+            val err = rootResult.exceptionOrNull() ?: Exception("Falha ao acessar pasta no Google Drive.")
+            dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", "ensureBackupHierarchy falhou na raiz: ${err.message}")
+            return@withContext Result.failure(err)
         }
         val rootId = rootResult.getOrThrow()
+
         val quickBackupsResult = getOrCreateSubfolder(DriveConstants.SUBFOLDER_QUICK_BACKUPS, rootId, accountEmail)
-        val quickBackupsId = quickBackupsResult.getOrDefault(rootId)
+        if (quickBackupsResult.isFailure) {
+            val err = quickBackupsResult.exceptionOrNull() ?: Exception("Falha ao resolver subpasta '${DriveConstants.SUBFOLDER_QUICK_BACKUPS}'.")
+            dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", "ensureBackupHierarchy falhou em '${DriveConstants.SUBFOLDER_QUICK_BACKUPS}': ${err.message}")
+            return@withContext Result.failure(err)
+        }
+        val quickBackupsId = quickBackupsResult.getOrThrow()
+
         val foldersResult = getOrCreateSubfolder(DriveConstants.SUBFOLDER_FOLDERS, rootId, accountEmail)
-        val foldersId = foldersResult.getOrDefault(rootId)
+        if (foldersResult.isFailure) {
+            val err = foldersResult.exceptionOrNull() ?: Exception("Falha ao resolver subpasta '${DriveConstants.SUBFOLDER_FOLDERS}'.")
+            dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", "ensureBackupHierarchy falhou em '${DriveConstants.SUBFOLDER_FOLDERS}': ${err.message}")
+            return@withContext Result.failure(err)
+        }
+        val foldersId = foldersResult.getOrThrow()
+
         val filesResult = getOrCreateSubfolder(DriveConstants.SUBFOLDER_FILES, rootId, accountEmail)
-        val filesId = filesResult.getOrDefault(rootId)
+        if (filesResult.isFailure) {
+            val err = filesResult.exceptionOrNull() ?: Exception("Falha ao resolver subpasta '${DriveConstants.SUBFOLDER_FILES}'.")
+            dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", "ensureBackupHierarchy falhou em '${DriveConstants.SUBFOLDER_FILES}': ${err.message}")
+            return@withContext Result.failure(err)
+        }
+        val filesId = filesResult.getOrThrow()
 
         Result.success(
             BackupFolderHierarchy(
@@ -440,12 +485,14 @@ class DriveFileManager(private val oAuthManager: OAuthManager) {
         }
     }
 
-    private fun searchFolder(name: String, token: String, parentId: String? = null): Result<String?> {
+    private fun searchFolderSingleAttempt(name: String, token: String, parentId: String? = null): Result<String?> {
+        val dbHelper = AppDatabaseHelper.getInstance(oAuthManager.context)
         return try {
+            val safeName = escapeDriveQuery(name)
             val query = if (parentId != null) {
-                "name = '$name' and '$parentId' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+                "name = '$safeName' and '$parentId' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
             } else {
-                "name = '$name' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+                "name = '$safeName' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
             }
             val encodedQuery = URLEncoder.encode(query, "UTF-8")
             val searchUrl = URL("$API_BASE/files?q=$encodedQuery&fields=files(id,name)")
@@ -467,53 +514,143 @@ class DriveFileManager(private val oAuthManager: OAuthManager) {
                 }
             } else if (code == 401) {
                 Result.failure(GoogleDriveSessionExpiredException("Sessão expirada (HTTP 401)", 401))
+            } else if (code in listOf(403, 429, 500, 502, 503, 504)) {
+                val errBody = try {
+                    BufferedReader(InputStreamReader(conn.errorStream ?: conn.inputStream)).use { it.readText() }
+                } catch (_: Exception) { "" }
+                dbHelper.insertLogAsync(LogLevel.ERROR, "GoogleDrive", "Erro transitório na busca da pasta '$name' (HTTP $code): $errBody")
+                Result.failure(GoogleDriveApiException(code, "HTTP $code ao buscar pasta '$name': $errBody"))
             } else {
-                Result.success(null)
+                handleApiError(conn, code)
             }
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
 
+    suspend fun searchFolderWithBackoff(
+        name: String,
+        initialToken: String,
+        parentId: String? = null,
+        maxRetries: Int = 3,
+        accountEmail: String? = null
+    ): Result<String?> = withContext(Dispatchers.IO) {
+        val dbHelper = AppDatabaseHelper.getInstance(oAuthManager.context)
+        var currentToken = initialToken
+        var lastError: Throwable? = null
+
+        for (attempt in 0..maxRetries) {
+            val res = searchFolderSingleAttempt(name, currentToken, parentId)
+            if (res.isSuccess) {
+                return@withContext res
+            }
+
+            val ex = res.exceptionOrNull()
+            lastError = ex
+
+            val is401 = ex is GoogleDriveSessionExpiredException || ex?.message?.contains("401") == true
+            if (is401) {
+                oAuthManager.invalidateToken(currentToken)
+                val refreshed = oAuthManager.forceRefreshToken(currentToken = currentToken, accountEmail = accountEmail)
+                if (refreshed.isSuccess) {
+                    currentToken = refreshed.getOrThrow()
+                    continue
+                } else {
+                    return@withContext Result.failure(refreshed.exceptionOrNull() ?: ex ?: GoogleDriveSessionExpiredException())
+                }
+            }
+
+            val isRetriable = (ex is GoogleDriveApiException && ex.statusCode in listOf(403, 429, 500, 502, 503, 504)) ||
+                    ex is java.io.IOException ||
+                    ex is java.net.SocketTimeoutException
+
+            if (isRetriable && attempt < maxRetries) {
+                val delayMs = (1000L * (1 shl attempt)) + Random.nextLong(100L, 500L)
+                dbHelper.insertLogAsync(
+                    LogLevel.WARN,
+                    "GoogleDrive",
+                    "Tentativa ${attempt + 1}/$maxRetries ao buscar pasta '$name' falhou (${ex?.message}). Aguardando ${delayMs}ms com backoff exponencial..."
+                )
+                delay(delayMs)
+            } else {
+                break
+            }
+        }
+
+        val finalErr = lastError ?: Exception("Falha desconhecida ao buscar pasta '$name'")
+        dbHelper.insertLogAsync(LogLevel.ERROR, "GoogleDrive", "searchFolder esgotou retries para '$name': ${finalErr.message}")
+        Result.failure(finalErr)
+    }
+
+    suspend fun searchFolder(name: String, token: String, parentId: String? = null): Result<String?> {
+        return searchFolderWithBackoff(name, token, parentId)
+    }
+
     suspend fun getOrCreateSubfolder(name: String, parentId: String, accountEmail: String? = null): Result<String> = withContext(Dispatchers.IO) {
-        val dbHelper = com.resync.app.data.database.AppDatabaseHelper.getInstance(oAuthManager.context)
-        var token = oAuthManager.getValidAccessToken(accountEmail)
-            ?: return@withContext Result.failure(GoogleDriveSessionExpiredException("A sessão do Google Drive expirou.", 401))
+        val dbHelper = AppDatabaseHelper.getInstance(oAuthManager.context)
+        val pathKey = "${accountEmail.orEmpty()}::$parentId::$name"
 
-        var searchRes = searchFolder(name, token, parentId)
-        if (searchRes.exceptionOrNull() is GoogleDriveSessionExpiredException) {
-            oAuthManager.invalidateToken(token)
-            val refreshed = oAuthManager.forceRefreshToken(currentToken = token, accountEmail = accountEmail)
-            if (refreshed.isSuccess) {
-                token = refreshed.getOrThrow()
-                searchRes = searchFolder(name, token, parentId)
+        // 1. Fast cache check
+        folderIdCache[pathKey]?.let { cachedId ->
+            dbHelper.insertLog(LogLevel.INFO, "GoogleDrive", "pasta '$name' resolvida (id: $cachedId, pai: $parentId)")
+            return@withContext Result.success(cachedId)
+        }
+
+        val mutex = getFolderMutex(pathKey)
+        mutex.withLock {
+            // 2. Double-checked locking inside mutex
+            folderIdCache[pathKey]?.let { cachedId ->
+                dbHelper.insertLog(LogLevel.INFO, "GoogleDrive", "pasta '$name' resolvida (id: $cachedId, pai: $parentId)")
+                return@withContext Result.success(cachedId)
+            }
+
+            var token = oAuthManager.getValidAccessToken(accountEmail)
+                ?: return@withContext Result.failure(GoogleDriveSessionExpiredException("A sessão do Google Drive expirou.", 401))
+
+            // 3. Search folder with backoff before attempting to create
+            var searchRes = searchFolderWithBackoff(name, token, parentId, accountEmail = accountEmail)
+            if (searchRes.isFailure) {
+                val err = searchRes.exceptionOrNull() ?: Exception("Falha ao buscar pasta '$name' no Google Drive.")
+                dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", "Falha ao resolver pasta '$name': ${err.message}")
+                return@withContext Result.failure(err)
+            }
+
+            val existingId = searchRes.getOrNull()
+            if (!existingId.isNullOrBlank()) {
+                folderIdCache[pathKey] = existingId
+                dbHelper.insertLog(LogLevel.INFO, "GoogleDrive", "pasta '$name' resolvida (id: $existingId, pai: $parentId)")
+                return@withContext Result.success(existingId)
+            }
+
+            // 4. Folder strictly does not exist, create it
+            var createRes = createFolder(name, parentId, token)
+            if (createRes.exceptionOrNull() is GoogleDriveSessionExpiredException) {
+                oAuthManager.invalidateToken(token)
+                val refreshed = oAuthManager.forceRefreshToken(currentToken = token, accountEmail = accountEmail)
+                if (refreshed.isSuccess) {
+                    token = refreshed.getOrThrow()
+                    createRes = createFolder(name, parentId, token)
+                    if (createRes.exceptionOrNull() is GoogleDriveSessionExpiredException) {
+                        oAuthManager.markSessionExpired(true)
+                    }
+                } else {
+                    val ex = refreshed.exceptionOrNull() ?: GoogleDriveSessionExpiredException()
+                    dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", "Erro de autenticação ao criar pasta '$name': ${ex.message}")
+                    return@withContext Result.failure(ex)
+                }
+            }
+
+            val createdId = createRes.getOrNull()
+            if (!createdId.isNullOrBlank()) {
+                folderIdCache[pathKey] = createdId
+                dbHelper.insertLog(LogLevel.INFO, "GoogleDrive", "pasta '$name' resolvida (id: $createdId, pai: $parentId)")
+                Result.success(createdId)
             } else {
-                return@withContext Result.failure(refreshed.exceptionOrNull() ?: GoogleDriveSessionExpiredException())
+                val err = createRes.exceptionOrNull() ?: Exception("Falha ao criar pasta '$name' no Google Drive.")
+                dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", "Erro ao criar subpasta '$name' (Pai: $parentId): ${err.message}")
+                Result.failure(err)
             }
         }
-
-        val existingId = searchRes.getOrNull()
-        if (!existingId.isNullOrBlank()) {
-            dbHelper.insertLog(com.resync.app.data.model.LogLevel.INFO, "GoogleDrive", "Subpasta '$name' localizada no Google Drive (ID: $existingId, Pai: $parentId)")
-            return@withContext Result.success(existingId)
-        }
-
-        var createRes = createFolder(name, parentId, token)
-        if (createRes.exceptionOrNull() is GoogleDriveSessionExpiredException) {
-            oAuthManager.invalidateToken(token)
-            val refreshed = oAuthManager.forceRefreshToken(currentToken = token, accountEmail = accountEmail)
-            if (refreshed.isSuccess) {
-                token = refreshed.getOrThrow()
-                createRes = createFolder(name, parentId, token)
-            } else {
-                return@withContext Result.failure(refreshed.exceptionOrNull() ?: GoogleDriveSessionExpiredException())
-            }
-        }
-        val createdId = createRes.getOrNull()
-        if (!createdId.isNullOrBlank()) {
-            dbHelper.insertLog(com.resync.app.data.model.LogLevel.INFO, "GoogleDrive", "Subpasta '$name' criada com sucesso no Google Drive (ID: $createdId, Pai: $parentId)")
-        }
-        createRes
     }
 
     private fun createFolder(name: String, parentId: String?, token: String): Result<String> {
@@ -727,10 +864,11 @@ class DriveFileManager(private val oAuthManager: OAuthManager) {
 
     fun searchFileByName(name: String, token: String, parentId: String? = null): Result<String?> {
         return try {
+            val safeName = escapeDriveQuery(name)
             val query = if (parentId != null) {
-                "name = '$name' and '$parentId' in parents and trashed = false"
+                "name = '$safeName' and '$parentId' in parents and trashed = false"
             } else {
-                "name = '$name' and trashed = false"
+                "name = '$safeName' and trashed = false"
             }
             val encodedQuery = URLEncoder.encode(query, "UTF-8")
             val searchUrl = URL("$API_BASE/files?q=$encodedQuery&fields=files(id,name)")
@@ -753,7 +891,7 @@ class DriveFileManager(private val oAuthManager: OAuthManager) {
             } else if (code == 401) {
                 Result.failure(GoogleDriveSessionExpiredException("Sessão expirada (HTTP 401)", 401))
             } else {
-                Result.success(null)
+                handleApiError(conn, code)
             }
         } catch (e: Exception) {
             Result.failure(e)

@@ -147,6 +147,13 @@ class FileUploadWorker(
                 }
             }
 
+            if (parentFolderId.isBlank()) {
+                val err = "ID da pasta de destino não resolvido para $fileName. Upload cancelado para impedir envio à raiz."
+                dbHelper.insertLog(LogLevel.ERROR, "UploadWorker", err)
+                dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", err)
+                throw IllegalStateException(err)
+            }
+
             dbHelper.insertLog(
                 LogLevel.INFO,
                 "GoogleDrive",
@@ -407,17 +414,24 @@ class FileUploadWorker(
 
             // Validar ID e tamanho retornado pelo Google Drive
             val returnedId = uploadedDriveFile.id.orEmpty()
-            val returnedSize = uploadedDriveFile.size?.toLong() ?: 0L
+            var returnedSize = uploadedDriveFile.size?.toLong() ?: 0L
             if (returnedId.isBlank()) {
                 val err = "Upload no Google Drive falhou: a API não retornou um ID de arquivo válido para $fileName."
                 dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", err)
                 throw IllegalStateException(err)
+            }
+            if (returnedSize <= 0L) {
+                try {
+                    val meta = drive.files().get(returnedId).setFields("id, size").execute()
+                    returnedSize = meta.size?.toLong() ?: 0L
+                } catch (_: Throwable) {}
             }
             if (returnedSize <= 0L || returnedSize != localFile.length()) {
                 val sizeMismatchErr = "Divergência de tamanho no Google Drive para $fileName: esperado ${localFile.length()} bytes, retornado $returnedSize bytes (0 bytes ou incompleto)."
                 dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", sizeMismatchErr)
                 throw IllegalStateException(sizeMismatchErr)
             }
+            dbHelper.insertLog(LogLevel.INFO, "GoogleDrive", "arquivo '$fileName' enviado para pasta '$parentFolderId'")
             dbHelper.insertLog(LogLevel.INFO, "GoogleDrive", "Arquivo enviado com sucesso ao Google Drive: $fileName (Tamanho: $returnedSize bytes, ID retornado: $returnedId)")
 
             // Se for container de backup, gerar e enviar índice complementar (svb_XXXX.index.json)

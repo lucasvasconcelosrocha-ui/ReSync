@@ -446,6 +446,11 @@ class UploadManager(private val oAuthManager: OAuthManager) {
                         dbHelper.insertLog(
                             com.resync.app.data.model.LogLevel.INFO,
                             "GoogleDrive",
+                            "arquivo '${driveMeta.name}' enviado para pasta '$targetFolderId'"
+                        )
+                        dbHelper.insertLog(
+                            com.resync.app.data.model.LogLevel.INFO,
+                            "GoogleDrive",
                             "Upload concluído com sucesso: ${driveMeta.name} (Tamanho: ${driveMeta.sizeBytes} bytes, ID retornado: ${driveMeta.id})"
                         )
 

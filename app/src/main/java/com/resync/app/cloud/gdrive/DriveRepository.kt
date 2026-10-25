@@ -22,11 +22,15 @@ import com.resync.app.data.room.AppRoomDatabase
 import com.resync.app.data.room.CloudAccount
 import com.resync.app.data.room.MaxCloudAccountsExceededException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.random.Random
 
 sealed class DriveAuthResult {
     data class Success(val account: CloudAccount) : DriveAuthResult()
@@ -41,12 +45,22 @@ sealed class DriveAuthResult {
  */
 class DriveRepository(private val context: Context) {
 
+    companion object {
+        fun escapeDriveQuery(value: String): String = value.replace("\\", "\\\\").replace("'", "\\'")
+    }
+
     private val dbHelper = AppDatabaseHelper.getInstance(context)
     private val roomDb = AppRoomDatabase.getInstance(context)
     private val dao = roomDb.cloudAccountDao()
 
     // Multi-account client cache: STRICTLY PER ACCOUNT, never a global singleton
     private val clientsByEmail = ConcurrentHashMap<String, Drive>()
+    private val folderMutexes = ConcurrentHashMap<String, Mutex>()
+    private val folderIdCache = ConcurrentHashMap<String, String>()
+
+    private fun getFolderMutex(pathKey: String): Mutex {
+        return folderMutexes.computeIfAbsent(pathKey) { Mutex() }
+    }
 
     val allAccounts: Flow<List<CloudAccount>> = dao.getAllAccounts()
 
@@ -353,7 +367,8 @@ class DriveRepository(private val context: Context) {
 
         // 1. Busca a pasta oficial ReSync ou pastas legadas reconhecidas
         for (candidateName in DriveConstants.ALL_ROOT_FOLDER_NAMES) {
-            val query = "name = '$candidateName' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+            val safeCandidate = escapeDriveQuery(candidateName)
+            val query = "name = '$safeCandidate' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
             val result = try {
                 drive.files().list()
                     .setQ(query)
@@ -439,53 +454,90 @@ class DriveRepository(private val context: Context) {
      */
     suspend fun getOrCreateSubfolder(email: String, subfolderName: String, parentId: String): String = withContext(Dispatchers.IO) {
         val dbHelper = AppDatabaseHelper.getInstance(context)
-        var drive = getDriveClientForAccount(email)
-        val query = "name = '$subfolderName' and '$parentId' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
-        val result = try {
-            drive.files().list()
-                .setQ(query)
-                .setSpaces("drive")
-                .setFields("files(id, name)")
-                .execute()
-        } catch (t: Throwable) {
-            val is401 = (t is GoogleJsonResponseException && t.statusCode == 401) || t.message?.contains("401") == true
-            if (is401) {
-                invalidateAccountToken(email)
-                drive = getDriveClientForAccount(email)
-                drive.files().list()
-                    .setQ(query)
-                    .setSpaces("drive")
-                    .setFields("files(id, name)")
+        val pathKey = "$email::$parentId::$subfolderName"
+
+        folderIdCache[pathKey]?.let { cachedId ->
+            dbHelper.insertLog(LogLevel.INFO, "GoogleDrive", "pasta '$subfolderName' resolvida (id: $cachedId, pai: $parentId)")
+            return@withContext cachedId
+        }
+
+        val mutex = getFolderMutex(pathKey)
+        mutex.withLock {
+            folderIdCache[pathKey]?.let { cachedId ->
+                dbHelper.insertLog(LogLevel.INFO, "GoogleDrive", "pasta '$subfolderName' resolvida (id: $cachedId, pai: $parentId)")
+                return@withContext cachedId
+            }
+
+            var drive = getDriveClientForAccount(email)
+            val safeName = escapeDriveQuery(subfolderName)
+            val query = "name = '$safeName' and '$parentId' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+
+            var existingId: String? = null
+            var lastError: Throwable? = null
+
+            for (attempt in 0..3) {
+                try {
+                    val result = drive.files().list()
+                        .setQ(query)
+                        .setSpaces("drive")
+                        .setFields("files(id, name)")
+                        .execute()
+                    val existing = result.files?.firstOrNull()
+                    if (existing != null) {
+                        existingId = existing.id
+                    }
+                    lastError = null
+                    break
+                } catch (t: Throwable) {
+                    lastError = t
+                    val is401 = (t is GoogleJsonResponseException && t.statusCode == 401) || t.message?.contains("401") == true
+                    if (is401) {
+                        invalidateAccountToken(email)
+                        drive = getDriveClientForAccount(email)
+                        continue
+                    }
+                    val isRetriable = (t is GoogleJsonResponseException && t.statusCode in listOf(403, 429, 500, 502, 503, 504)) ||
+                            t is java.io.IOException
+                    if (isRetriable && attempt < 3) {
+                        val delayMs = (1000L * (1 shl attempt)) + Random.nextLong(100L, 500L)
+                        dbHelper.insertLog(LogLevel.WARN, "GoogleDrive", "Tentativa ${attempt + 1}/3 ao buscar subpasta '$subfolderName' falhou (${t.message}). Aguardando ${delayMs}ms com backoff...")
+                        delay(delayMs)
+                    } else {
+                        break
+                    }
+                }
+            }
+
+            if (lastError != null) {
+                dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", "Erro ao buscar subpasta '$subfolderName' para $email: ${lastError?.message}")
+                throw lastError!!
+            }
+
+            if (existingId != null) {
+                folderIdCache[pathKey] = existingId
+                dbHelper.insertLog(LogLevel.INFO, "GoogleDrive", "pasta '$subfolderName' resolvida (id: $existingId, pai: $parentId)")
+                return@withContext existingId
+            }
+
+            val folderMetadata = com.google.api.services.drive.model.File().apply {
+                name = subfolderName
+                mimeType = "application/vnd.google-apps.folder"
+                parents = listOf(parentId)
+            }
+
+            val created = try {
+                drive.files().create(folderMetadata)
+                    .setFields("id")
                     .execute()
-            } else {
-                dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", "Erro ao buscar subpasta '$subfolderName' para $email: ${t.message}")
+            } catch (t: Throwable) {
+                dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", "Erro ao criar subpasta '$subfolderName' para $email: ${t.message}")
                 throw t
             }
-        }
 
-        val existing = result.files?.firstOrNull()
-        if (existing != null) {
-            dbHelper.insertLog(LogLevel.INFO, "GoogleDrive", "Subpasta '$subfolderName' localizada no Google Drive para $email (ID: ${existing.id}, Pai: $parentId)")
-            return@withContext existing.id
+            folderIdCache[pathKey] = created.id
+            dbHelper.insertLog(LogLevel.INFO, "GoogleDrive", "pasta '$subfolderName' resolvida (id: ${created.id}, pai: $parentId)")
+            created.id
         }
-
-        val folderMetadata = com.google.api.services.drive.model.File().apply {
-            name = subfolderName
-            mimeType = "application/vnd.google-apps.folder"
-            parents = listOf(parentId)
-        }
-
-        val created = try {
-            drive.files().create(folderMetadata)
-                .setFields("id")
-                .execute()
-        } catch (t: Throwable) {
-            dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", "Erro ao criar subpasta '$subfolderName' para $email: ${t.message}")
-            throw t
-        }
-
-        dbHelper.insertLog(LogLevel.INFO, "GoogleDrive", "Subpasta '$subfolderName' criada com sucesso no Google Drive para $email (ID: ${created.id}, Pai: $parentId)")
-        created.id
     }
 
     /**
@@ -493,7 +545,8 @@ class DriveRepository(private val context: Context) {
      */
     suspend fun findFileInFolder(email: String, fileName: String, parentId: String): com.google.api.services.drive.model.File? = withContext(Dispatchers.IO) {
         var drive = getDriveClientForAccount(email)
-        val query = "name = '$fileName' and '$parentId' in parents and mimeType != 'application/vnd.google-apps.folder' and trashed = false"
+        val safeName = escapeDriveQuery(fileName)
+        val query = "name = '$safeName' and '$parentId' in parents and mimeType != 'application/vnd.google-apps.folder' and trashed = false"
         try {
             val res = drive.files().list()
                 .setQ(query)

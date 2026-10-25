@@ -160,6 +160,11 @@ class CloudBackupRepository(
             "GoogleDrive",
             "Arquivo verificado no Google Drive: '${verifiedFile.name}' (Tamanho confirmado: $verifiedSize bytes, ID retornado: '${verifiedFile.id}')"
         )
+        dbHelper.insertLog(
+            LogLevel.INFO,
+            "GoogleDrive",
+            "arquivo '${verifiedFile.name}' enviado para pasta '$targetFolderId'"
+        )
 
         // Integrity Validation (Checksum & MD5) using streaming single-pass validation
         val integrity = integrityManager.verifyUploadIntegrity(localFile, driveFile, driveFile.md5Checksum)

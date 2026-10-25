@@ -2558,35 +2558,112 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
                 context.contentResolver.takePersistableUriPermission(treeUri, flags)
             } catch (_: Throwable) {}
-            val rootDoc = androidx.documentfile.provider.DocumentFile.fromTreeUri(context, treeUri) ?: return@launch
+            val rootDoc = androidx.documentfile.provider.DocumentFile.fromTreeUri(context, treeUri)
+            if (rootDoc == null) {
+                dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", "Não foi possível acessar a pasta selecionada: $treeUri")
+                return@launch
+            }
             val rootName = rootDoc.name ?: "Pasta_Enviada"
-            val structure = driveRepository.getOrCreateSwiftVaultStructure(email)
-            val parentFoldersId = structure.foldersFolderId
-            val targetFolderId = driveRepository.getOrCreateSubfolder(email, rootName, parentFoldersId)
-            uploadDocumentDirectoryRecursively(rootDoc, email, targetFolderId)
+
+            // 1. Resolver estrutura base da nuvem (Backups Rápidos, Pastas, Arquivos)
+            val parentFoldersId = try {
+                val structure = driveRepository.getOrCreateSwiftVaultStructure(email)
+                structure.foldersFolderId
+            } catch (e: Exception) {
+                dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", "Falha ao resolver estrutura base de pastas no Google Drive: ${e.message}")
+                return@launch
+            }
+
+            if (parentFoldersId.isBlank()) {
+                dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", "ID da pasta 'Pastas' inválido. Envio da árvore abortado.")
+                return@launch
+            }
+
+            // 2. Resolver a pasta raiz do par no Drive
+            val targetFolderId = try {
+                driveRepository.getOrCreateSubfolder(email, rootName, parentFoldersId)
+            } catch (e: Exception) {
+                dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", "Falha ao resolver pasta raiz '$rootName' no Drive: ${e.message}")
+                return@launch
+            }
+
+            if (targetFolderId.isBlank()) {
+                dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", "ID inválido retornado para pasta raiz '$rootName'. Envio abortado.")
+                return@launch
+            }
+
+            // 3. Resolver e confirmar o folderId de TODA a árvore de diretórios ANTES de enviar arquivos
+            val dirFolderMap = mutableMapOf<String, String>()
+            dirFolderMap[rootDoc.uri.toString()] = targetFolderId
+
+            val allDirsResolved = resolveAllSubfoldersBeforeUpload(rootDoc, email, targetFolderId, dirFolderMap)
+            if (!allDirsResolved) {
+                dbHelper.insertLog(
+                    LogLevel.ERROR,
+                    "GoogleDrive",
+                    "A resolução de pastas da árvore falhou. Nenhum arquivo foi enviado para impedir pastas vazias ou arquivos na raiz."
+                )
+                return@launch
+            }
+
+            // 4. Com a hierarquia 100% resolvida e confirmada no Google Drive, enfileirar os arquivos
+            enqueueFilesForResolvedTree(rootDoc, email, dirFolderMap)
         }
     }
 
-    private suspend fun uploadDocumentDirectoryRecursively(
-        docDir: androidx.documentfile.provider.DocumentFile,
+    private suspend fun resolveAllSubfoldersBeforeUpload(
+        currentDir: androidx.documentfile.provider.DocumentFile,
         targetEmail: String,
-        parentDriveFolderId: String
+        currentDriveFolderId: String,
+        dirFolderMap: MutableMap<String, String>
+    ): Boolean {
+        for (child in currentDir.listFiles()) {
+            if (child.isDirectory) {
+                val dirName = child.name ?: "Subpasta"
+                val subDriveId = try {
+                    driveRepository.getOrCreateSubfolder(targetEmail, dirName, currentDriveFolderId)
+                } catch (e: Exception) {
+                    dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", "Erro ao resolver subpasta '$dirName' (Pai: $currentDriveFolderId): ${e.message}")
+                    return false
+                }
+                if (subDriveId.isBlank()) {
+                    dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", "ID retornado em branco para subpasta '$dirName'.")
+                    return false
+                }
+                dirFolderMap[child.uri.toString()] = subDriveId
+                val subOk = resolveAllSubfoldersBeforeUpload(child, targetEmail, subDriveId, dirFolderMap)
+                if (!subOk) return false
+            }
+        }
+        return true
+    }
+
+    private suspend fun enqueueFilesForResolvedTree(
+        currentDir: androidx.documentfile.provider.DocumentFile,
+        targetEmail: String,
+        dirFolderMap: Map<String, String>
     ) {
-        for (file in docDir.listFiles()) {
-            if (file.isDirectory) {
-                val dirName = file.name ?: "Subpasta"
-                val subDriveId = driveRepository.getOrCreateSubfolder(targetEmail, dirName, parentDriveFolderId)
-                uploadDocumentDirectoryRecursively(file, targetEmail, subDriveId)
-            } else if (file.isFile) {
-                val tempFile = copyUriToTemp(file.uri, file.name)
+        val destFolderId = dirFolderMap[currentDir.uri.toString()]
+        if (destFolderId.isNullOrBlank()) {
+            dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", "Destino da pasta ${currentDir.name} não localizado. Arquivos não enviados para evitar queda na raiz.")
+            return
+        }
+
+        for (child in currentDir.listFiles()) {
+            if (child.isDirectory) {
+                enqueueFilesForResolvedTree(child, targetEmail, dirFolderMap)
+            } else if (child.isFile) {
+                val tempFile = copyUriToTemp(child.uri, child.name)
                 if (tempFile != null) {
                     enqueueFileUpload(
                         localFilePath = tempFile.absolutePath,
-                        fileName = file.name ?: tempFile.name,
+                        fileName = child.name ?: tempFile.name,
                         targetEmail = targetEmail,
-                        destFolderId = parentDriveFolderId,
-                        mimeType = file.type ?: "application/octet-stream"
+                        destFolderId = destFolderId,
+                        mimeType = child.type ?: "application/octet-stream"
                     )
+                } else {
+                    dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", "Falha ao preparar cópia local do arquivo '${child.name}' para pasta '$destFolderId'")
                 }
             }
         }
@@ -2685,29 +2762,77 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun syncFolderWithDrive(folderFile: File, targetEmail: String) {
         viewModelScope.launch {
             if (!folderFile.exists() || !folderFile.isDirectory) return@launch
-            val structure = driveRepository.getOrCreateSwiftVaultStructure(targetEmail)
-            val targetFolderId = driveRepository.getOrCreateSubfolder(targetEmail, folderFile.name, structure.foldersFolderId)
+            val structure = try {
+                driveRepository.getOrCreateSwiftVaultStructure(targetEmail)
+            } catch (e: Exception) {
+                dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", "Falha ao resolver estrutura para $targetEmail: ${e.message}")
+                return@launch
+            }
+            val targetFolderId = try {
+                driveRepository.getOrCreateSubfolder(targetEmail, folderFile.name, structure.foldersFolderId)
+            } catch (e: Exception) {
+                dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", "Falha ao resolver pasta '${folderFile.name}': ${e.message}")
+                return@launch
+            }
 
-            val remoteFiles = driveRepository.getDriveClientForAccount(targetEmail).files().list()
-                .setQ("'$targetFolderId' in parents and trashed = false")
-                .setFields("files(name, modifiedTime, size)")
-                .execute().files ?: emptyList()
+            if (targetFolderId.isBlank()) {
+                dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", "ID em branco para pasta '${folderFile.name}'.")
+                return@launch
+            }
 
-            val remoteMap = remoteFiles.associateBy { it.name }
+            val dirFolderMap = mutableMapOf<String, String>()
+            dirFolderMap[folderFile.absolutePath] = targetFolderId
 
-            folderFile.listFiles()?.forEach { localFile ->
-                if (localFile.isFile) {
-                    val remoteMatch = remoteMap[localFile.name]
-                    val needsUpload = remoteMatch == null || remoteMatch.getSize() != localFile.length()
-                    if (needsUpload) {
-                        enqueueFileUpload(
-                            localFilePath = localFile.absolutePath,
-                            fileName = localFile.name,
-                            targetEmail = targetEmail,
-                            destFolderId = targetFolderId
-                        )
-                    }
+            val allDirsResolved = resolveAllLocalSubfoldersBeforeUpload(folderFile, targetEmail, targetFolderId, dirFolderMap)
+            if (!allDirsResolved) {
+                dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", "A resolução de subpastas locais falhou para ${folderFile.name}. Sincronização abortada.")
+                return@launch
+            }
+
+            enqueueLocalFilesForResolvedTree(folderFile, targetEmail, dirFolderMap)
+        }
+    }
+
+    private suspend fun resolveAllLocalSubfoldersBeforeUpload(
+        currentDir: File,
+        targetEmail: String,
+        currentDriveFolderId: String,
+        dirFolderMap: MutableMap<String, String>
+    ): Boolean {
+        val children = currentDir.listFiles() ?: return true
+        for (child in children) {
+            if (child.isDirectory) {
+                val subDriveId = try {
+                    driveRepository.getOrCreateSubfolder(targetEmail, child.name, currentDriveFolderId)
+                } catch (e: Exception) {
+                    dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", "Erro ao resolver subpasta '${child.name}': ${e.message}")
+                    return false
                 }
+                if (subDriveId.isBlank()) return false
+                dirFolderMap[child.absolutePath] = subDriveId
+                if (!resolveAllLocalSubfoldersBeforeUpload(child, targetEmail, subDriveId, dirFolderMap)) return false
+            }
+        }
+        return true
+    }
+
+    private fun enqueueLocalFilesForResolvedTree(
+        currentDir: File,
+        targetEmail: String,
+        dirFolderMap: Map<String, String>
+    ) {
+        val destFolderId = dirFolderMap[currentDir.absolutePath] ?: return
+        val children = currentDir.listFiles() ?: return
+        for (child in children) {
+            if (child.isDirectory) {
+                enqueueLocalFilesForResolvedTree(child, targetEmail, dirFolderMap)
+            } else if (child.isFile) {
+                enqueueFileUpload(
+                    localFilePath = child.absolutePath,
+                    fileName = child.name,
+                    targetEmail = targetEmail,
+                    destFolderId = destFolderId
+                )
             }
         }
     }
