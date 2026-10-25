@@ -629,7 +629,7 @@ class BackupEngine(private val context: Context) {
                             )
                         )
                     } else {
-                        val dataResult = backupAppDataRoot(app, stagingDir)
+                        val dataResult = backupAppDataRoot(app, stagingDir, options)
                         if (dataResult.isNoData) {
                             // Apps sem pasta de dados ou realmente vazios: marque como "sem dados", não como falha
                             dbHelper.insertLog(
@@ -652,6 +652,15 @@ class BackupEngine(private val context: Context) {
                             val dataTarFile = dataResult.tarFile
                             val dataSha256 = SecurityManager.computeFileSha256(dataTarFile)
                             val dataEntryName = "apps/${app.packageName}/data.tar"
+                            val dataMetadata = mutableMapOf(
+                                "packageName" to app.packageName,
+                                "dataType" to "internal_data",
+                                "sourcePath" to dataResult.path
+                            )
+                            if (dataResult.hasWarnings) {
+                                dataMetadata["hasWarnings"] = "true"
+                                dataMetadata["ignoredCount"] = dataResult.ignoredFiles.size.toString()
+                            }
                             val dataItem = ManifestItem(
                                 id = UUID.randomUUID().toString(),
                                 type = BackupItemType.APP_DATA,
@@ -661,30 +670,54 @@ class BackupEngine(private val context: Context) {
                                 sizeBytes = dataTarFile.length(),
                                 sha256Checksum = dataSha256,
                                 compressionMethod = "STORED",
-                                metadata = mapOf("packageName" to app.packageName, "dataType" to "internal_data", "sourcePath" to dataResult.path)
+                                metadata = dataMetadata
                             )
                             packEntries.add(ArchiveEngine.PackEntry(dataEntryName, sourceFile = dataTarFile, manifestItem = dataItem, isStoreOnly = true))
                             manifestItems.add(dataItem)
                             totalEstimatedSize += dataTarFile.length()
                             appFileEntries.add(AppBackupFileEntry("data.tar", dataEntryName, dataTarFile.length(), dataSha256, "internal_data"))
-                            dbHelper.insertLog(
-                                LogLevel.INFO,
-                                "BackupEngine",
+
+                            val logMsg = if (dataResult.hasWarnings) {
+                                "App ${app.packageName}: modo=Root, caminho=${dataResult.path}, bytes=${dataTarFile.length()}, código de saída=${dataResult.exitCode}, Concluído com avisos: ${dataResult.ignoredFiles.size} arquivos ignorados (${dataResult.warnings.joinToString("; ")})"
+                            } else {
                                 "App ${app.packageName}: modo=Root, caminho=${dataResult.path}, bytes=${dataTarFile.length()}, código de saída=0, erro=Nenhum"
+                            }
+                            dbHelper.insertLog(
+                                if (dataResult.hasWarnings) LogLevel.WARN else LogLevel.INFO,
+                                "BackupEngine",
+                                logMsg
                             )
+
+                            val statusText = if (dataResult.hasWarnings) {
+                                "Concluído com avisos (${dataResult.ignoredFiles.size} ignorados)"
+                            } else {
+                                FormatUtils.formatBytes(dataTarFile.length())
+                            }
+
+                            val errorDetails = if (dataResult.hasWarnings) {
+                                if (dataResult.ignoredFiles.isNotEmpty()) {
+                                    "${dataResult.ignoredFiles.size} arquivo(s) ignorado(s) (sockets/FIFOs): ${dataResult.ignoredFiles.take(10).joinToString(", ")}${if (dataResult.ignoredFiles.size > 10) "..." else ""}"
+                                } else {
+                                    dataResult.warnings.joinToString("; ")
+                                }
+                            } else null
+
                             completedItemsList.add(
                                 CompletedItemInfo(
                                     name = "${app.appName} (Dados)",
                                     type = BackupItemType.APP_DATA,
                                     success = true,
-                                    isIgnored = false,
+                                    isIgnored = dataResult.hasWarnings,
                                     stage = "Compactação de Dados",
-                                    statusText = FormatUtils.formatBytes(dataTarFile.length()),
-                                    packageName = app.packageName
+                                    statusText = statusText,
+                                    packageName = app.packageName,
+                                    error = errorDetails,
+                                    causeException = if (dataResult.hasWarnings) dataResult.warnings.joinToString("; ") else null,
+                                    suggestedFix = if (dataResult.hasWarnings) "Sockets Unix e FIFOs não precisam ser salvos; seus dados principais foram arquivados com sucesso." else null
                                 )
                             )
                         } else {
-                            // Falha na leitura com código de saída != 0
+                            // Falha na leitura com código de saída != 0 e != 1 (ou arquivo inválido)
                             val warnMsg = "Falha ao ler dados de ${app.appName} (${dataResult.path}): saída ${dataResult.exitCode} - ${dataResult.error}"
                             dbHelper.insertLog(
                                 LogLevel.ERROR,
@@ -712,11 +745,19 @@ class BackupEngine(private val context: Context) {
                     if (!isRootActive) {
                         dbHelper.insertLog(LogLevel.INFO, "BackupEngine", "App ${app.packageName}: modo=Sem root, user_de ignorado.")
                     } else {
-                        val deResult = backupUserDeRoot(app, stagingDir)
+                        val deResult = backupUserDeRoot(app, stagingDir, options)
                         if (deResult.success && !deResult.isNoData && deResult.tarFile != null) {
                             val userDeTarFile = deResult.tarFile
                             val deSha256 = SecurityManager.computeFileSha256(userDeTarFile)
                             val deEntryName = "apps/${app.packageName}/user_de.tar"
+                            val deMetadata = mutableMapOf(
+                                "packageName" to app.packageName,
+                                "dataType" to "user_de"
+                            )
+                            if (deResult.hasWarnings) {
+                                deMetadata["hasWarnings"] = "true"
+                                deMetadata["ignoredCount"] = deResult.ignoredFiles.size.toString()
+                            }
                             val deItem = ManifestItem(
                                 id = UUID.randomUUID().toString(),
                                 type = BackupItemType.APP_DATA,
@@ -726,17 +767,39 @@ class BackupEngine(private val context: Context) {
                                 sizeBytes = userDeTarFile.length(),
                                 sha256Checksum = deSha256,
                                 compressionMethod = "STORED",
-                                metadata = mapOf("packageName" to app.packageName, "dataType" to "user_de")
+                                metadata = deMetadata
                             )
                             packEntries.add(ArchiveEngine.PackEntry(deEntryName, sourceFile = userDeTarFile, manifestItem = deItem, isStoreOnly = true))
                             manifestItems.add(deItem)
                             totalEstimatedSize += userDeTarFile.length()
                             appFileEntries.add(AppBackupFileEntry("user_de.tar", deEntryName, userDeTarFile.length(), deSha256, "user_de"))
-                            dbHelper.insertLog(
-                                LogLevel.INFO,
-                                "BackupEngine",
+
+                            val deLogMsg = if (deResult.hasWarnings) {
+                                "App ${app.packageName}: modo=Root, caminho=${deResult.path}, bytes=${userDeTarFile.length()}, código de saída=${deResult.exitCode}, Concluído com avisos: ${deResult.ignoredFiles.size} arquivos ignorados (${deResult.warnings.joinToString("; ")})"
+                            } else {
                                 "App ${app.packageName}: modo=Root, caminho=${deResult.path}, bytes=${userDeTarFile.length()}, código de saída=0, erro=Nenhum"
+                            }
+                            dbHelper.insertLog(
+                                if (deResult.hasWarnings) LogLevel.WARN else LogLevel.INFO,
+                                "BackupEngine",
+                                deLogMsg
                             )
+                            if (deResult.hasWarnings) {
+                                completedItemsList.add(
+                                    CompletedItemInfo(
+                                        name = "${app.appName} (User DE)",
+                                        type = BackupItemType.APP_DATA,
+                                        success = true,
+                                        isIgnored = true,
+                                        stage = "Compactação de Dados (DE)",
+                                        statusText = "Concluído com avisos (${deResult.ignoredFiles.size} ignorados)",
+                                        packageName = app.packageName,
+                                        error = "${deResult.ignoredFiles.size} arquivo(s) ignorado(s): ${deResult.ignoredFiles.take(5).joinToString(", ")}",
+                                        causeException = deResult.warnings.joinToString("; "),
+                                        suggestedFix = "Sockets Unix e FIFOs não precisam ser salvos."
+                                    )
+                                )
+                            }
                         } else if (deResult.isNoData) {
                             dbHelper.insertLog(LogLevel.INFO, "BackupEngine", "App ${app.packageName}: modo=Root, caminho=${deResult.path}, bytes=0, código de saída=0, sem dados (user_de)")
                         } else {
@@ -1889,12 +1952,19 @@ class BackupEngine(private val context: Context) {
                 dbHelper.insertLog(LogLevel.INFO, "BackupEngine", "Backup SOMENTE_DRIVE gerado em staging temporário: ${driveStagingFile.name} (${driveStagingFile.length() / (1024 * 1024)} MB). Nenhuma cópia gravada em SwiftVaultBackups.")
                 cpuGovernor.endProfiling()
 
-                val failedCount = completedItemsList.count { !it.success }
-                val finishWarning = if (failedCount > 0) "$failedCount item(ns) apresentaram avisos ou falha." else null
+                val failedCount = completedItemsList.count { !it.success && !it.isIgnored }
+                val ignoredCount = completedItemsList.count { it.isIgnored }
+                val finishWarning = if (failedCount > 0) {
+                    "$failedCount item(ns) apresentaram falhas."
+                } else if (ignoredCount > 0) {
+                    "$ignoredCount item(ns) concluídos com avisos ou ignorados."
+                } else null
+
+                val stageDrive = if (failedCount > 0) "Finalizado com falhas" else if (ignoredCount > 0) "Concluído com avisos" else "Concluído"
 
                 emitProgress(
                     BackupProgress(
-                        stage = if (failedCount > 0) "Concluído com avisos" else "Concluído",
+                        stage = stageDrive,
                         currentItemName = "Container preparado em staging temporário para envio (${driveStagingFile.name})",
                         progressPercent = 1.0f,
                         bytesProcessed = fixedTotalBytes,
@@ -2037,28 +2107,33 @@ class BackupEngine(private val context: Context) {
                 val finishWarning = if (failedCount > 0) {
                     "$failedCount item(ns) apresentaram falhas."
                 } else if (ignoredCount > 0) {
-                    "$ignoredCount item(ns) foram ignorados."
+                    "$ignoredCount item(ns) concluídos com avisos ou ignorados."
                 } else null
 
-                if (failedCount > 0) {
-                    val errorReportText = buildString {
-                        appendLine("Relatório de Falhas no Backup: ${finalOutputFile.name}")
-                        completedItemsList.filter { !it.success && !it.isIgnored }.forEach { fail ->
-                            appendLine("Item: ${fail.name}")
-                            appendLine("Etapa: ${fail.stage}")
-                            appendLine("Erro: ${fail.errorMessage}")
-                            appendLine("Causa: ${fail.causeException}")
-                            appendLine("Sugestão: ${fail.suggestedFix}")
+                if (failedCount > 0 || ignoredCount > 0) {
+                    val reportText = buildString {
+                        if (failedCount > 0) {
+                            appendLine("Relatório de Falhas no Backup: ${finalOutputFile.name}")
+                        } else {
+                            appendLine("Relatório de Avisos no Backup: ${finalOutputFile.name}")
+                        }
+                        completedItemsList.filter { !it.success || it.isIgnored }.forEach { item ->
+                            appendLine("Item: ${item.name}")
+                            appendLine("Etapa: ${item.stage}")
+                            if (item.statusText != null) appendLine("Status: ${item.statusText}")
+                            if (item.error != null) appendLine("Detalhes: ${item.error}")
+                            if (item.causeException != null) appendLine("Diagnóstico: ${item.causeException}")
+                            if (item.suggestedFix != null) appendLine("Observação: ${item.suggestedFix}")
                             appendLine("---")
                         }
                     }
-                    dbHelper.insertLog(LogLevel.WARN, "BackupReport_${backupId}", finishWarning ?: "Falhas no backup", errorReportText)
+                    dbHelper.insertLog(LogLevel.WARN, "BackupReport_${backupId}", finishWarning ?: "Avisos no backup", reportText)
                 }
 
                 val finalStage = if (failedCount > 0) {
                     "Finalizado com falhas"
                 } else if (ignoredCount > 0) {
-                    "Finalizado com avisos"
+                    "Concluído com avisos"
                 } else {
                     "Concluído"
                 }
@@ -2066,7 +2141,7 @@ class BackupEngine(private val context: Context) {
                 val finalItemName = if (failedCount > 0) {
                     "Backup finalizado com $failedCount falha(s) (${finalOutputFile.name})"
                 } else if (ignoredCount > 0) {
-                    "Backup finalizado com $ignoredCount item(ns) ignorado(s) (${finalOutputFile.name})"
+                    "Backup finalizado com $ignoredCount aviso(s) (${finalOutputFile.name})"
                 } else {
                     "Backup verificado com sucesso! (${finalOutputFile.name})"
                 }
@@ -2930,10 +3005,54 @@ class BackupEngine(private val context: Context) {
         val exitCode: Int,
         val path: String,
         val error: String?,
-        val tarFile: File?
+        val tarFile: File?,
+        val hasWarnings: Boolean = false,
+        val ignoredFiles: List<String> = emptyList(),
+        val warnings: List<String> = emptyList()
     )
 
-    private suspend fun backupAppDataRoot(app: AppInfo, stagingDir: File): AppDataBackupResult = withContext(Dispatchers.IO) {
+    private fun escapeTarPattern(pattern: String): String {
+        val sb = StringBuilder()
+        for (c in pattern) {
+            when (c) {
+                '*', '?', '[', ']', '\\' -> sb.append('\\').append(c)
+                else -> sb.append(c)
+            }
+        }
+        return sb.toString()
+    }
+
+    private fun escapeForShellDoubleQuotes(str: String): String {
+        val sb = StringBuilder()
+        for (c in str) {
+            when (c) {
+                '\\', '"', '$', '`' -> sb.append('\\').append(c)
+                else -> sb.append(c)
+            }
+        }
+        return sb.toString()
+    }
+
+    private fun verifyTarArchive(tarFile: File): Boolean {
+        if (!tarFile.exists() || tarFile.length() == 0L) return false
+        val res = Shell.cmd("tar -tf \"${tarFile.absolutePath}\" >/dev/null 2>&1").exec()
+        if (res.isSuccess) return true
+        val resToybox = Shell.cmd("toybox tar -tf \"${tarFile.absolutePath}\" >/dev/null 2>&1").exec()
+        return resToybox.isSuccess
+    }
+
+    private fun isTarCommandAcceptable(exitCode: Int, tarFile: File): Boolean {
+        if (!tarFile.exists() || tarFile.length() == 0L) return false
+        if (exitCode == 0) return true
+        if (exitCode == 1) return verifyTarArchive(tarFile)
+        return false
+    }
+
+    private suspend fun backupAppDataRoot(
+        app: AppInfo,
+        stagingDir: File,
+        options: AppSelectionOptions? = null
+    ): AppDataBackupResult = withContext(Dispatchers.IO) {
         val pkg = app.packageName
         val candidatePaths = listOf("/data/data/$pkg", "/data/user/0/$pkg")
         var chosenPath: String? = null
@@ -2972,8 +3091,13 @@ class BackupEngine(private val context: Context) {
             )
         }
 
-        // 2. Verificar se o diretório está vazio (desconsiderando cache e code_cache)
-        val checkFilesCmd = Shell.cmd("find \"$chosenPath\" -mindepth 1 -maxdepth 2 ! -name \"cache\" ! -name \"code_cache\" 2>/dev/null | head -n 1").exec()
+        // 2. Descobrir se devemos incluir cache (toggle em configurações ou opção específica)
+        val shouldIncludeCache = options?.includeCache == true ||
+            context.getSharedPreferences("swiftvault_prefs", Context.MODE_PRIVATE).getBoolean("backup_include_cache", false)
+
+        // Verificar se o diretório está vazio (desconsiderando cache, code_cache e no_backup caso cache desativado)
+        val findIgnoreArgs = if (!shouldIncludeCache) "! -name \"cache\" ! -name \"code_cache\" ! -name \"no_backup\"" else "! -name \"no_backup\""
+        val checkFilesCmd = Shell.cmd("find \"$chosenPath\" -mindepth 1 -maxdepth 2 $findIgnoreArgs 2>/dev/null | head -n 1").exec()
         val hasFiles = checkFilesCmd.isSuccess && checkFilesCmd.out.any { it.isNotBlank() }
         if (!hasFiles) {
             return@withContext AppDataBackupResult(
@@ -2987,36 +3111,98 @@ class BackupEngine(private val context: Context) {
             )
         }
 
-        // 3. Executar compactação tar com root
+        // 3. Descobrir sockets Unix (-type s) e FIFOs/named pipes (-type p) antes do tar
+        val findSocketsCmd = Shell.cmd("find \"$chosenPath\" \\( -type s -o -type p \\) 2>/dev/null").exec()
+        val ignoredSocketsAndPipes = if (findSocketsCmd.isSuccess) {
+            findSocketsCmd.out.map { it.trim() }.filter { it.isNotBlank() }
+        } else {
+            emptyList()
+        }
+
+        // Registrar nos logs do app, em nível WARN, cada socket ou pipe ignorado
+        for (sock in ignoredSocketsAndPipes) {
+            dbHelper.insertLog(
+                LogLevel.WARN,
+                "BackupEngine",
+                "Socket/FIFO ignorado: $sock (App: $pkg)"
+            )
+        }
+
+        // 4. Preparar caminhos relativos para exclusão no tar
+        val prefixWithSlash = if (chosenPath.endsWith("/")) chosenPath else "$chosenPath/"
+        val relSockets = ignoredSocketsAndPipes.map { sockPath ->
+            if (sockPath.startsWith(prefixWithSlash)) {
+                sockPath.substring(prefixWithSlash.length)
+            } else {
+                sockPath.removePrefix(chosenPath).removePrefix("/")
+            }
+        }.filter { it.isNotBlank() }
+
+        val standardExcludes = if (!shouldIncludeCache) {
+            listOf("cache", "code_cache", "no_backup", "./cache", "./code_cache", "./no_backup")
+        } else {
+            listOf("no_backup", "./no_backup")
+        }
+
+        // Criar arquivo de exclusão para o tar (-X)
+        val excludeFile = File(stagingDir, "${pkg}_data_excludes.txt")
+        try {
+            val excludeLines = mutableListOf<String>()
+            excludeLines.addAll(standardExcludes)
+            for (rel in relSockets) {
+                val escapedRel = escapeTarPattern(rel)
+                excludeLines.add(escapedRel)
+                excludeLines.add("./$escapedRel")
+            }
+            excludeFile.writeText(excludeLines.joinToString("\n") + "\n")
+            excludeFile.setReadable(true, false)
+        } catch (e: Throwable) {
+            dbHelper.insertLog(LogLevel.WARN, "BackupEngine", "Erro ao criar excludeFile: ${e.message}")
+        }
+
+        val excludeArgsBuilder = StringBuilder()
+        for (std in standardExcludes) {
+            excludeArgsBuilder.append(" --exclude \"$std\"")
+        }
+        for (rel in relSockets) {
+            val safeTarPattern = escapeTarPattern(rel)
+            val safeShellArg = escapeForShellDoubleQuotes(safeTarPattern)
+            excludeArgsBuilder.append(" --exclude \"$safeShellArg\"")
+            excludeArgsBuilder.append(" --exclude \"./$safeShellArg\"")
+        }
+        val excludeArgsStr = excludeArgsBuilder.toString()
+        val excludeFileArg = if (excludeFile.exists()) " -X \"${excludeFile.absolutePath}\"" else ""
+
+        // 5. Executar compactação tar com root
         val dataTarFile = File(stagingDir, "${pkg}_data.tar")
         if (dataTarFile.exists()) dataTarFile.delete()
 
         // Tentativa 1: Preservando dono numérico (--numeric-owner), permissões (-p) e contexto SELinux (--selinux)
-        val cmd1 = "nice -n 19 ionice -c 3 tar -cf \"${dataTarFile.absolutePath}\" -p --numeric-owner --selinux --exclude \"cache\" --exclude \"code_cache\" --exclude \"no_backup\" --exclude \"./cache\" --exclude \"./code_cache\" --exclude \"./no_backup\" -C \"$chosenPath\" ."
+        val cmd1 = "nice -n 19 ionice -c 3 tar -cf \"${dataTarFile.absolutePath}\" -p --numeric-owner --selinux$excludeFileArg$excludeArgsStr -C \"$chosenPath\" ."
         var tarExec = Shell.cmd(cmd1).exec()
         var outErr = (tarExec.out + tarExec.err).filter { it.isNotBlank() }.joinToString(" ")
         var exitCode = tarExec.code
 
         // Se falhar devido a flag --selinux não suportada pelo binário toybox/tar, tentar sem --selinux
-        if (!tarExec.isSuccess && (outErr.contains("selinux", ignoreCase = true) || outErr.contains("unrecognized", ignoreCase = true) || outErr.contains("unknown", ignoreCase = true))) {
-            val cmd2 = "nice -n 19 ionice -c 3 tar -cf \"${dataTarFile.absolutePath}\" -p --numeric-owner --exclude \"cache\" --exclude \"code_cache\" --exclude \"no_backup\" --exclude \"./cache\" --exclude \"./code_cache\" --exclude \"./no_backup\" -C \"$chosenPath\" ."
+        if (!isTarCommandAcceptable(exitCode, dataTarFile) && (outErr.contains("selinux", ignoreCase = true) || outErr.contains("unrecognized", ignoreCase = true) || outErr.contains("unknown", ignoreCase = true))) {
+            val cmd2 = "nice -n 19 ionice -c 3 tar -cf \"${dataTarFile.absolutePath}\" -p --numeric-owner$excludeFileArg$excludeArgsStr -C \"$chosenPath\" ."
             tarExec = Shell.cmd(cmd2).exec()
             outErr = (tarExec.out + tarExec.err).filter { it.isNotBlank() }.joinToString(" ")
             exitCode = tarExec.code
         }
 
         // Se ainda falhar, testar namespace mount master ("su -mm" no KernelSU / Magisk)
-        if (!tarExec.isSuccess || !dataTarFile.exists() || dataTarFile.length() == 0L) {
+        if (!isTarCommandAcceptable(exitCode, dataTarFile)) {
             try {
                 val pMm = Runtime.getRuntime().exec(arrayOf(
                     "su", "-mm", "-c",
-                    "tar -cf \"${dataTarFile.absolutePath}\" -p --numeric-owner --exclude 'cache' --exclude 'code_cache' --exclude 'no_backup' -C \"$chosenPath\" ."
+                    "tar -cf \"${dataTarFile.absolutePath}\" -p --numeric-owner$excludeFileArg$excludeArgsStr -C \"$chosenPath\" ."
                 ))
                 val mmErr = pMm.errorStream.bufferedReader().use { it.readText() }
                 val mmExit = pMm.waitFor()
-                if (mmExit == 0 && dataTarFile.exists() && dataTarFile.length() > 0L) {
-                    exitCode = 0
-                    outErr = ""
+                if (isTarCommandAcceptable(mmExit, dataTarFile)) {
+                    exitCode = mmExit
+                    outErr = mmErr
                 } else if (mmExit != 0 && outErr.isBlank()) {
                     exitCode = mmExit
                     outErr = mmErr
@@ -3025,29 +3211,64 @@ class BackupEngine(private val context: Context) {
         }
 
         // Se ainda falhar e o caminho tentado foi /data/data, tentar o caminho alternativo /data/user/0
-        if ((exitCode != 0 || !dataTarFile.exists() || dataTarFile.length() == 0L) && chosenPath != "/data/user/0/$pkg") {
+        if (!isTarCommandAcceptable(exitCode, dataTarFile) && chosenPath != "/data/user/0/$pkg") {
             val altPath = "/data/user/0/$pkg"
-            val altCmd = "nice -n 19 ionice -c 3 tar -cf \"${dataTarFile.absolutePath}\" -p --numeric-owner --exclude \"cache\" --exclude \"code_cache\" --exclude \"no_backup\" -C \"$altPath\" ."
+            val altCmd = "nice -n 19 ionice -c 3 tar -cf \"${dataTarFile.absolutePath}\" -p --numeric-owner$excludeFileArg$excludeArgsStr -C \"$altPath\" ."
             val altExec = Shell.cmd(altCmd).exec()
-            if (altExec.isSuccess && dataTarFile.exists() && dataTarFile.length() > 0L) {
+            if (isTarCommandAcceptable(altExec.code, dataTarFile)) {
                 chosenPath = altPath
-                exitCode = 0
-                outErr = ""
+                exitCode = altExec.code
+                outErr = (altExec.out + altExec.err).filter { it.isNotBlank() }.joinToString(" ")
             }
         }
 
-        val bytes = if (dataTarFile.exists()) dataTarFile.length() else 0L
+        try {
+            if (excludeFile.exists()) excludeFile.delete()
+        } catch (_: Throwable) {}
 
-        if (exitCode == 0 && bytes > 0L) {
-            AppDataBackupResult(
-                success = true,
-                isNoData = false,
-                bytesRead = bytes,
-                exitCode = 0,
-                path = chosenPath,
-                error = null,
-                tarFile = dataTarFile
-            )
+        val bytes = if (dataTarFile.exists()) dataTarFile.length() else 0L
+        val isReadable = verifyTarArchive(dataTarFile)
+
+        val warningsList = mutableListOf<String>()
+        if (ignoredSocketsAndPipes.isNotEmpty()) {
+            warningsList.add("${ignoredSocketsAndPipes.size} sockets/FIFOs ignorados")
+        }
+        if (outErr.isNotBlank()) {
+            warningsList.add(outErr)
+        }
+
+        // Tratamento do código de saída:
+        // 0 = sucesso
+        // 1 = alguns arquivos ignorados/avisos ("Concluído com avisos")
+        // >= 2 = falha real
+        if (dataTarFile.exists() && bytes > 0L && isReadable) {
+            if (exitCode == 0 && ignoredSocketsAndPipes.isEmpty()) {
+                AppDataBackupResult(
+                    success = true,
+                    isNoData = false,
+                    bytesRead = bytes,
+                    exitCode = 0,
+                    path = chosenPath,
+                    error = null,
+                    tarFile = dataTarFile,
+                    hasWarnings = false,
+                    ignoredFiles = emptyList(),
+                    warnings = emptyList()
+                )
+            } else {
+                AppDataBackupResult(
+                    success = true,
+                    isNoData = false,
+                    bytesRead = bytes,
+                    exitCode = exitCode,
+                    path = chosenPath,
+                    error = null,
+                    tarFile = dataTarFile,
+                    hasWarnings = true,
+                    ignoredFiles = ignoredSocketsAndPipes,
+                    warnings = warningsList
+                )
+            }
         } else if (exitCode == 0 && bytes == 0L) {
             AppDataBackupResult(
                 success = true,
@@ -3056,11 +3277,14 @@ class BackupEngine(private val context: Context) {
                 exitCode = 0,
                 path = chosenPath,
                 error = null,
-                tarFile = null
+                tarFile = null,
+                hasWarnings = false,
+                ignoredFiles = ignoredSocketsAndPipes,
+                warnings = warningsList
             )
         } else {
             val selinuxInfo = CapabilityManager(context).getSelinuxStatus()
-            val detailedError = if (outErr.isNotBlank()) "$outErr (SELinux: $selinuxInfo)" else "Código de saída: $exitCode (SELinux: $selinuxInfo)"
+            val detailedError = if (outErr.isNotBlank()) "$outErr (SELinux: $selinuxInfo, saída=$exitCode, legível=$isReadable)" else "Código de saída: $exitCode (SELinux: $selinuxInfo, legível=$isReadable)"
             AppDataBackupResult(
                 success = false,
                 isNoData = false,
@@ -3068,12 +3292,19 @@ class BackupEngine(private val context: Context) {
                 exitCode = exitCode,
                 path = chosenPath,
                 error = detailedError,
-                tarFile = null
+                tarFile = null,
+                hasWarnings = false,
+                ignoredFiles = ignoredSocketsAndPipes,
+                warnings = warningsList
             )
         }
     }
 
-    private suspend fun backupUserDeRoot(app: AppInfo, stagingDir: File): AppDataBackupResult = withContext(Dispatchers.IO) {
+    private suspend fun backupUserDeRoot(
+        app: AppInfo,
+        stagingDir: File,
+        options: AppSelectionOptions? = null
+    ): AppDataBackupResult = withContext(Dispatchers.IO) {
         val pkg = app.packageName
         val dePath = "/data/user_de/0/$pkg"
 
@@ -3090,7 +3321,11 @@ class BackupEngine(private val context: Context) {
             )
         }
 
-        val checkFilesCmd = Shell.cmd("find \"$dePath\" -mindepth 1 -maxdepth 2 ! -name \"cache\" ! -name \"code_cache\" 2>/dev/null | head -n 1").exec()
+        val shouldIncludeCache = options?.includeCache == true ||
+            context.getSharedPreferences("swiftvault_prefs", Context.MODE_PRIVATE).getBoolean("backup_include_cache", false)
+
+        val findIgnoreArgs = if (!shouldIncludeCache) "! -name \"cache\" ! -name \"code_cache\" ! -name \"no_backup\"" else "! -name \"no_backup\""
+        val checkFilesCmd = Shell.cmd("find \"$dePath\" -mindepth 1 -maxdepth 2 $findIgnoreArgs 2>/dev/null | head -n 1").exec()
         val hasFiles = checkFilesCmd.isSuccess && checkFilesCmd.out.any { it.isNotBlank() }
         if (!hasFiles) {
             return@withContext AppDataBackupResult(
@@ -3104,32 +3339,91 @@ class BackupEngine(private val context: Context) {
             )
         }
 
+        // Descobrir sockets Unix (-type s) e FIFOs/named pipes (-type p) antes do tar
+        val findSocketsCmd = Shell.cmd("find \"$dePath\" \\( -type s -o -type p \\) 2>/dev/null").exec()
+        val ignoredSocketsAndPipes = if (findSocketsCmd.isSuccess) {
+            findSocketsCmd.out.map { it.trim() }.filter { it.isNotBlank() }
+        } else {
+            emptyList()
+        }
+
+        for (sock in ignoredSocketsAndPipes) {
+            dbHelper.insertLog(
+                LogLevel.WARN,
+                "BackupEngine",
+                "Socket/FIFO ignorado (User DE): $sock (App: $pkg)"
+            )
+        }
+
+        val prefixWithSlash = if (dePath.endsWith("/")) dePath else "$dePath/"
+        val relSockets = ignoredSocketsAndPipes.map { sockPath ->
+            if (sockPath.startsWith(prefixWithSlash)) {
+                sockPath.substring(prefixWithSlash.length)
+            } else {
+                sockPath.removePrefix(dePath).removePrefix("/")
+            }
+        }.filter { it.isNotBlank() }
+
+        val standardExcludes = if (!shouldIncludeCache) {
+            listOf("cache", "code_cache", "no_backup", "./cache", "./code_cache", "./no_backup")
+        } else {
+            listOf("no_backup", "./no_backup")
+        }
+
+        val excludeFile = File(stagingDir, "${pkg}_user_de_excludes.txt")
+        try {
+            val excludeLines = mutableListOf<String>()
+            excludeLines.addAll(standardExcludes)
+            for (rel in relSockets) {
+                val escapedRel = escapeTarPattern(rel)
+                excludeLines.add(escapedRel)
+                excludeLines.add("./$escapedRel")
+            }
+            excludeFile.writeText(excludeLines.joinToString("\n") + "\n")
+            excludeFile.setReadable(true, false)
+        } catch (e: Throwable) {
+            dbHelper.insertLog(LogLevel.WARN, "BackupEngine", "Erro ao criar excludeFile user_de: ${e.message}")
+        }
+
+        val excludeArgsBuilder = StringBuilder()
+        for (std in standardExcludes) {
+            excludeArgsBuilder.append(" --exclude \"$std\"")
+        }
+        for (rel in relSockets) {
+            val safeTarPattern = escapeTarPattern(rel)
+            val safeShellArg = escapeForShellDoubleQuotes(safeTarPattern)
+            excludeArgsBuilder.append(" --exclude \"$safeShellArg\"")
+            excludeArgsBuilder.append(" --exclude \"./$safeShellArg\"")
+        }
+        val excludeArgsStr = excludeArgsBuilder.toString()
+        val excludeFileArg = if (excludeFile.exists()) " -X \"${excludeFile.absolutePath}\"" else ""
+
         val userDeTarFile = File(stagingDir, "${pkg}_user_de.tar")
         if (userDeTarFile.exists()) userDeTarFile.delete()
 
-        val cmd1 = "nice -n 19 ionice -c 3 tar -cf \"${userDeTarFile.absolutePath}\" -p --numeric-owner --selinux --exclude \"cache\" --exclude \"code_cache\" -C \"$dePath\" ."
+        val cmd1 = "nice -n 19 ionice -c 3 tar -cf \"${userDeTarFile.absolutePath}\" -p --numeric-owner --selinux$excludeFileArg$excludeArgsStr -C \"$dePath\" ."
         var tarExec = Shell.cmd(cmd1).exec()
         var outErr = (tarExec.out + tarExec.err).filter { it.isNotBlank() }.joinToString(" ")
         var exitCode = tarExec.code
 
-        if (!tarExec.isSuccess && (outErr.contains("selinux", ignoreCase = true) || outErr.contains("unrecognized", ignoreCase = true) || outErr.contains("unknown", ignoreCase = true))) {
-            val cmd2 = "nice -n 19 ionice -c 3 tar -cf \"${userDeTarFile.absolutePath}\" -p --numeric-owner --exclude \"cache\" --exclude \"code_cache\" -C \"$dePath\" ."
+        if (!isTarCommandAcceptable(exitCode, userDeTarFile) && (outErr.contains("selinux", ignoreCase = true) || outErr.contains("unrecognized", ignoreCase = true) || outErr.contains("unknown", ignoreCase = true))) {
+            val cmd2 = "nice -n 19 ionice -c 3 tar -cf \"${userDeTarFile.absolutePath}\" -p --numeric-owner$excludeFileArg$excludeArgsStr -C \"$dePath\" ."
             tarExec = Shell.cmd(cmd2).exec()
             outErr = (tarExec.out + tarExec.err).filter { it.isNotBlank() }.joinToString(" ")
             exitCode = tarExec.code
         }
 
-        if (!tarExec.isSuccess || !userDeTarFile.exists() || userDeTarFile.length() == 0L) {
+        if (!isTarCommandAcceptable(exitCode, userDeTarFile)) {
             try {
                 val pMm = Runtime.getRuntime().exec(arrayOf(
                     "su", "-mm", "-c",
-                    "tar -cf \"${userDeTarFile.absolutePath}\" -p --numeric-owner --exclude 'cache' --exclude 'code_cache' -C \"$dePath\" ."
+                    "tar -cf \"${userDeTarFile.absolutePath}\" -p --numeric-owner$excludeFileArg$excludeArgsStr -C \"$dePath\" ."
                 ))
                 val mmErr = pMm.errorStream.bufferedReader().use { it.readText() }
                 val mmExit = pMm.waitFor()
-                if (mmExit == 0 && userDeTarFile.exists() && userDeTarFile.length() > 0L) {
-                    exitCode = 0
-                    outErr = ""
+                if (isTarCommandAcceptable(mmExit, userDeTarFile)) {
+                    exitCode = mmExit
+                    outErr = mmErr
                 } else if (mmExit != 0 && outErr.isBlank()) {
                     exitCode = mmExit
                     outErr = mmErr
@@ -3137,17 +3431,49 @@ class BackupEngine(private val context: Context) {
             } catch (_: Throwable) {}
         }
 
+        try {
+            if (excludeFile.exists()) excludeFile.delete()
+        } catch (_: Throwable) {}
+
         val bytes = if (userDeTarFile.exists()) userDeTarFile.length() else 0L
-        if (exitCode == 0 && bytes > 0L) {
-            AppDataBackupResult(
-                success = true,
-                isNoData = false,
-                bytesRead = bytes,
-                exitCode = 0,
-                path = dePath,
-                error = null,
-                tarFile = userDeTarFile
-            )
+        val isReadable = verifyTarArchive(userDeTarFile)
+
+        val warningsList = mutableListOf<String>()
+        if (ignoredSocketsAndPipes.isNotEmpty()) {
+            warningsList.add("${ignoredSocketsAndPipes.size} sockets/FIFOs ignorados")
+        }
+        if (outErr.isNotBlank()) {
+            warningsList.add(outErr)
+        }
+
+        if (userDeTarFile.exists() && bytes > 0L && isReadable) {
+            if (exitCode == 0 && ignoredSocketsAndPipes.isEmpty()) {
+                AppDataBackupResult(
+                    success = true,
+                    isNoData = false,
+                    bytesRead = bytes,
+                    exitCode = 0,
+                    path = dePath,
+                    error = null,
+                    tarFile = userDeTarFile,
+                    hasWarnings = false,
+                    ignoredFiles = emptyList(),
+                    warnings = emptyList()
+                )
+            } else {
+                AppDataBackupResult(
+                    success = true,
+                    isNoData = false,
+                    bytesRead = bytes,
+                    exitCode = exitCode,
+                    path = dePath,
+                    error = null,
+                    tarFile = userDeTarFile,
+                    hasWarnings = true,
+                    ignoredFiles = ignoredSocketsAndPipes,
+                    warnings = warningsList
+                )
+            }
         } else if (exitCode == 0 && bytes == 0L) {
             AppDataBackupResult(
                 success = true,
@@ -3156,11 +3482,14 @@ class BackupEngine(private val context: Context) {
                 exitCode = 0,
                 path = dePath,
                 error = null,
-                tarFile = null
+                tarFile = null,
+                hasWarnings = false,
+                ignoredFiles = ignoredSocketsAndPipes,
+                warnings = warningsList
             )
         } else {
             val selinuxInfo = CapabilityManager(context).getSelinuxStatus()
-            val detailedError = if (outErr.isNotBlank()) "$outErr (SELinux: $selinuxInfo)" else "Código de saída: $exitCode (SELinux: $selinuxInfo)"
+            val detailedError = if (outErr.isNotBlank()) "$outErr (SELinux: $selinuxInfo, saída=$exitCode, legível=$isReadable)" else "Código de saída: $exitCode (SELinux: $selinuxInfo, legível=$isReadable)"
             AppDataBackupResult(
                 success = false,
                 isNoData = false,
@@ -3168,7 +3497,10 @@ class BackupEngine(private val context: Context) {
                 exitCode = exitCode,
                 path = dePath,
                 error = detailedError,
-                tarFile = null
+                tarFile = null,
+                hasWarnings = false,
+                ignoredFiles = ignoredSocketsAndPipes,
+                warnings = warningsList
             )
         }
     }

@@ -220,6 +220,44 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
+            // DADOS DE APLICATIVOS (CACHE)
+            val includeAppCache by viewModel.includeAppCache.collectAsStateWithLifecycle()
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .border(1.dp, DarkCardBorder, RoundedCornerShape(14.dp)),
+                colors = CardDefaults.cardColors(containerColor = DarkSurfaceVariant)
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(imageVector = Icons.Default.FolderZip, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Dados de Aplicativos", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 14.sp)
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                            Text("Incluir cache dos aplicativos", fontWeight = FontWeight.SemiBold, color = TextPrimary, fontSize = 13.sp)
+                            Text("Por padrão, pastas cache/, code_cache/ e no_backup/ são excluídas do backup para economizar espaço e evitar temporários", fontSize = 11.sp, color = TextSecondary)
+                        }
+                        Switch(
+                            checked = includeAppCache,
+                            onCheckedChange = { viewModel.setIncludeAppCache(it) },
+                            colors = SwitchDefaults.colors(checkedThumbColor = Color.Black, checkedTrackColor = primaryAccent)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
             // 3. ATUALIZAÇÕES DO APLICATIVO
             Card(
                 modifier = Modifier

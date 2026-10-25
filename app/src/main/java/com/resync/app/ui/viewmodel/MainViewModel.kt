@@ -157,6 +157,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         prefs.edit().putBoolean("show_internal_system_packages", show).apply()
     }
 
+    // Toggle for including app cache in data backups
+    private val _includeAppCache = MutableStateFlow(
+        prefs.getBoolean("backup_include_cache", false)
+    )
+    val includeAppCache: StateFlow<Boolean> = _includeAppCache.asStateFlow()
+
+    fun setIncludeAppCache(include: Boolean) {
+        _includeAppCache.value = include
+        prefs.edit().putBoolean("backup_include_cache", include).apply()
+    }
+
     private val _selectedAppForDetail = MutableStateFlow<AppInfo?>(null)
     val selectedAppForDetail: StateFlow<AppInfo?> = _selectedAppForDetail.asStateFlow()
 
@@ -2848,7 +2859,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             includeInternalData = prefs.getBoolean("quick_opt_internal_data", true),
             includeExternalData = prefs.getBoolean("quick_opt_external_data", false),
             includeObb = prefs.getBoolean("quick_opt_obb", false),
-            includeUserDe = prefs.getBoolean("quick_opt_user_de", true)
+            includeUserDe = prefs.getBoolean("quick_opt_user_de", true),
+            includeCache = prefs.getBoolean("backup_include_cache", false)
         )
     }
 
@@ -2861,6 +2873,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             .putBoolean("quick_opt_external_data", options.includeExternalData)
             .putBoolean("quick_opt_obb", options.includeObb)
             .putBoolean("quick_opt_user_de", options.includeUserDe)
+            .putBoolean("backup_include_cache", options.includeCache)
             .apply()
     }
 

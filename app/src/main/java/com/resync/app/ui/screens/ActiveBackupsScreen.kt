@@ -822,6 +822,15 @@ private fun FinishedOperationCard(
                                     color = StatusWarning,
                                     modifier = Modifier.padding(start = 22.dp)
                                 )
+                                if (!item.error.isNullOrBlank()) {
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = item.error!!,
+                                        fontSize = 10.sp,
+                                        color = TextSecondary,
+                                        modifier = Modifier.padding(start = 22.dp)
+                                    )
+                                }
                             }
                         }
                     }
