@@ -116,10 +116,10 @@ class AppUpdateManager(private val context: Context) {
         }
 
         try {
-            val releaseInfo = fetchVersionJsonDirect()
+            val releaseInfo = fetchVersionJsonDirect() ?: fetchFromGitHubApiFallback()
 
             if (releaseInfo == null) {
-                Log.d(TAG, "version.json não encontrado ou inválido no momento.")
+                Log.d(TAG, "Nenhuma informação de versão remota obtida no momento.")
                 return@withContext Result.success(null)
             }
 

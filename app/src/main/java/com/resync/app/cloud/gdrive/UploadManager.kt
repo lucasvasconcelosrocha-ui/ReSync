@@ -400,30 +400,39 @@ class UploadManager(private val oAuthManager: OAuthManager) {
                         )
                     }
 
-                    // Upload completed and file metadata returned by Google Drive
-                    if (isFinal) {
-                        val driveMeta = chunkResult.metadata!!
-                        val computedMd5 = md5Digest.digest().joinToString("") { "%02x".format(it) }
+                        // Upload completed and file metadata returned by Google Drive
+                        if (isFinal) {
+                            var driveMeta = chunkResult.metadata!!
+                            val computedMd5 = md5Digest.digest().joinToString("") { "%02x".format(it) }
 
-                        AppLogger.i(TAG, "Upload concluído no Google Drive! FileId=${driveMeta.id}, MD5 local=$computedMd5, MD5 Drive=${driveMeta.md5Checksum}")
+                            // Consulta obrigatória dos metadados oficiais do Drive para verificar se os bytes foram gravados de fato
+                            val (verifiedSize, verifiedMd5) = fetchRemoteFileMetadata(driveMeta.id, token)
+                            if (verifiedSize > 0L) {
+                                driveMeta = driveMeta.copy(
+                                    sizeBytes = verifiedSize,
+                                    md5Checksum = verifiedMd5 ?: driveMeta.md5Checksum
+                                )
+                            }
 
-                        if (driveMeta.id.isBlank()) {
-                            val err = "Upload no Google Drive falhou: a API não retornou um fileId válido."
-                            AppLogger.e(TAG, err, extraParams = mapOf("jobId" to jobId))
-                            dbHelper.insertLog(com.resync.app.data.model.LogLevel.ERROR, "GoogleDrive", err)
-                            transferDao.updateState(jobId, CloudTransferState.FALHOU, err)
-                            transferDao.releaseExecutorLock(jobId, executorOwner)
-                            return@withContext Result.failure(IllegalStateException(err))
-                        }
+                            AppLogger.i(TAG, "Upload concluído no Google Drive! FileId=${driveMeta.id}, Size=${driveMeta.sizeBytes} bytes, MD5 local=$computedMd5, MD5 Drive=${driveMeta.md5Checksum}")
 
-                        if (driveMeta.sizeBytes <= 0L || driveMeta.sizeBytes != totalBytes) {
-                            val sizeErr = "Divergência de tamanho no Google Drive para ${localFile.name}: esperado $totalBytes bytes, retornado ${driveMeta.sizeBytes} bytes (0 bytes ou incompleto)."
-                            AppLogger.e(TAG, sizeErr, extraParams = mapOf("jobId" to jobId))
-                            dbHelper.insertLog(com.resync.app.data.model.LogLevel.ERROR, "GoogleDrive", sizeErr)
-                            transferDao.updateState(jobId, CloudTransferState.FALHOU, sizeErr)
-                            transferDao.releaseExecutorLock(jobId, executorOwner)
-                            return@withContext Result.failure(IllegalStateException(sizeErr))
-                        }
+                            if (driveMeta.id.isBlank()) {
+                                val err = "Upload no Google Drive falhou: a API não retornou um fileId válido."
+                                AppLogger.e(TAG, err, extraParams = mapOf("jobId" to jobId))
+                                dbHelper.insertLog(com.resync.app.data.model.LogLevel.ERROR, "GoogleDrive", err)
+                                transferDao.updateState(jobId, CloudTransferState.FALHOU, err)
+                                transferDao.releaseExecutorLock(jobId, executorOwner)
+                                return@withContext Result.failure(IllegalStateException(err))
+                            }
+
+                            if (driveMeta.sizeBytes <= 0L || driveMeta.sizeBytes != totalBytes) {
+                                val sizeErr = "Divergência de tamanho no Google Drive para ${localFile.name}: esperado $totalBytes bytes, retornado ${driveMeta.sizeBytes} bytes (0 bytes gravados ou arquivo incompleto)."
+                                AppLogger.e(TAG, sizeErr, extraParams = mapOf("jobId" to jobId))
+                                dbHelper.insertLog(com.resync.app.data.model.LogLevel.ERROR, "GoogleDrive", sizeErr)
+                                transferDao.updateState(jobId, CloudTransferState.FALHOU, sizeErr)
+                                transferDao.releaseExecutorLock(jobId, executorOwner)
+                                return@withContext Result.failure(IllegalStateException(sizeErr))
+                            }
 
                         if (!driveMeta.md5Checksum.isNullOrBlank() && !computedMd5.equals(driveMeta.md5Checksum, ignoreCase = true)) {
                             val md5MismatchErr = "Divergência de integridade MD5: local=$computedMd5, remoto=${driveMeta.md5Checksum}"
@@ -638,7 +647,7 @@ class UploadManager(private val oAuthManager: OAuthManager) {
                     val fileId = json?.get("id")?.asString
                         ?: throw GoogleDriveApiException(code, "Resposta do Drive sem fileId")
 
-                    val returnedSize = json.get("size")?.asLong ?: totalBytes
+                    val returnedSize = json.get("size")?.asLong ?: 0L
                     val meta = DriveFileMetadata(
                         id = fileId,
                         name = json.get("name")?.asString ?: "backup.resync",
@@ -713,4 +722,28 @@ class UploadManager(private val oAuthManager: OAuthManager) {
             conn.disconnect()
         }
     }
+
+    private fun fetchRemoteFileMetadata(fileId: String, token: String): Pair<Long, String?> {
+        val url = "https://www.googleapis.com/drive/v3/files/$fileId?fields=id,size,md5Checksum&supportsAllDrives=true"
+        val request = Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer $token")
+            .build()
+        return try {
+            GDriveNetworkClient.client.newCall(request).execute().use { response ->
+                if (response.isSuccessful) {
+                    val bodyStr = response.body?.string() ?: ""
+                    val json = com.google.gson.JsonParser.parseString(bodyStr).asJsonObject
+                    val size = json.get("size")?.asLong ?: 0L
+                    val md5 = json.get("md5Checksum")?.asString
+                    Pair(size, md5)
+                } else {
+                    Pair(0L, null)
+                }
+            }
+        } catch (_: Exception) {
+            Pair(0L, null)
+        }
+    }
 }
+

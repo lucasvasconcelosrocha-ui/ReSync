@@ -7,12 +7,15 @@ import android.app.PendingIntent
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
+import org.json.JSONObject
 import com.resync.app.R
 
 /**
@@ -126,33 +129,48 @@ object HyperFocusNotificationHelper {
     private var cachedAppLogoBitmap: Bitmap? = null
 
     /**
-     * Retorna o bitmap oficial do ReSync limitado a ~192x192 px de forma segura.
+     * Renderiza o bitmap colorido oficial do ReSync a partir do ícone adaptativo (fundo azul-escuro #0B1F3A +
+     * foreground dos dois celulares com seta de sincronização, degradê azul->verde), sem transparência em volta.
      */
-    fun getAppLogoBitmap(context: Context): Bitmap? {
+    fun getAdaptiveIconColorBitmap(context: Context, sizePx: Int = 192): Bitmap {
         val cached = cachedAppLogoBitmap
         if (cached != null && !cached.isRecycled) {
             return cached
         }
-        return try {
-            val options = BitmapFactory.Options().apply {
-                inPreferredConfig = Bitmap.Config.ARGB_8888
-            }
-            var bmp = BitmapFactory.decodeResource(context.resources, R.drawable.ic_resync_notification_logo, options)
-                ?: BitmapFactory.decodeResource(context.resources, R.drawable.ic_resync_island, options)
-                ?: BitmapFactory.decodeResource(context.resources, R.mipmap.ic_launcher, options)
+        val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
 
-            if (bmp != null && (bmp.width > 192 || bmp.height > 192)) {
-                bmp = Bitmap.createScaledBitmap(bmp, 192, 192, true)
+        // 1. Fundo azul-escuro oficial (#0B1F3A)
+        val bgColor = ContextCompat.getColor(context, R.color.ic_launcher_background)
+        canvas.drawColor(bgColor)
+
+        // 2. Foreground oficial colorido
+        val fgDrawable = ContextCompat.getDrawable(context, R.drawable.ic_launcher_foreground)
+        if (fgDrawable != null) {
+            fgDrawable.setBounds(0, 0, sizePx, sizePx)
+            fgDrawable.draw(canvas)
+        } else {
+            val appIcon = try {
+                context.packageManager.getApplicationIcon(context.packageName)
+            } catch (_: Throwable) { null }
+            if (appIcon != null) {
+                appIcon.setBounds(0, 0, sizePx, sizePx)
+                appIcon.draw(canvas)
             }
-            cachedAppLogoBitmap = bmp
-            bmp
-        } catch (t: Throwable) {
-            Log.e(TAG, "getAppLogoBitmap: falha ao carregar logo: ${t.message}")
-            null
         }
+
+        cachedAppLogoBitmap = bitmap
+        return bitmap
     }
 
-    fun getIslandLogoBitmap(context: Context): Bitmap? = getAppLogoBitmap(context)
+    /**
+     * Retorna o bitmap oficial colorido do ReSync limitado a ~192x192 px de forma segura.
+     */
+    fun getAppLogoBitmap(context: Context): Bitmap? {
+        return getAdaptiveIconColorBitmap(context)
+    }
+
+    fun getIslandLogoBitmap(context: Context): Bitmap? = getAdaptiveIconColorBitmap(context)
 
     fun formatShortIslandTime(seconds: Long): String {
         if (seconds <= 0L) return "~"
@@ -177,6 +195,8 @@ object HyperFocusNotificationHelper {
     /**
      * Construtor original e estável de notificação: utiliza DecoratedCustomViewStyle com layout
      * de 4 linhas exatas e barra de progresso (R.layout.notification_transfer_collapsed).
+     * Configura o ícone colorido adaptativo em setLargeIcon, na ilha dinâmica do HyperOS (miui.focus.pics / picInfo)
+     * e no ticker da barra de status.
      */
     fun buildSafeNotification(
         context: Context,
@@ -207,12 +227,15 @@ object HyperFocusNotificationHelper {
             }
 
             val effectiveSubText = subText.ifBlank { "Processando itens..." }
+            val appIconBmp = getAdaptiveIconColorBitmap(context)
 
             val builder = NotificationCompat.Builder(context, channelId)
                 .setContentTitle(title)
                 .setContentText(line2SizeDest)
                 .setSubText(effectiveSubText)
                 .setSmallIcon(R.drawable.ic_notification)
+                .setLargeIcon(appIconBmp)
+                .setTicker(title.ifBlank { "ReSync" })
                 .setOngoing(isOngoing)
                 .setAutoCancel(autoCancel)
                 .setOnlyAlertOnce(isOnlyAlertOnce)
@@ -222,6 +245,62 @@ object HyperFocusNotificationHelper {
                 .setStyle(NotificationCompat.DecoratedCustomViewStyle())
                 .setCustomContentView(collapsedView)
                 .setCustomBigContentView(collapsedView)
+
+            // Configuração da Focus Notification do Xiaomi HyperOS / MIUI para renderização colorida na Super Island
+            try {
+                val picsBundle = Bundle().apply {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        val icon = android.graphics.drawable.Icon.createWithBitmap(appIconBmp)
+                        putParcelable("miui.focus.pic_island", icon)
+                        putParcelable("miui.focus.pic_ticker", icon)
+                    }
+                    putParcelable("miui.focus.pic_island_bmp", appIconBmp)
+                    putParcelable("miui.focus.pic_ticker_bmp", appIconBmp)
+                }
+                builder.addExtras(Bundle().apply {
+                    putBundle("miui.focus.pics", picsBundle)
+                })
+
+                val focusParamJson = JSONObject().apply {
+                    val paramV2 = JSONObject().apply {
+                        put("protocol", 1)
+                        put("business", "transfer")
+                        put("enableFloat", true)
+                        put("updatable", true)
+                        put("ticker", title.ifBlank { "ReSync" })
+                        put("tickerPic", "miui.focus.pic_ticker")
+                        val island = JSONObject().apply {
+                            put("islandProperty", 1)
+                            val smallIsland = JSONObject().apply {
+                                val picInfo = JSONObject().apply {
+                                    put("type", 1)
+                                    put("pic", "miui.focus.pic_island")
+                                }
+                                put("picInfo", picInfo)
+                            }
+                            put("smallIsland", smallIsland)
+                            val bigIsland = JSONObject().apply {
+                                val imageTextLeft = JSONObject().apply {
+                                    put("type", 1)
+                                    val picInfo = JSONObject().apply {
+                                        put("type", 1)
+                                        put("pic", "miui.focus.pic_island")
+                                    }
+                                    put("picInfo", picInfo)
+                                }
+                                put("imageTextInfoLeft", imageTextLeft)
+                            }
+                            put("bigIslandArea", bigIsland)
+                        }
+                        put("param_island", island)
+                    }
+                    put("param_v2", paramV2)
+                }.toString()
+
+                builder.extras.putString("miui.focus.param", focusParamJson)
+            } catch (t: Throwable) {
+                Log.w(TAG, "buildSafeNotification: extras HyperOS ignorados: ${t.message}")
+            }
 
             if (contentIntent != null) {
                 builder.setContentIntent(contentIntent)
@@ -240,6 +319,7 @@ object HyperFocusNotificationHelper {
             // Lockscreen Public Notification (matches the same 4-line collapsed view)
             val publicNotification = NotificationCompat.Builder(context, channelId)
                 .setSmallIcon(R.drawable.ic_notification)
+                .setLargeIcon(appIconBmp)
                 .setContentTitle(title)
                 .setContentText(line2SizeDest)
                 .setSubText(effectiveSubText)
@@ -256,8 +336,10 @@ object HyperFocusNotificationHelper {
             builder.build()
         } catch (t: Throwable) {
             Log.e(TAG, "buildSafeNotification fallback: ${t.message}", t)
+            val fallbackLogo = getAdaptiveIconColorBitmap(context)
             NotificationCompat.Builder(context, channelId)
                 .setSmallIcon(R.drawable.ic_notification)
+                .setLargeIcon(fallbackLogo)
                 .setContentTitle(title.ifBlank { "ReSync" })
                 .setContentText(line2SizeDest.ifBlank { "Operação em andamento" })
                 .setOngoing(isOngoing)

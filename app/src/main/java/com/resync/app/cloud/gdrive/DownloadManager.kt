@@ -13,6 +13,7 @@ import okhttp3.Protocol
 import okhttp3.Request
 import java.io.File
 import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.io.IOException
 import java.io.RandomAccessFile
 import java.security.MessageDigest
@@ -323,9 +324,17 @@ class DownloadManager(private val oAuthManager: OAuthManager) {
             (headerBytes[0] == 0x50.toByte() && headerBytes[1] == 0x4B.toByte() && headerBytes[2] == 0x03.toByte() && headerBytes[3] == 0x04.toByte())
         )
         if (!isSvbMagic) {
+            val hex16 = headerBytes.take(readHeader.coerceAtLeast(0)).joinToString(" ") { "%02X".format(it) }
+            val ascii16 = String(headerBytes.take(readHeader.coerceAtLeast(0)).toByteArray(), Charsets.US_ASCII).replace(Regex("[^\\x20-\\x7E]"), ".")
+            val headerErr = "Cabeçalho de container inválido recebido do Google Drive. Esperado SVB1 ou PK\\x03\\x04. (Recebido: $hex16 | '$ascii16', tamanho: $finalLength vs esperado: $totalBytes)"
+            AppLogger.e(TAG, headerErr, extraParams = mapOf(
+                "jobId" to jobId,
+                "tamanhoRecebido" to finalLength.toString(),
+                "tamanhoEsperado" to totalBytes.toString(),
+                "hex16" to hex16,
+                "ascii16" to ascii16
+            ))
             partFile.delete()
-            val headerErr = "Cabeçalho de container inválido recebido do Google Drive. Esperado SVB1 ou PK\\x03\\x04."
-            AppLogger.e(TAG, headerErr, extraParams = mapOf("jobId" to jobId))
             transferDao.updateState(jobId, CloudTransferState.FALHOU, headerErr)
             transferDao.releaseExecutorLock(jobId, executorOwner)
             return@withContext Result.failure(IllegalStateException(headerErr))
@@ -435,6 +444,7 @@ class DownloadManager(private val oAuthManager: OAuthManager) {
             try {
                 httpClient.newCall(request).execute().use { response ->
                     val code = response.code
+                    val contentType = response.header("Content-Type") ?: "desconhecido"
 
                     if (code == 401) {
                         oAuthManager.forceRefreshToken(accountEmail = accountEmail)
@@ -442,7 +452,11 @@ class DownloadManager(private val oAuthManager: OAuthManager) {
                     }
 
                     if (code != 206) {
-                        throw GoogleDriveApiException(code, "HTTP $code esperado 206 ao baixar bloco.")
+                        val errBytes = response.body?.bytes() ?: ByteArray(0)
+                        val hex16 = errBytes.take(16).joinToString(" ") { "%02X".format(it) }
+                        val errDetail = "HTTP $code inesperado ao baixar bloco (esperado 206). Content-Type=$contentType, tamanho recebido=${errBytes.size}, hex16=[$hex16]"
+                        AppLogger.e(TAG, errDetail)
+                        throw GoogleDriveApiException(code, errDetail)
                     }
 
                     val body = response.body ?: throw IOException("Corpo da resposta vazio para parte ${part.partIndex}")
@@ -510,4 +524,74 @@ class DownloadManager(private val oAuthManager: OAuthManager) {
             Pair(0L, null)
         }
     }
+
+    suspend fun fetchRemoteFileSize(fileId: String, token: String): Long {
+        return fetchRemoteFileMetadata(fileId, token).first
+    }
+
+    /**
+     * Download simples direto via files.get com alt=media, sem cabeçalho Range.
+     * Utilizado para download de teste de diagnóstico e arquivos sem validação de container.
+     */
+    suspend fun downloadSimpleFile(
+        fileId: String,
+        destinationFile: File,
+        accountEmail: String? = null
+    ): Result<File> = withContext(Dispatchers.IO) {
+        var token = oAuthManager.getValidAccessToken(accountEmail)
+        if (token == null) {
+            val refreshed = oAuthManager.forceRefreshToken(accountEmail = accountEmail)
+            if (refreshed.isSuccess) {
+                token = refreshed.getOrThrow()
+            } else {
+                return@withContext Result.failure(GoogleDriveSessionExpiredException("Usuário não autenticado no Google Drive.", 401))
+            }
+        }
+
+        val url = "https://www.googleapis.com/drive/v3/files/$fileId?alt=media&supportsAllDrives=true"
+        val request = Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer $token")
+            .header("Accept-Encoding", "identity")
+            .get()
+            .build()
+
+        destinationFile.parentFile?.mkdirs()
+        val tempDest = File(destinationFile.parentFile, "${destinationFile.name}.tmp")
+        tempDest.delete()
+
+        try {
+            httpClient.newCall(request).execute().use { response ->
+                val code = response.code
+                val contentType = response.header("Content-Type") ?: "desconhecido"
+                val body = response.body
+
+                if (!response.isSuccessful || body == null) {
+                    val errorBytes = body?.bytes() ?: ByteArray(0)
+                    val hex16 = errorBytes.take(16).joinToString(" ") { "%02X".format(it) }
+                    val errDetail = "Falha no download direto: HTTP $code, Content-Type=$contentType, bytes=${errorBytes.size}, hex16=[$hex16]"
+                    AppLogger.e(TAG, errDetail)
+                    return@withContext Result.failure(GoogleDriveApiException(code, errDetail))
+                }
+
+                FileOutputStream(tempDest).use { fos ->
+                    body.byteStream().copyTo(fos)
+                }
+
+                destinationFile.delete()
+                if (!tempDest.renameTo(destinationFile)) {
+                    tempDest.copyTo(destinationFile, overwrite = true)
+                    tempDest.delete()
+                }
+
+                AppLogger.i(TAG, "Download direto simples concluído: ${destinationFile.name} (${destinationFile.length()} bytes, HTTP $code, Type=$contentType)")
+                Result.success(destinationFile)
+            }
+        } catch (e: Exception) {
+            tempDest.delete()
+            AppLogger.e(TAG, "Erro no download simples do arquivo $fileId: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
 }
+

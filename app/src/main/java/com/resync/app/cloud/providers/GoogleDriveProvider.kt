@@ -306,16 +306,36 @@ class GoogleDriveProvider(private val context: Context) : CloudStorageProvider {
 
         val uploadedFile = uploadRes.getOrThrow()
 
-        // Step 7: Test Download
+        // Confirma se o upload gravou o conteúdo de verdade (size não pode ser 0)
+        val token = oAuthManager.getValidAccessToken() ?: ""
+        val confirmedSize = if (token.isNotBlank()) downloadManager.fetchRemoteFileSize(uploadedFile.id, token) else uploadedFile.sizeBytes
+        if (confirmedSize <= 0L) {
+            driveFileManager.deleteFile(uploadedFile.id)
+            testFile.delete()
+            emit(
+                CloudDiagnosticResult(
+                    stepName = "Upload de teste",
+                    status = DiagnosticStepStatus.FAILED,
+                    latencyMs = System.currentTimeMillis() - t4,
+                    errorCode = "EMPTY_FILE_UPLOADED",
+                    errorMessage = "O Google Drive confirmou o envio, mas registrou 0 bytes salvos.",
+                    possibleCause = "O arquivo de upload foi enviado vazio ou não foi gravado no Google Drive.",
+                    recommendedSolution = "Verifique o espaço na sua conta Google e tente novamente."
+                )
+            )
+            return@flow
+        }
+
+        // Step 7: Test Download (arquivo simples de texto, sem Range e sem validação de container SVB1/ZIP)
         val t5 = System.currentTimeMillis()
         val downloadedFile = File(context.cacheDir, "rodin_diagnostic_download.tmp")
-        val downloadRes = downloadManager.downloadBackupFile(
+        val downloadRes = downloadManager.downloadSimpleFile(
             fileId = uploadedFile.id,
-            destinationFile = downloadedFile,
-            totalBytesEstimated = testFile.length()
-        ) { }
+            destinationFile = downloadedFile
+        )
 
         if (downloadRes.isFailure) {
+            val ex = downloadRes.exceptionOrNull()
             driveFileManager.deleteFile(uploadedFile.id)
             testFile.delete()
             downloadedFile.delete()
@@ -325,9 +345,29 @@ class GoogleDriveProvider(private val context: Context) : CloudStorageProvider {
                     status = DiagnosticStepStatus.FAILED,
                     latencyMs = System.currentTimeMillis() - t5,
                     errorCode = "DOWNLOAD_FAILED",
-                    errorMessage = downloadRes.exceptionOrNull()?.message,
-                    possibleCause = "Falha ao transferir dados do Google Drive.",
+                    errorMessage = ex?.message,
+                    possibleCause = "Falha ao transferir dados do Google Drive via files.get.",
                     recommendedSolution = "Tente novamente ou verifique se há um firewall/VPN ativo."
+                )
+            )
+            return@flow
+        }
+
+        // Valida tamanho exato recebido x enviado
+        if (downloadedFile.length() != testFile.length()) {
+            val sizeDiffErr = "Divergência de tamanho no download de teste: enviado ${testFile.length()} bytes, baixado ${downloadedFile.length()} bytes"
+            driveFileManager.deleteFile(uploadedFile.id)
+            testFile.delete()
+            downloadedFile.delete()
+            emit(
+                CloudDiagnosticResult(
+                    stepName = "Download de teste",
+                    status = DiagnosticStepStatus.FAILED,
+                    latencyMs = System.currentTimeMillis() - t5,
+                    errorCode = "DOWNLOAD_SIZE_MISMATCH",
+                    errorMessage = sizeDiffErr,
+                    possibleCause = "Download incompleto retornado pelo Google Drive.",
+                    recommendedSolution = "Verifique a estabilidade da sua rede de internet."
                 )
             )
             return@flow

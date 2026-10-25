@@ -307,8 +307,11 @@ object CloudNotificationManager {
             }
         }
 
+        val appLogo = HyperFocusNotificationHelper.getAdaptiveIconColorBitmap(context)
+
         val builder = NotificationCompat.Builder(context, CHANNEL_COMPLETION_ID)
             .setSmallIcon(R.drawable.ic_notification)
+            .setLargeIcon(appLogo)
             .setContentTitle(line1Title)
             .setContentText(line2Status)
             .setSubText(cleanDest)
@@ -323,6 +326,7 @@ object CloudNotificationManager {
         // Versão pública para a tela de bloqueio com exatamente as 4 linhas
         val publicNotif = NotificationCompat.Builder(context, CHANNEL_COMPLETION_ID)
             .setSmallIcon(R.drawable.ic_notification)
+            .setLargeIcon(appLogo)
             .setContentTitle(line1Title)
             .setContentText(line2Status)
             .setSubText(cleanDest)
