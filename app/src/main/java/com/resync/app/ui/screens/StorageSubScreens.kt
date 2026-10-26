@@ -12,6 +12,7 @@ import android.widget.Toast
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -196,6 +197,7 @@ fun StorageCacheScreen(
     val installedApps by viewModel.installedApps.collectAsStateWithLifecycle()
 
     var cacheList by remember { mutableStateOf<List<AppCacheItem>>(emptyList()) }
+    var failedApps by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
     var isLoading by remember { mutableStateOf(true) }
     var isCalculating by remember { mutableStateOf(false) }
     var analyzedCount by remember { mutableIntStateOf(0) }
@@ -224,12 +226,44 @@ fun StorageCacheScreen(
         return mode == AppOpsManager.MODE_ALLOWED
     }
 
-    suspend fun loadCacheData() = withContext(Dispatchers.IO) {
+    suspend fun queryAppCacheBytes(
+        packageName: String,
+        storageStatsManager: StorageStatsManager?,
+        usageGranted: Boolean,
+        hasRoot: Boolean
+    ): Long = withContext(Dispatchers.IO) {
+        var cBytes = 0L
+        if (storageStatsManager != null && usageGranted) {
+            try {
+                val stats = storageStatsManager.queryStatsForPackage(
+                    StorageManager.UUID_DEFAULT,
+                    packageName,
+                    Process.myUserHandle()
+                )
+                cBytes = stats.cacheBytes
+            } catch (_: Exception) {}
+        }
+        if (cBytes <= 0L && hasRoot) {
+            try {
+                val cmd = "du -sk /data/data/$packageName/cache /data/data/$packageName/code_cache /data/user_de/0/$packageName/cache /storage/emulated/0/Android/data/$packageName/cache 2>/dev/null"
+                val res = Shell.cmd(cmd).exec()
+                for (line in res.out) {
+                    val kb = line.trim().split("\\s+".toRegex()).firstOrNull()?.toLongOrNull() ?: 0L
+                    cBytes += kb * 1024L
+                }
+            } catch (_: Exception) {}
+        }
+        cBytes.coerceAtLeast(0L)
+    }
+
+    suspend fun loadCacheData(silent: Boolean = false) = withContext(Dispatchers.IO) {
+        if (isCalculating || isClearingAll) return@withContext
         isCalculating = true
         val hasRoot = runCatching { Shell.isAppGrantedRoot() == true }.getOrDefault(false)
         val usageGranted = checkUsageStatsPermission()
         withContext(Dispatchers.Main) {
             hasUsagePermission = usageGranted || hasRoot
+            if (!silent && cacheList.isEmpty()) isLoading = true
         }
 
         val storageStatsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -240,7 +274,6 @@ fun StorageCacheScreen(
         withContext(Dispatchers.Main) {
             totalAppsCount = apps.size
             analyzedCount = 0
-            if (cacheList.isEmpty()) isLoading = true
         }
 
         val tempItems = ConcurrentLinkedQueue<AppCacheItem>()
@@ -252,39 +285,18 @@ fun StorageCacheScreen(
                     semaphore.withPermit {
                         var cBytes = 0L
                         withTimeoutOrNull(2500L) {
-                            if (storageStatsManager != null && usageGranted) {
-                                try {
-                                    val stats = storageStatsManager.queryStatsForPackage(
-                                        StorageManager.UUID_DEFAULT,
-                                        app.packageName,
-                                        Process.myUserHandle()
-                                    )
-                                    cBytes = stats.cacheBytes
-                                } catch (_: Exception) {}
-                            }
-
-                            if (cBytes <= 0L && hasRoot) {
-                                try {
-                                    val pkg = app.packageName
-                                    val cmd = "du -sk /data/data/$pkg/cache /data/data/$pkg/code_cache /data/user_de/0/$pkg/cache /storage/emulated/0/Android/data/$pkg/cache 2>/dev/null"
-                                    val res = Shell.cmd(cmd).exec()
-                                    for (line in res.out) {
-                                        val kb = line.trim().split("\\s+".toRegex()).firstOrNull()?.toLongOrNull() ?: 0L
-                                        cBytes += kb * 1024L
-                                    }
-                                } catch (_: Exception) {}
-                            }
-
-                            if (cBytes <= 0L) {
-                                cBytes = (app.sizeBytes * 0.04).toLong().coerceAtLeast(0L)
-                            }
+                            cBytes = queryAppCacheBytes(app.packageName, storageStatsManager, usageGranted, hasRoot)
                         }
 
-                        tempItems.add(AppCacheItem(app, cBytes))
+                        if (cBytes > 0L) {
+                            tempItems.add(AppCacheItem(app, cBytes))
+                        }
                         withContext(Dispatchers.Main) {
                             analyzedCount++
-                            cacheList = tempItems.sortedByDescending { it.cacheBytes }
-                            isLoading = false
+                            if (!silent) {
+                                cacheList = tempItems.toList().sortedByDescending { it.cacheBytes }
+                                isLoading = false
+                            }
                         }
                     }
                 }
@@ -292,6 +304,7 @@ fun StorageCacheScreen(
         }
 
         withContext(Dispatchers.Main) {
+            cacheList = tempItems.toList().sortedByDescending { it.cacheBytes }
             isCalculating = false
             isLoading = false
         }
@@ -311,8 +324,8 @@ fun StorageCacheScreen(
                 val granted = checkUsageStatsPermission()
                 val newHasUsage = granted || hasRoot
                 hasUsagePermission = newHasUsage
-                if (granted && !isCalculating && cacheList.isEmpty()) {
-                    coroutineScope.launch { loadCacheData() }
+                if (!isCalculating && !isClearingAll) {
+                    coroutineScope.launch { loadCacheData(silent = cacheList.isNotEmpty()) }
                 }
             }
         }
@@ -322,14 +335,31 @@ fun StorageCacheScreen(
         }
     }
 
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (isActive) {
+                delay(5000L)
+                if (!isCalculating && !isClearingAll) {
+                    loadCacheData(silent = true)
+                }
+            }
+        }
+    }
+
     fun clearAppCache(item: AppCacheItem) {
         coroutineScope.launch {
+            val pkg = item.app.packageName
+            val initialBytes = item.cacheBytes
+
+            // 1. Atualização imediata no State (remove da lista na hora)
+            cacheList = cacheList.filter { it.app.packageName != pkg }
+
             val hasRoot = withContext(Dispatchers.IO) {
                 runCatching { Shell.isAppGrantedRoot() == true }.getOrDefault(false)
             }
+
             if (hasRoot) {
                 withContext(Dispatchers.IO) {
-                    val pkg = item.app.packageName
                     Shell.cmd(
                         "rm -rf /data/data/$pkg/cache/*",
                         "rm -rf /data/data/$pkg/code_cache/*",
@@ -337,15 +367,11 @@ fun StorageCacheScreen(
                         "rm -rf /storage/emulated/0/Android/data/$pkg/cache/*"
                     ).exec()
                 }
-                cacheList = cacheList.map {
-                    if (it.app.packageName == item.app.packageName) it.copy(cacheBytes = 0L) else it
-                }
-                Toast.makeText(context, "Cache de ${item.app.appName} limpo!", Toast.LENGTH_SHORT).show()
-                viewModel.loadData()
             } else {
                 try {
                     val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                        data = Uri.fromParts("package", item.app.packageName, null)
+                        data = Uri.fromParts("package", pkg, null)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     }
                     context.startActivity(intent)
                     Toast.makeText(context, "Abra Armazenamento e toque em Limpar Cache", Toast.LENGTH_LONG).show()
@@ -353,18 +379,58 @@ fun StorageCacheScreen(
                     Toast.makeText(context, "Não foi possível abrir as configurações", Toast.LENGTH_SHORT).show()
                 }
             }
+
+            val storageStatsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.getSystemService(Context.STORAGE_STATS_SERVICE) as? StorageStatsManager
+            } else null
+            val usageGranted = checkUsageStatsPermission()
+
+            // 2. Reconsulta real 1 (logo após limpar)
+            var currentBytes = queryAppCacheBytes(pkg, storageStatsManager, usageGranted, hasRoot)
+
+            // 2. Reconsulta real 2 (após ~1.5s)
+            delay(1500L)
+            currentBytes = queryAppCacheBytes(pkg, storageStatsManager, usageGranted, hasRoot)
+
+            withContext(Dispatchers.Main) {
+                val currentList = cacheList.filter { it.app.packageName != pkg }.toMutableList()
+                if (currentBytes > 0L) {
+                    currentList.add(AppCacheItem(item.app, currentBytes))
+                    cacheList = currentList.sortedByDescending { it.cacheBytes }
+                    val freed = initialBytes - currentBytes
+                    if (freed > 0L) {
+                        Toast.makeText(context, "${FormatUtils.formatBytes(freed)} liberados de ${item.app.appName}!", Toast.LENGTH_SHORT).show()
+                    } else {
+                        failedApps = failedApps + (pkg to true)
+                        Toast.makeText(context, "Não foi possível limpar o cache de ${item.app.appName}", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    cacheList = currentList.sortedByDescending { it.cacheBytes }
+                    failedApps = failedApps - pkg
+                    Toast.makeText(context, "Cache de ${item.app.appName} limpo com sucesso!", Toast.LENGTH_SHORT).show()
+                }
+                viewModel.loadData()
+            }
         }
     }
 
     fun clearAllCache() {
         coroutineScope.launch {
             isClearingAll = true
-            val bytesToFree = cacheList.sumOf { it.cacheBytes }
-            withContext(Dispatchers.IO) {
-                val hasRoot = runCatching { Shell.isAppGrantedRoot() == true }.getOrDefault(false)
-                if (hasRoot) {
+            val itemsToClean = cacheList.toList()
+            val totalBefore = itemsToClean.sumOf { it.cacheBytes }
+
+            // 1. Atualização imediata no State
+            cacheList = emptyList()
+
+            val hasRoot = withContext(Dispatchers.IO) {
+                runCatching { Shell.isAppGrantedRoot() == true }.getOrDefault(false)
+            }
+
+            if (hasRoot) {
+                withContext(Dispatchers.IO) {
                     Shell.cmd("pm trim-caches 999999999999").exec()
-                    for (item in cacheList) {
+                    for (item in itemsToClean) {
                         val pkg = item.app.packageName
                         Shell.cmd(
                             "rm -rf /data/data/$pkg/cache/*",
@@ -374,13 +440,64 @@ fun StorageCacheScreen(
                         ).exec()
                     }
                 }
+            } else {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Limpeza em lote de outros apps requer acesso Root", Toast.LENGTH_LONG).show()
+                }
             }
-            cacheList = cacheList.map { it.copy(cacheBytes = 0L) }
-            isClearingAll = false
-            val freedStr = FormatUtils.formatBytes(bytesToFree)
-            lastFreedMessage = "$freedStr liberados com sucesso!"
-            Toast.makeText(context, "$freedStr liberados com sucesso!", Toast.LENGTH_LONG).show()
-            viewModel.loadData()
+
+            val storageStatsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.getSystemService(Context.STORAGE_STATS_SERVICE) as? StorageStatsManager
+            } else null
+            val usageGranted = checkUsageStatsPermission()
+
+            // 2. Reconsulta real 1 (logo após limpar)
+            withContext(Dispatchers.IO) {
+                for (item in itemsToClean) {
+                    queryAppCacheBytes(item.app.packageName, storageStatsManager, usageGranted, hasRoot)
+                }
+            }
+
+            // 2. Reconsulta real 2 (após ~1.5s)
+            delay(1500L)
+            val remainingItems = mutableListOf<AppCacheItem>()
+            val newFailedMap = mutableMapOf<String, Boolean>()
+            withContext(Dispatchers.IO) {
+                for (item in itemsToClean) {
+                    val b = queryAppCacheBytes(item.app.packageName, storageStatsManager, usageGranted, hasRoot)
+                    if (b > 0L) {
+                        remainingItems.add(AppCacheItem(item.app, b))
+                        if (b >= item.cacheBytes) {
+                            newFailedMap[item.app.packageName] = true
+                        }
+                    }
+                }
+            }
+
+            withContext(Dispatchers.Main) {
+                cacheList = remainingItems.sortedByDescending { it.cacheBytes }
+                failedApps = newFailedMap
+                isClearingAll = false
+
+                // 3. Diferença entre o total antes e o total depois da releitura
+                val totalAfter = cacheList.sumOf { it.cacheBytes }
+                val actuallyFreed = (totalBefore - totalAfter).coerceAtLeast(0L)
+
+                if (actuallyFreed > 0L) {
+                    val freedStr = FormatUtils.formatBytes(actuallyFreed)
+                    lastFreedMessage = "$freedStr liberados com sucesso!"
+                    Toast.makeText(context, "$freedStr liberados com sucesso!", Toast.LENGTH_LONG).show()
+                } else {
+                    if (!hasRoot) {
+                        lastFreedMessage = "Não foi possível limpar o cache automaticamente (requer Root)."
+                        Toast.makeText(context, "Não foi possível limpar o cache (requer Root)", Toast.LENGTH_LONG).show()
+                    } else {
+                        lastFreedMessage = "Nenhum cache adicional pôde ser liberado."
+                        Toast.makeText(context, "Nenhum cache pôde ser liberado", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                viewModel.loadData()
+            }
         }
     }
 
@@ -444,8 +561,7 @@ fun StorageCacheScreen(
                                 fontSize = 11.sp,
                                 color = primaryAccent,
                                 fontWeight = FontWeight.Medium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                maxLines = 2
                             )
                             if (isCalculating) {
                                 Spacer(modifier = Modifier.width(6.dp))
@@ -675,11 +791,24 @@ fun StorageCacheScreen(
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
-                                    Text(
-                                        text = "Cache: ${FormatUtils.formatBytes(item.cacheBytes)}",
-                                        fontSize = 11.sp,
-                                        color = if (item.cacheBytes > 0) StatusWarning else TextMuted
-                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text(
+                                            text = "Cache: ${FormatUtils.formatBytes(item.cacheBytes)}",
+                                            fontSize = 11.sp,
+                                            color = if (item.cacheBytes > 0) StatusWarning else TextMuted
+                                        )
+                                        if (failedApps[item.app.packageName] == true) {
+                                            Text(
+                                                text = "• não foi possível limpar",
+                                                fontSize = 11.sp,
+                                                color = StatusError,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        }
+                                    }
                                 }
                                 if (item.cacheBytes > 0) {
                                     OutlinedButton(
