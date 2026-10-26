@@ -47,9 +47,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -81,9 +83,11 @@ fun CategoryBackupScreen(
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
+    val clipboardManager = LocalClipboardManager.current
     val coroutineScope = rememberCoroutineScope()
     val currentAccent by viewModel.themeAccent.collectAsStateWithLifecycle()
     val primaryAccent = getAccentColor(currentAccent)
+
 
     val localBackups by viewModel.backupRecords.collectAsStateWithLifecycle()
     val remoteBackups by viewModel.remoteDriveBackups.collectAsStateWithLifecycle()
@@ -118,6 +122,14 @@ fun CategoryBackupScreen(
     var realDnsInfo by remember { mutableStateOf<DnsCategoryInfo?>(null) }
     var realWallpapers by remember { mutableStateOf<List<WallpaperPreviewItem>>(emptyList()) }
     var isLoadingRealData by remember { mutableStateOf(true) }
+    val isPermissionMissing = remember(category, isLoadingRealData) {
+        when (category.lowercase()) {
+            "calls" -> androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CALL_LOG) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            "messages", "sms" -> androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            "contacts" -> androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            else -> false
+        }
+    }
 
     // Seleção de itens em "No celular agora"
     var selectedItemIds by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -238,12 +250,17 @@ fun CategoryBackupScreen(
         when (category.lowercase()) {
             "calls" -> {
                 permissions.add(Manifest.permission.READ_CALL_LOG)
+                permissions.add(Manifest.permission.READ_CONTACTS)
+                permissions.add(Manifest.permission.WRITE_CALL_LOG)
             }
             "messages", "sms" -> {
                 permissions.add(Manifest.permission.READ_SMS)
+                permissions.add(Manifest.permission.READ_CONTACTS)
+                permissions.add("android.permission.WRITE_SMS")
             }
             "contacts" -> {
                 permissions.add(Manifest.permission.READ_CONTACTS)
+                permissions.add(Manifest.permission.WRITE_CONTACTS)
             }
             "bluetooth" -> {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -252,10 +269,19 @@ fun CategoryBackupScreen(
             }
             "wifi" -> {
                 permissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
+                permissions.add(Manifest.permission.ACCESS_COARSE_LOCATION)
             }
         }
         if (permissions.isNotEmpty()) {
-            permissionLauncher.launch(permissions.toTypedArray())
+            if (com.topjohnwu.superuser.Shell.isAppGrantedRoot() == true) {
+                DeviceCategoryInspector.ensurePermission(context, *permissions.toTypedArray())
+            }
+            val missing = permissions.filter {
+                androidx.core.content.ContextCompat.checkSelfPermission(context, it) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            }
+            if (missing.isNotEmpty()) {
+                permissionLauncher.launch(missing.toTypedArray())
+            }
         }
     }
 
@@ -541,8 +567,58 @@ fun CategoryBackupScreen(
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 160.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Banner de permissão ou aviso se houver
-                if (permissionDeniedExplanation != null) {
+                // Banner de permissão interativo
+                if (isPermissionMissing) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(containerColor = StatusWarning.copy(alpha = 0.15f)),
+                            border = BorderStroke(1.dp, StatusWarning.copy(alpha = 0.5f))
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.Security, contentDescription = null, tint = StatusWarning, modifier = Modifier.size(24.dp))
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
+                                        Text("Permissão necessária", fontWeight = FontWeight.Bold, fontSize = 13.5.sp, color = TextPrimary)
+                                        Text(
+                                            text = when (category.lowercase()) {
+                                                "calls" -> "Conceda permissão de Histórico de Chamadas e Contatos para visualizar e salvar suas ligações."
+                                                "messages", "sms" -> "Conceda permissão de SMS para visualizar e salvar suas mensagens."
+                                                "contacts" -> "Conceda permissão de Contatos para visualizar sua agenda."
+                                                else -> "Conceda as permissões necessárias."
+                                            },
+                                            fontSize = 11.sp,
+                                            color = TextSecondary
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Button(
+                                    onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        requestPermissionsForCategory()
+                                        coroutineScope.launch {
+                                            delay(500)
+                                            loadDeviceData()
+                                        }
+                                    },
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = StatusWarning),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                    modifier = Modifier.height(36.dp)
+                                ) {
+                                    Text("Conceder", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                                }
+                            }
+                        }
+                    }
+                } else if (permissionDeniedExplanation != null) {
                     item {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -1161,11 +1237,43 @@ fun CategoryBackupScreen(
                                                         }
 
                                                         is WifiSavedNetwork -> {
+                                                            var isPasswordRevealed by remember(item.ssid) { mutableStateOf(false) }
+
                                                             Icon(Icons.Default.Wifi, contentDescription = null, tint = if (item.isConnected) AccentEmeraldGreen else TextSecondary, modifier = Modifier.size(16.dp))
                                                             Spacer(modifier = Modifier.width(8.dp))
                                                             Column(modifier = Modifier.weight(1f)) {
                                                                 Text(item.ssid, fontSize = 13.sp, color = TextPrimary, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                                                Text(item.keyMgmt, fontSize = 10.sp, color = TextMuted)
+                                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                                    Text(item.keyMgmt, fontSize = 10.sp, color = TextMuted)
+                                                                    if (!item.password.isNullOrBlank()) {
+                                                                        Text(" • ", fontSize = 10.sp, color = TextMuted)
+                                                                        Text(
+                                                                            text = if (isPasswordRevealed) item.password else "••••••••",
+                                                                            fontSize = 10.sp,
+                                                                            color = if (isPasswordRevealed) primaryAccent else TextSecondary,
+                                                                            fontWeight = if (isPasswordRevealed) FontWeight.Bold else FontWeight.Normal
+                                                                        )
+                                                                    }
+                                                                }
+                                                            }
+                                                            if (!item.password.isNullOrBlank()) {
+                                                                IconButton(
+                                                                    onClick = {
+                                                                        isPasswordRevealed = !isPasswordRevealed
+                                                                        if (isPasswordRevealed) {
+                                                                            clipboardManager.setText(AnnotatedString(item.password))
+                                                                            Toast.makeText(context, "Senha de \"${item.ssid}\" copiada!", Toast.LENGTH_SHORT).show()
+                                                                        }
+                                                                    },
+                                                                    modifier = Modifier.size(32.dp)
+                                                                ) {
+                                                                    Icon(
+                                                                        imageVector = if (isPasswordRevealed) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                                                        contentDescription = "Revelar senha",
+                                                                        tint = if (isPasswordRevealed) primaryAccent else TextMuted,
+                                                                        modifier = Modifier.size(16.dp)
+                                                                    )
+                                                                }
                                                             }
                                                             if (item.isConnected) {
                                                                 Surface(
@@ -1173,7 +1281,7 @@ fun CategoryBackupScreen(
                                                                     color = AccentEmeraldGreen.copy(alpha = 0.2f),
                                                                     border = BorderStroke(1.dp, AccentEmeraldGreen.copy(alpha = 0.5f))
                                                                 ) {
-                                                                    Text("Conectado agora", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = AccentEmeraldGreen, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                                                    Text("Conectado", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = AccentEmeraldGreen, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
                                                                 }
                                                             }
                                                         }
@@ -1503,7 +1611,8 @@ fun CategoryBackupScreen(
                                 destinationType = BackupDestinationType.SOMENTE_INTERNA,
                                 includeHomeWallpaper = isHomeWallpaperSelected,
                                 includeLockWallpaper = isLockWallpaperSelected,
-                                selectedAppPackages = selectedItemIds.toList()
+                                selectedAppPackages = selectedItemIds.toList(),
+                                selectedCategoryItemIds = selectedItemIds
                             )
                             Toast.makeText(context, "Iniciando backup no dispositivo...", Toast.LENGTH_SHORT).show()
                         },
@@ -1526,7 +1635,8 @@ fun CategoryBackupScreen(
                                 destinationType = BackupDestinationType.SOMENTE_DRIVE,
                                 includeHomeWallpaper = isHomeWallpaperSelected,
                                 includeLockWallpaper = isLockWallpaperSelected,
-                                selectedAppPackages = selectedItemIds.toList()
+                                selectedAppPackages = selectedItemIds.toList(),
+                                selectedCategoryItemIds = selectedItemIds
                             )
                             Toast.makeText(context, "Iniciando backup no Google Drive...", Toast.LENGTH_SHORT).show()
                         },
@@ -1549,7 +1659,8 @@ fun CategoryBackupScreen(
                                 destinationType = BackupDestinationType.INTERNA_E_DRIVE,
                                 includeHomeWallpaper = isHomeWallpaperSelected,
                                 includeLockWallpaper = isLockWallpaperSelected,
-                                selectedAppPackages = selectedItemIds.toList()
+                                selectedAppPackages = selectedItemIds.toList(),
+                                selectedCategoryItemIds = selectedItemIds
                             )
                             Toast.makeText(context, "Iniciando backup em ambos os destinos...", Toast.LENGTH_SHORT).show()
                         },

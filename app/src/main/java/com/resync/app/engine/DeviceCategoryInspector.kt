@@ -84,6 +84,7 @@ data class ContactItem(
 data class WifiSavedNetwork(
     val ssid: String,
     val keyMgmt: String,
+    val password: String? = null,
     val isConnected: Boolean = false,
     val isHidden: Boolean = false,
     val isSelected: Boolean = true
@@ -117,7 +118,67 @@ data class WallpaperPreviewItem(
 
 object DeviceCategoryInspector {
 
+    fun cleanPhoneNumber(phone: String): String {
+        return phone.replace(Regex("[^0-9+]"), "")
+    }
+
+    fun ensurePermission(context: Context, vararg permissions: String) {
+        val missing = permissions.filter {
+            androidx.core.content.ContextCompat.checkSelfPermission(context, it) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+        if (missing.isNotEmpty() && Shell.isAppGrantedRoot() == true) {
+            for (p in missing) {
+                runCatching {
+                    Shell.cmd("pm grant ${context.packageName} $p").exec()
+                }
+            }
+        }
+    }
+
+    suspend fun getContactNameMap(context: Context): Map<String, String> = withContext(Dispatchers.IO) {
+        val map = mutableMapOf<String, String>()
+        try {
+            ensurePermission(context, android.Manifest.permission.READ_CONTACTS)
+            val cursor = context.contentResolver.query(
+                ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                arrayOf(
+                    ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                    ContactsContract.CommonDataKinds.Phone.NUMBER
+                ),
+                null, null, null
+            )
+            cursor?.use { c ->
+                val nameCol = c.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+                val numCol = c.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                while (c.moveToNext()) {
+                    val name = if (nameCol >= 0) c.getString(nameCol) else null
+                    val num = if (numCol >= 0) c.getString(numCol) else null
+                    if (!name.isNullOrBlank() && !num.isNullOrBlank()) {
+                        val clean = cleanPhoneNumber(num)
+                        if (clean.isNotBlank()) {
+                            map[clean] = name
+                            val digitsOnly = clean.replace("+", "")
+                            if (digitsOnly.length >= 8) {
+                                map[digitsOnly.takeLast(8)] = name
+                                map[digitsOnly.takeLast(9)] = name
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (_: Throwable) {}
+        map
+    }
+
     suspend fun getSmsConversations(context: Context): List<SmsConversationItem> = withContext(Dispatchers.IO) {
+        ensurePermission(
+            context,
+            android.Manifest.permission.READ_SMS,
+            "android.permission.WRITE_SMS",
+            android.Manifest.permission.READ_CONTACTS
+        )
+
+        val contactsMap = getContactNameMap(context)
         val conversations = mutableMapOf<String, MutableList<Pair<Long, String>>>()
         val latestDates = mutableMapOf<String, Long>()
 
@@ -134,7 +195,7 @@ object DeviceCategoryInspector {
                 projection,
                 null,
                 null,
-                "${Telephony.Sms.DATE} DESC LIMIT 1000"
+                "${Telephony.Sms.DATE} DESC"
             )
 
             cursor?.use { c ->
@@ -143,7 +204,8 @@ object DeviceCategoryInspector {
                 val bodyCol = c.getColumnIndex(Telephony.Sms.BODY)
                 val dateCol = c.getColumnIndex(Telephony.Sms.DATE)
 
-                while (c.moveToNext()) {
+                var count = 0
+                while (c.moveToNext() && count < 2000) {
                     val id = if (idCol >= 0) c.getLong(idCol) else 0L
                     val address = if (addrCol >= 0) c.getString(addrCol) ?: "Desconhecido" else "Desconhecido"
                     val body = if (bodyCol >= 0) c.getString(bodyCol) ?: "" else ""
@@ -154,6 +216,7 @@ object DeviceCategoryInspector {
                     if (!latestDates.containsKey(address)) {
                         latestDates[address] = date
                     }
+                    count++
                 }
             }
         } catch (_: Throwable) {}
@@ -161,7 +224,7 @@ object DeviceCategoryInspector {
         // Fallback via Root Shell se vazio e houver Root
         if (conversations.isEmpty() && Shell.isAppGrantedRoot() == true) {
             try {
-                val res = Shell.cmd("content query --uri content://sms --projection _id:address:body:date").exec()
+                val res = Shell.cmd("content query --uri content://sms --projection _id:address:body:date --user 0").exec()
                 if (res.isSuccess) {
                     for (line in res.out) {
                         if (!line.startsWith("Row:")) continue
@@ -191,10 +254,15 @@ object DeviceCategoryInspector {
         }
 
         conversations.map { (addr, msgs) ->
+            val cleanAddr = cleanPhoneNumber(addr)
+            val contactName = contactsMap[cleanAddr]
+                ?: contactsMap[cleanAddr.replace("+", "").takeLast(9)]
+                ?: contactsMap[cleanAddr.replace("+", "").takeLast(8)]
+
             SmsConversationItem(
                 id = msgs.firstOrNull()?.first ?: 0L,
                 address = addr,
-                contactName = null,
+                contactName = contactName,
                 messageCount = msgs.size,
                 snippet = msgs.firstOrNull()?.second?.take(100) ?: "",
                 date = latestDates[addr] ?: System.currentTimeMillis()
@@ -204,6 +272,16 @@ object DeviceCategoryInspector {
 
     suspend fun getCallLogs(context: Context): List<CallLogEntry> = withContext(Dispatchers.IO) {
         val list = mutableListOf<CallLogEntry>()
+        ensurePermission(
+            context,
+            android.Manifest.permission.READ_CALL_LOG,
+            android.Manifest.permission.WRITE_CALL_LOG,
+            android.Manifest.permission.READ_CONTACTS
+        )
+
+        val contactsMap = getContactNameMap(context)
+
+        // 1. ContentResolver
         try {
             val projection = arrayOf(
                 CallLog.Calls._ID,
@@ -218,7 +296,7 @@ object DeviceCategoryInspector {
                 projection,
                 null,
                 null,
-                "${CallLog.Calls.DATE} DESC LIMIT 500"
+                "${CallLog.Calls.DATE} DESC"
             )
 
             cursor?.use { c ->
@@ -229,54 +307,109 @@ object DeviceCategoryInspector {
                 val dateCol = c.getColumnIndex(CallLog.Calls.DATE)
                 val durCol = c.getColumnIndex(CallLog.Calls.DURATION)
 
-                while (c.moveToNext()) {
+                var count = 0
+                while (c.moveToNext() && count < 1000) {
                     val id = if (idCol >= 0) c.getLong(idCol) else 0L
                     val number = if (numCol >= 0) c.getString(numCol) ?: "" else ""
-                    val name = if (nameCol >= 0) c.getString(nameCol) else null
+                    var name = if (nameCol >= 0) c.getString(nameCol) else null
                     val type = if (typeCol >= 0) c.getInt(typeCol) else CallLog.Calls.INCOMING_TYPE
                     val date = if (dateCol >= 0) c.getLong(dateCol) else System.currentTimeMillis()
                     val dur = if (durCol >= 0) c.getLong(durCol) else 0L
 
+                    if (name.isNullOrBlank() && number.isNotBlank()) {
+                        val clean = cleanPhoneNumber(number)
+                        name = contactsMap[clean]
+                            ?: contactsMap[clean.replace("+", "").takeLast(9)]
+                            ?: contactsMap[clean.replace("+", "").takeLast(8)]
+                    }
+
                     list.add(CallLogEntry(id, number, name, type, date, dur))
+                    count++
                 }
             }
         } catch (_: Throwable) {}
 
-        // Fallback Root se vazio
+        // 2. Fallback Root se vazio
         if (list.isEmpty() && Shell.isAppGrantedRoot() == true) {
+            // Tentativa A: Leitura direta do SQLite calllog.db
             try {
-                val res = Shell.cmd("content query --uri content://call_log/calls --projection _id:number:name:type:date:duration").exec()
-                if (res.isSuccess) {
-                    for (line in res.out) {
-                        if (!line.startsWith("Row:")) continue
-                        val pairs = line.substringAfter("Row:").trim().split(", ")
-                        var id = 0L
-                        var number = ""
-                        var name: String? = null
-                        var type = 1
-                        var date = System.currentTimeMillis()
-                        var dur = 0L
-                        for (p in pairs) {
-                            val k = p.substringBefore("=").trim()
-                            val v = p.substringAfter("=").trim()
-                            when (k) {
-                                "_id" -> id = v.toLongOrNull() ?: 0L
-                                "number" -> if (v != "NULL") number = v
-                                "name" -> if (v != "NULL") name = v
-                                "type" -> type = v.toIntOrNull() ?: 1
-                                "date" -> date = v.toLongOrNull() ?: System.currentTimeMillis()
-                                "duration" -> dur = v.toLongOrNull() ?: 0L
+                val dbPaths = listOf(
+                    "/data/data/com.android.providers.contacts/databases/calllog.db",
+                    "/data/user_de/0/com.android.providers.contacts/databases/calllog.db",
+                    "/data/data/com.android.providers.contacts/databases/contacts2.db"
+                )
+                for (dbp in dbPaths) {
+                    val check = Shell.cmd("[ -f \"$dbp\" ] && echo YES || echo NO").exec()
+                    if (check.isSuccess && check.out.firstOrNull() == "YES") {
+                        val sqlRes = Shell.cmd("sqlite3 \"$dbp\" \"SELECT _id, number, name, type, date, duration FROM calls ORDER BY date DESC LIMIT 500;\"").exec()
+                        if (sqlRes.isSuccess && sqlRes.out.isNotEmpty()) {
+                            for (row in sqlRes.out) {
+                                val parts = row.split("|")
+                                if (parts.size >= 6) {
+                                    val id = parts[0].toLongOrNull() ?: 0L
+                                    val number = parts[1]
+                                    var name = parts[2].takeIf { it.isNotBlank() && it != "NULL" }
+                                    val type = parts[3].toIntOrNull() ?: 1
+                                    val date = parts[4].toLongOrNull() ?: System.currentTimeMillis()
+                                    val dur = parts[5].toLongOrNull() ?: 0L
+
+                                    if (name.isNullOrBlank() && number.isNotBlank()) {
+                                        val clean = cleanPhoneNumber(number)
+                                        name = contactsMap[clean]
+                                            ?: contactsMap[clean.replace("+", "").takeLast(9)]
+                                            ?: contactsMap[clean.replace("+", "").takeLast(8)]
+                                    }
+                                    list.add(CallLogEntry(id, number, name, type, date, dur))
+                                }
                             }
-                        }
-                        if (number.isNotBlank() || id > 0L) {
-                            list.add(CallLogEntry(id, number, name, type, date, dur))
+                            if (list.isNotEmpty()) break
                         }
                     }
                 }
             } catch (_: Throwable) {}
+
+            // Tentativa B: Content query com --user 0
+            if (list.isEmpty()) {
+                try {
+                    val res = Shell.cmd("content query --uri content://call_log/calls --projection _id:number:name:type:date:duration --user 0").exec()
+                    if (res.isSuccess) {
+                        for (line in res.out) {
+                            if (!line.startsWith("Row:")) continue
+                            val pairs = line.substringAfter("Row:").trim().split(", ")
+                            var id = 0L
+                            var number = ""
+                            var name: String? = null
+                            var type = 1
+                            var date = System.currentTimeMillis()
+                            var dur = 0L
+                            for (p in pairs) {
+                                val k = p.substringBefore("=").trim()
+                                val v = p.substringAfter("=").trim()
+                                when (k) {
+                                    "_id" -> id = v.toLongOrNull() ?: 0L
+                                    "number" -> if (v != "NULL") number = v
+                                    "name" -> if (v != "NULL") name = v
+                                    "type" -> type = v.toIntOrNull() ?: 1
+                                    "date" -> date = v.toLongOrNull() ?: System.currentTimeMillis()
+                                    "duration" -> dur = v.toLongOrNull() ?: 0L
+                                }
+                            }
+                            if (number.isNotBlank() || id > 0L) {
+                                if (name.isNullOrBlank() && number.isNotBlank()) {
+                                    val clean = cleanPhoneNumber(number)
+                                    name = contactsMap[clean]
+                                        ?: contactsMap[clean.replace("+", "").takeLast(9)]
+                                        ?: contactsMap[clean.replace("+", "").takeLast(8)]
+                                }
+                                list.add(CallLogEntry(id, number, name, type, date, dur))
+                            }
+                        }
+                    }
+                } catch (_: Throwable) {}
+            }
         }
 
-        list
+        list.sortedByDescending { it.date }
     }
 
     suspend fun getContacts(context: Context): List<ContactItem> = withContext(Dispatchers.IO) {
@@ -386,29 +519,41 @@ object DeviceCategoryInspector {
 
         // 1. Root inspection de WifiConfigStore.xml
         try {
-            val res = Shell.cmd("cat /data/misc/wifi/WifiConfigStore.xml 2>/dev/null || cat /data/misc/apexdata/com.android.wifi/WifiConfigStore.xml 2>/dev/null").exec()
+            val res = Shell.cmd("cat /data/misc/wifi/WifiConfigStore.xml 2>/dev/null || cat /data/misc/apexdata/com.android.wifi/WifiConfigStore.xml 2>/dev/null || cat /data/misc/wifi/wpa_supplicant.conf 2>/dev/null").exec()
             if (res.isSuccess && res.out.isNotEmpty()) {
                 val fullText = res.out.joinToString("\n")
-                val configKeyRegex = Regex("<string name=\"ConfigKey\">&quot;(.*?)&quot;(.*?)</string>")
-                val ssidRegex = Regex("<string name=\"SSID\">&quot;(.*?)&quot;</string>")
 
-                val matches = configKeyRegex.findAll(fullText).toList()
-                if (matches.isNotEmpty()) {
-                    for (m in matches) {
-                        val ssid = m.groupValues[1]
-                        val security = m.groupValues[2].trim()
-                        if (ssid.isNotBlank()) {
-                            val isConn = activeSsid != null && (activeSsid == ssid || activeSsid.trim('"') == ssid)
-                            networks.add(WifiSavedNetwork(ssid, if (security.isNotBlank()) security else "WPA2_PSK", isConnected = isConn))
-                        }
-                    }
-                } else {
-                    val ssidMatches = ssidRegex.findAll(fullText).toList()
-                    for (m in ssidMatches) {
-                        val ssid = m.groupValues[1]
-                        if (ssid.isNotBlank() && networks.none { it.ssid == ssid }) {
-                            val isConn = activeSsid != null && (activeSsid == ssid || activeSsid.trim('"') == ssid)
-                            networks.add(WifiSavedNetwork(ssid, "WPA2_PSK", isConnected = isConn))
+                // A. Parse por blocos <Network>...</Network> (Android 8+)
+                val networkBlocks = fullText.split("<Network>")
+                for (block in networkBlocks) {
+                    if (!block.contains("WifiConfiguration")) continue
+                    val ssidMatch = Regex("<string name=\"SSID\">&quot;(.*?)&quot;</string>").find(block)
+                    val ssid = ssidMatch?.groupValues?.getOrNull(1) ?: continue
+                    if (ssid.isBlank()) continue
+
+                    val keyMgmtMatch = Regex("<string name=\"ConfigKey\">&quot;.*?&quot;(.*?)</string>").find(block)
+                    val keyMgmt = keyMgmtMatch?.groupValues?.getOrNull(1)?.trim()?.ifBlank { "WPA2_PSK" } ?: "WPA2_PSK"
+
+                    val pskMatch = Regex("<string name=\"PreSharedKey\">&quot;(.*?)&quot;</string>").find(block)
+                    val wepMatch = Regex("<string name=\"WEPKey0\">&quot;(.*?)&quot;</string>").find(block)
+                    val password = pskMatch?.groupValues?.getOrNull(1) ?: wepMatch?.groupValues?.getOrNull(1)
+
+                    val isConn = activeSsid != null && (activeSsid == ssid || activeSsid.trim('"') == ssid)
+                    networks.add(WifiSavedNetwork(ssid, keyMgmt, password, isConnected = isConn))
+                }
+
+                // B. Se o bloco falhou, fallback por chave/SSID regex
+                if (networks.isEmpty()) {
+                    val configKeyRegex = Regex("<string name=\"ConfigKey\">&quot;(.*?)&quot;(.*?)</string>")
+                    val matches = configKeyRegex.findAll(fullText).toList()
+                    if (matches.isNotEmpty()) {
+                        for (m in matches) {
+                            val ssid = m.groupValues[1]
+                            val security = m.groupValues[2].trim()
+                            if (ssid.isNotBlank()) {
+                                val isConn = activeSsid != null && (activeSsid == ssid || activeSsid.trim('"') == ssid)
+                                networks.add(WifiSavedNetwork(ssid, if (security.isNotBlank()) security else "WPA2_PSK", null, isConnected = isConn))
+                            }
                         }
                     }
                 }
@@ -427,7 +572,7 @@ object DeviceCategoryInspector {
                         val ssid = c.SSID?.trim('"', ' ') ?: ""
                         if (ssid.isNotBlank()) {
                             val isConn = activeSsid != null && (activeSsid == ssid || activeSsid.trim('"') == ssid)
-                            networks.add(WifiSavedNetwork(ssid, "WPA_PSK", isConnected = isConn))
+                            networks.add(WifiSavedNetwork(ssid, "WPA_PSK", null, isConnected = isConn))
                         }
                     }
                 }
@@ -436,7 +581,7 @@ object DeviceCategoryInspector {
 
         // Se houver rede conectada que não apareceu no arquivo xml, adicionar
         if (!activeSsid.isNullOrBlank() && networks.none { it.ssid == activeSsid.trim('"') }) {
-            networks.add(0, WifiSavedNetwork(activeSsid.trim('"'), "WPA2_PSK", isConnected = true))
+            networks.add(0, WifiSavedNetwork(activeSsid.trim('"'), "WPA2_PSK", null, isConnected = true))
         }
 
         // Ordenar colocando a conectada no topo
