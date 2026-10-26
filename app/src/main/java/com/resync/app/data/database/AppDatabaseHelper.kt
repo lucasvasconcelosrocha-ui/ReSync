@@ -8,6 +8,7 @@ import android.database.sqlite.SQLiteOpenHelper
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.resync.app.data.model.*
+import com.resync.app.util.AppLogger
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -613,12 +614,14 @@ class AppDatabaseHelper(private val context: Context) : SQLiteOpenHelper(
     // ==========================================
     suspend fun insertLog(level: LogLevel, tag: String, message: String, details: String? = null) = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
+        val sanitizedMsg = AppLogger.maskSensitive(message)
+        val sanitizedDetails = details?.let { AppLogger.maskSensitive(it) }
         val cv = ContentValues().apply {
             put("timestamp", now)
             put("level", level.name)
             put("tag", tag)
-            put("message", message)
-            put("details", details)
+            put("message", sanitizedMsg)
+            put("details", sanitizedDetails)
         }
         writableDatabase.insert("system_logs", null, cv)
         _dbChanges.tryEmit("system_logs")
@@ -635,8 +638,8 @@ class AppDatabaseHelper(private val context: Context) : SQLiteOpenHelper(
                 val dateStr = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(now))
                 val timeStr = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date(now))
                 val logFile = File(logDir, "resync_$dateStr.log")
-                val detailStr = if (details != null) " | Detalhes: $details" else ""
-                val line = "[$timeStr] [${level.name}] [$tag] $message$detailStr\n"
+                val detailStr = if (sanitizedDetails != null) " | Detalhes: $sanitizedDetails" else ""
+                val line = "[$timeStr] [${level.name}] [$tag] $sanitizedMsg$detailStr\n"
                 logFile.appendText(line)
             }
         } catch (_: Throwable) {}

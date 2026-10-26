@@ -17,8 +17,16 @@ import com.resync.app.service.BackupForegroundService
 import com.resync.app.updater.*
 import com.topjohnwu.superuser.Shell
 import android.util.Log
+import android.app.usage.StorageStatsManager
+import android.os.storage.StorageManager
+import android.os.Process
+import com.resync.app.util.FormatUtils
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -32,6 +40,7 @@ import com.resync.app.worker.FileUploadWorker
 import com.resync.app.data.room.AppRoomDatabase
 import com.resync.app.data.room.CloudAccount as RoomCloudAccount
 import java.io.File
+import java.util.concurrent.ConcurrentLinkedQueue
 
 enum class GoogleDriveState {
     NOT_CONNECTED,   // ⚪ Não conectado
@@ -104,8 +113,209 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _totalAppCacheBytes = MutableStateFlow<Long>(0L)
     val totalAppCacheBytes: StateFlow<Long> = _totalAppCacheBytes.asStateFlow()
 
+    private val _appCacheList = MutableStateFlow<List<AppCacheItem>>(emptyList())
+    val appCacheList: StateFlow<List<AppCacheItem>> = _appCacheList.asStateFlow()
+
+    private val _isCacheScanning = MutableStateFlow(false)
+    val isCacheScanning: StateFlow<Boolean> = _isCacheScanning.asStateFlow()
+
+    private val _cacheAnalyzedCount = MutableStateFlow(0)
+    val cacheAnalyzedCount: StateFlow<Int> = _cacheAnalyzedCount.asStateFlow()
+
+    private val _cacheTotalAppsCount = MutableStateFlow(0)
+    val cacheTotalAppsCount: StateFlow<Int> = _cacheTotalAppsCount.asStateFlow()
+
+    private val _isClearingCache = MutableStateFlow(false)
+    val isClearingCache: StateFlow<Boolean> = _isClearingCache.asStateFlow()
+
+    private val _lastCacheFreedMessage = MutableStateFlow<String?>(null)
+    val lastCacheFreedMessage: StateFlow<String?> = _lastCacheFreedMessage.asStateFlow()
+
+    fun dismissLastCacheFreedMessage() {
+        _lastCacheFreedMessage.value = null
+    }
+
     fun updateTotalCacheBytes(bytes: Long) {
         _totalAppCacheBytes.value = bytes
+    }
+
+    /**
+     * Scans installed applications cache using StorageStatsManager in parallel chunks (< 500ms).
+     */
+    fun scanAppCache(force: Boolean = false) {
+        if (_isCacheScanning.value) return
+        if (!force && _appCacheList.value.isNotEmpty()) return
+
+        viewModelScope.launch(Dispatchers.IO) {
+            _isCacheScanning.value = true
+            val apps: List<AppInfo> = if (installedApps.value.isNotEmpty()) {
+                installedApps.value
+            } else {
+                withContext(Dispatchers.Main) { refreshInstalledApps(force = false) }
+                installedApps.value
+            }
+
+            _cacheTotalAppsCount.value = apps.size
+            _cacheAnalyzedCount.value = 0
+
+            val storageStatsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.getSystemService(Context.STORAGE_STATS_SERVICE) as? StorageStatsManager
+            } else null
+
+            val tempItems = ConcurrentLinkedQueue<AppCacheItem>()
+            var processed = 0
+
+            // Processa em lotes paralelos de 30 apps em Dispatchers.IO para leitura instantânea (< 500ms)
+            coroutineScope {
+                apps.chunked(30).forEach { chunk ->
+                    chunk.map { app ->
+                        async(Dispatchers.IO) {
+                            var cBytes = 0L
+                            if (storageStatsManager != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                try {
+                                    val stats = storageStatsManager.queryStatsForPackage(
+                                        StorageManager.UUID_DEFAULT,
+                                        app.packageName,
+                                        Process.myUserHandle()
+                                    )
+                                    cBytes = stats.cacheBytes
+                                } catch (_: Exception) {}
+                            }
+                            if (cBytes > 0L) {
+                                tempItems.add(AppCacheItem(app, cBytes))
+                            }
+                        }
+                    }.awaitAll()
+
+                    processed += chunk.size
+                    _cacheAnalyzedCount.value = processed
+                }
+            }
+
+            val sorted = tempItems.toList().sortedByDescending { it.cacheBytes }
+            _appCacheList.value = sorted
+            _totalAppCacheBytes.value = sorted.sumOf { it.cacheBytes }
+            _isCacheScanning.value = false
+        }
+    }
+
+    /**
+     * Clears single application cache via root (or intent fallback) and updates StateFlow immediately.
+     */
+    fun clearSingleAppCache(item: AppCacheItem) {
+        val pkg = item.app.packageName
+        val initialBytes = item.cacheBytes
+
+        // 1. Atualização imediata no State (remove da lista na hora e subtrai do total)
+        _appCacheList.value = _appCacheList.value.filter { it.app.packageName != pkg }
+        _totalAppCacheBytes.value = _appCacheList.value.sumOf { it.cacheBytes }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val isRoot = runCatching { Shell.isAppGrantedRoot() == true || Shell.getShell().isRoot }.getOrDefault(false)
+            if (isRoot) {
+                Shell.cmd(
+                    "rm -rf /data/data/$pkg/cache/*",
+                    "rm -rf /data/data/$pkg/code_cache/*",
+                    "rm -rf /data/user_de/0/$pkg/cache/*",
+                    "rm -rf /data/user_de/0/$pkg/code_cache/*",
+                    "rm -rf /sdcard/Android/data/$pkg/cache/*"
+                ).exec()
+            }
+
+            // Consulta rápida para validar resíduo real
+            var residualBytes = 0L
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val storageStatsManager = context.getSystemService(Context.STORAGE_STATS_SERVICE) as? StorageStatsManager
+                if (storageStatsManager != null) {
+                    try {
+                        val stats = storageStatsManager.queryStatsForPackage(
+                            StorageManager.UUID_DEFAULT,
+                            pkg,
+                            Process.myUserHandle()
+                        )
+                        residualBytes = stats.cacheBytes
+                    } catch (_: Exception) {}
+                }
+            }
+
+            val freed = (initialBytes - residualBytes).coerceAtLeast(0L)
+            if (freed > 0L) {
+                _lastCacheFreedMessage.value = "${FormatUtils.formatBytes(freed)} liberados de ${item.app.appName}!"
+            }
+
+            if (residualBytes > 0L) {
+                val current = _appCacheList.value.filter { it.app.packageName != pkg }.toMutableList()
+                current.add(AppCacheItem(item.app, residualBytes))
+                _appCacheList.value = current.sortedByDescending { it.cacheBytes }
+                _totalAppCacheBytes.value = _appCacheList.value.sumOf { it.cacheBytes }
+            }
+        }
+    }
+
+    /**
+     * Clears all apps cache via root in batched commands and updates StateFlow immediately.
+     */
+    fun clearAllAppCache() {
+        _isClearingCache.value = true
+        val itemsToClean = _appCacheList.value.toList()
+        val totalBefore = _totalAppCacheBytes.value
+
+        // 1. Atualização imediata no State (zera tudo instantaneamente)
+        _appCacheList.value = emptyList()
+        _totalAppCacheBytes.value = 0L
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val isRoot = runCatching { Shell.isAppGrantedRoot() == true || Shell.getShell().isRoot }.getOrDefault(false)
+
+            if (isRoot) {
+                // pm trim-caches limpa caches do sistema em lote
+                Shell.cmd("pm trim-caches 999999999999").exec()
+
+                // Limpeza REAL em lote agrupando comandos por pacote (25 apps por comando)
+                itemsToClean.chunked(25).forEach { batch ->
+                    val cmdBuilder = StringBuilder()
+                    batch.forEach { item ->
+                        val p = item.app.packageName
+                        cmdBuilder.append("rm -rf /data/data/$p/cache/* /data/data/$p/code_cache/* /data/user_de/0/$p/cache/* /data/user_de/0/$p/code_cache/* /sdcard/Android/data/$p/cache/*; ")
+                    }
+                    Shell.cmd(cmdBuilder.toString()).exec()
+                }
+            }
+
+            // Verificação residual rápida via StorageStatsManager
+            val storageStatsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.getSystemService(Context.STORAGE_STATS_SERVICE) as? StorageStatsManager
+            } else null
+
+            val remainingItems = mutableListOf<AppCacheItem>()
+            if (storageStatsManager != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                itemsToClean.forEach { item ->
+                    try {
+                        val stats = storageStatsManager.queryStatsForPackage(
+                            StorageManager.UUID_DEFAULT,
+                            item.app.packageName,
+                            Process.myUserHandle()
+                        )
+                        if (stats.cacheBytes > 0L) {
+                            remainingItems.add(AppCacheItem(item.app, stats.cacheBytes))
+                        }
+                    } catch (_: Exception) {}
+                }
+            }
+
+            val totalAfter = remainingItems.sumOf { it.cacheBytes }
+            val freed = (totalBefore - totalAfter).coerceAtLeast(0L)
+
+            _appCacheList.value = remainingItems.sortedByDescending { it.cacheBytes }
+            _totalAppCacheBytes.value = totalAfter
+            _isClearingCache.value = false
+
+            if (freed > 0L) {
+                _lastCacheFreedMessage.value = "${FormatUtils.formatBytes(freed)} liberados com sucesso!"
+            } else {
+                _lastCacheFreedMessage.value = "Nenhum cache adicional pôde ser liberado."
+            }
+        }
     }
 
     // Custom Device Label
@@ -1174,7 +1384,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         targetCloudProvider: CloudProviderType? = null,
         targetCloudAccountEmail: String? = null,
         destinationLabel: String? = null,
-        destinationType: BackupDestinationType = BackupDestinationType.SOMENTE_INTERNA
+        destinationType: BackupDestinationType = BackupDestinationType.SOMENTE_INTERNA,
+        selectedCategoryItemIds: Set<String>? = null
     ) {
         Log.d("BackupOrigin", "MainViewModel.launchBackup called by user: title='$title', apps=${selectedApps.size}, files=${selectedFiles.size}, destinationType=$destinationType, destLabel='$destinationLabel'")
         val emailToSync = targetCloudAccountEmail ?: _activeAccountEmail.value ?: _multiCloudAccounts.value.firstOrNull()?.email
@@ -1196,7 +1407,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             targetCloudProvider = targetCloudProvider,
             targetCloudAccountEmail = emailToSync,
             destinationLabel = destinationLabel,
-            destinationType = destinationType
+            destinationType = destinationType,
+            selectedCategoryItemIds = selectedCategoryItemIds
         )
     }
 
@@ -2104,20 +2316,125 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun deleteRemoteBackupsForLabel(deviceLabel: String, onFinished: (Int) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
+            val currentLabelTrimmed = deviceLabel.trim()
             val targets = _remoteDriveBackups.value.filter {
-                !it.name.endsWith(".index.json") &&
-                (it.name.contains(deviceLabel, ignoreCase = true) || it.name.endsWith(".resync") || it.name.endsWith(".svb") || it.name.endsWith(".zip"))
+                !it.name.endsWith(".index.json") && (
+                    it.appProperties["deviceLabel"]?.trim()?.equals(currentLabelTrimmed, ignoreCase = true) == true ||
+                    (currentLabelTrimmed.isNotBlank() && it.name.contains(currentLabelTrimmed, ignoreCase = true))
+                )
             }
+            // Immediately remove from in-memory state to reflect zeroed counters in UI
+            val remaining = _remoteDriveBackups.value.filterNot { targets.any { t -> t.id == it.id } }
+            _remoteDriveBackups.value = remaining
+            _remoteBackupsState.value = RemoteBackupsState.Loaded(remaining)
+
             var count = 0
             val activeEmail = _activeAccountEmail.value
             for (item in targets) {
                 val res = gdriveProvider.cloudBackupRepository.deleteRemoteBackup(item.id, activeEmail)
                 if (res.isSuccess) count++
+                val baseName = item.name.removeSuffix(".resync").removeSuffix(".svb").removeSuffix(".zip")
+                val sidecar = _remoteDriveBackups.value.find { it.name == "$baseName.index.json" }
+                if (sidecar != null) {
+                    gdriveProvider.cloudBackupRepository.deleteRemoteBackup(sidecar.id, activeEmail)
+                }
             }
-            fetchRemoteDriveBackups()
-            refreshDriveAccountInfo()
+            refreshActiveAccountData(activeEmail, isManual = true)
             withContext(Dispatchers.Main) {
                 onFinished(count)
+            }
+        }
+    }
+
+    fun executeScheduleRoutine(schedule: BackupScheduleItem, onStarted: (() -> Unit)? = null) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val appCtx = getApplication<Application>().applicationContext
+            val allApps = installedApps.value
+            
+            val includeApps = schedule.targetItems.contains("APPS")
+            val appPairs = if (includeApps) {
+                val specificSet = schedule.specificApps.toSet()
+                val appsToBackup = if (specificSet.isEmpty()) allApps else allApps.filter { specificSet.contains(it.packageName) }
+                val mode = schedule.appBackupMode
+                appsToBackup.map { app ->
+                    Pair(
+                        app,
+                        com.resync.app.data.model.AppSelectionOptions(
+                            includeBaseApk = mode == "APK" || mode == "BOTH",
+                            includeSplits = mode == "APK" || mode == "BOTH",
+                            includeData = mode == "DATA" || mode == "BOTH",
+                            includeInternalData = mode == "DATA" || mode == "BOTH",
+                            includeExternalData = mode == "DATA" || mode == "BOTH"
+                        )
+                    )
+                }
+            } else emptyList()
+
+            val destType = when (schedule.destination) {
+                "Nuvem" -> BackupDestinationType.SOMENTE_DRIVE
+                "Ambos" -> BackupDestinationType.INTERNA_E_DRIVE
+                else -> BackupDestinationType.SOMENTE_INTERNA
+            }
+
+            val cloudProvider = if (destType != BackupDestinationType.SOMENTE_INTERNA) {
+                CloudProviderType.GOOGLE_DRIVE
+            } else null
+
+            val destLabel = when (schedule.destination) {
+                "Nuvem" -> "Google Drive"
+                "Ambos" -> "Memória interna + Google Drive"
+                else -> "Memória interna"
+            }
+
+            withContext(Dispatchers.Main) {
+                onStarted?.invoke()
+            }
+
+            ScheduleManager.getInstance(appCtx).recordExecutionResult(schedule.id, "Executando...")
+
+            BackupRepository.startBackup(
+                context = appCtx,
+                title = schedule.title,
+                selectedApps = appPairs,
+                selectedFiles = schedule.selectedFolders,
+                includeSms = schedule.targetItems.contains("MESSAGES"),
+                includeCalls = schedule.targetItems.contains("CALLS"),
+                includeContacts = schedule.targetItems.contains("CONTACTS"),
+                includeDns = schedule.targetItems.contains("DNS"),
+                includeWallpaper = schedule.targetItems.contains("WALLPAPER"),
+                includeWallpaperHome = schedule.targetItems.contains("WALLPAPER"),
+                includeWallpaperLock = schedule.targetItems.contains("WALLPAPER"),
+                includeWifi = schedule.targetItems.contains("WIFI"),
+                includeBluetooth = schedule.targetItems.contains("BLUETOOTH"),
+                targetCloudProvider = cloudProvider,
+                targetCloudAccountEmail = _activeAccountEmail.value,
+                destinationLabel = destLabel,
+                destinationType = destType
+            )
+
+            try {
+                val finishProgress = BackupRepository.backupProgress.filterNotNull().first { it.isFinished }
+                val dateStr = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
+                if (finishProgress.error != null) {
+                    ScheduleManager.getInstance(appCtx).recordExecutionResult(schedule.id, "Falha: ${finishProgress.error}")
+                } else {
+                    ScheduleManager.getInstance(appCtx).recordExecutionResult(schedule.id, "Sucesso ($dateStr)")
+                }
+            } catch (t: Throwable) {
+                Log.w("MainViewModel", "Erro aguardando conclusão do agendamento: ${t.message}")
+            }
+        }
+    }
+
+    fun executeAllScheduleRoutines(routines: List<BackupScheduleItem>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val enabled = routines.filter { it.isEnabled }
+            for (routine in enabled) {
+                executeScheduleRoutine(routine)
+                try {
+                    BackupRepository.backupProgress.filterNotNull().first { it.isFinished }
+                } catch (_: Throwable) {}
+                delay(2000L)
             }
         }
     }
@@ -2348,8 +2665,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _updateState.value = UpdateState.Verifying(releaseInfo, "Verificando integridade e assinatura do APK...")
                 val verifyResult = appUpdateManager.verifyDownloadedApk(apkFile, releaseInfo.sha256)
                 verifyResult.onSuccess {
-                    val rootAvailable = Shell.isAppGrantedRoot() == true
-                    _updateState.value = UpdateState.ReadyToInstall(releaseInfo, apkFile, isRootAvailable = rootAvailable)
+                    val rootAvailable = runCatching {
+                        Shell.isAppGrantedRoot() == true || capabilityManager.isRootGranted()
+                    }.getOrDefault(false)
+
+                    if (rootAvailable) {
+                        installDownloadedUpdate(apkFile, preferRoot = true)
+                    } else {
+                        _updateState.value = UpdateState.ReadyToInstall(releaseInfo, apkFile, isRootAvailable = false)
+                    }
                 }.onFailure { err ->
                     _updateState.value = UpdateState.Error(
                         message = err.message ?: "Falha na verificação de integridade do pacote.",
@@ -2375,7 +2699,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             val currentState = _updateState.value
-            val releaseInfo = if (currentState is UpdateState.ReadyToInstall) currentState.releaseInfo else null
+            val releaseInfo = when (currentState) {
+                is UpdateState.ReadyToInstall -> currentState.releaseInfo
+                is UpdateState.Verifying -> currentState.releaseInfo
+                is UpdateState.Downloading -> currentState.releaseInfo
+                is UpdateState.Available -> currentState.releaseInfo
+                else -> appUpdateManager.getCachedReleaseInfo()
+            }
             if (releaseInfo != null) {
                 _updateState.value = UpdateState.Installing(releaseInfo, isRoot = preferRoot)
             }
@@ -3982,7 +4312,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         email: String? = null,
         includeHomeWallpaper: Boolean = true,
         includeLockWallpaper: Boolean = true,
-        selectedAppPackages: List<String> = emptyList()
+        selectedAppPackages: List<String> = emptyList(),
+        selectedCategoryItemIds: Set<String>? = null
     ) {
         val isCloud = destinationType == BackupDestinationType.SOMENTE_DRIVE || destinationType == BackupDestinationType.INTERNA_E_DRIVE
         val targetEmail = email ?: _activeAccountEmail.value ?: _multiCloudAccounts.value.firstOrNull()?.email
@@ -3991,6 +4322,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val appInfoMap = installedApps.value.associateBy { it.packageName }
             val pkgs = if (selectedAppPackages.isNotEmpty()) {
                 selectedAppPackages
+            } else if (selectedCategoryItemIds != null && selectedCategoryItemIds.isNotEmpty()) {
+                selectedCategoryItemIds.toList()
             } else {
                 installedApps.value.filter { !it.isSystemApp }.map { it.packageName }
             }
@@ -4037,7 +4370,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             targetCloudProvider = if (isCloud) CloudProviderType.GOOGLE_DRIVE else null,
             targetCloudAccountEmail = if (isCloud) targetEmail else null,
             destinationLabel = destLabel,
-            destinationType = destinationType
+            destinationType = destinationType,
+            selectedCategoryItemIds = selectedCategoryItemIds
         )
     }
 

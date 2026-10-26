@@ -89,6 +89,9 @@ object AppLogger {
     private val AUTH_HEADER_PATTERN = Pattern.compile("(?i)(authorization|token|secret|password|access_token)=([^&\\s]+)")
     private val EMAIL_PATTERN = Pattern.compile("([a-zA-Z0-9_\\-\\.]+)(@[a-zA-Z0-9_\\-\\.]+)")
     private val SESSION_URI_PATTERN = Pattern.compile("(https://www\\.googleapis\\.com/upload/drive/v3/files\\?uploadType=resumable&upload_id=)([^&\\s]+)")
+    private val WIFI_KEY_PATTERN = Pattern.compile("(?i)(preSharedKey|wpa_psk|psk|wifi_password|wep_key0?)=([^\\r\\n,;]+)")
+    private val SMS_BODY_PATTERN = Pattern.compile("(?i)(body|sms_body|sms_content)=([^\\r\\n,;]+)")
+    private val KEY_PATTERN = Pattern.compile("(?i)(passphrase|encryption_key|master_key|private_key|secret_key)=([^\\r\\n,;]+)")
 
     fun initialize(context: Context) {
         if (appContext != null) return
@@ -161,6 +164,9 @@ object AppLogger {
             sanitized = BEARER_PATTERN.matcher(sanitized).replaceAll("Bearer [REDACTED_TOKEN]")
             sanitized = AUTH_HEADER_PATTERN.matcher(sanitized).replaceAll("$1=[REDACTED]")
             sanitized = SESSION_URI_PATTERN.matcher(sanitized).replaceAll("$1[REDACTED_UPLOAD_ID]")
+            sanitized = WIFI_KEY_PATTERN.matcher(sanitized).replaceAll("$1=[REDACTED_WIFI_KEY]")
+            sanitized = SMS_BODY_PATTERN.matcher(sanitized).replaceAll("$1=[REDACTED_SMS]")
+            sanitized = KEY_PATTERN.matcher(sanitized).replaceAll("$1=[REDACTED_KEY]")
             sanitized = EMAIL_PATTERN.matcher(sanitized).replaceAll { mr ->
                 val user = mr.group(1) ?: ""
                 val domain = mr.group(2) ?: ""

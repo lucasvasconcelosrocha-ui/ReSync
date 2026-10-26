@@ -223,7 +223,8 @@ class BackupEngine(private val context: Context) {
         encryptionPassword: String? = null,
         destinationDir: File? = null,
         destinationLabel: String? = null,
-        destinationType: BackupDestinationType = BackupDestinationType.SOMENTE_INTERNA
+        destinationType: BackupDestinationType = BackupDestinationType.SOMENTE_INTERNA,
+        selectedCategoryItemIds: Set<String>? = null
     ): Flow<BackupProgress> = channelFlow<BackupProgress> {
         try {
             android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
@@ -268,7 +269,7 @@ class BackupEngine(private val context: Context) {
             "Modo de acesso detectado para backup: $detectedModeLabel (uid=${if (isRootActive) 0 else android.os.Process.myUid()})"
         )
 
-        val anyAppDataRequested = safeSelectedApps.any { it.second.includeData || it.second.includeInternalData }
+        val anyAppDataRequested = safeSelectedApps.any { it.second.includeInternalData || it.second.includeExternalData || it.second.includeObb }
         if (!isRootActive && anyAppDataRequested) {
             dbHelper.insertLog(
                 LogLevel.WARN,
@@ -297,7 +298,7 @@ class BackupEngine(private val context: Context) {
                 }
             }
             // Dados só entram no cálculo se o modo Root estiver ativo
-            if (isRootActive && (options.includeData || options.includeInternalData)) {
+            if (isRootActive && options.includeInternalData) {
                 val dLen = app.sizeBytes.takeIf { it > 0 } ?: 15_000_000L
                 appBytes += dLen
                 appItemCount++
@@ -591,7 +592,7 @@ class BackupEngine(private val context: Context) {
                 }
 
                 // Internal Data: /data/data/<pkg> or /data/user/0/<pkg> (excluding cache and code_cache)
-                if (options.includeData || options.includeInternalData) {
+                if (options.includeInternalData) {
                     emitProgress(
                         BackupProgress(
                             stage = "Aplicativos",
@@ -1044,7 +1045,7 @@ class BackupEngine(private val context: Context) {
                             compressionSpeedBytesPerSec = progressEstimator.getEffectiveSpeedBytes()
                         )
                     )
-                    val smsList = readSmsMessages()
+                    val smsList = readSmsMessages(selectedCategoryItemIds)
                     var smsCount = 0
                     if (smsList.isNotEmpty()) {
                         val smsJson = gson.toJson(smsList).toByteArray(Charsets.UTF_8)
@@ -1133,7 +1134,7 @@ class BackupEngine(private val context: Context) {
                             compressionSpeedBytesPerSec = progressEstimator.getEffectiveSpeedBytes()
                         )
                     )
-                    val callsList = readCallLogs()
+                    val callsList = readCallLogs(selectedCategoryItemIds)
                     if (callsList.isNotEmpty()) {
                         val callsJson = gson.toJson(callsList).toByteArray(Charsets.UTF_8)
                         val entryName = "system/telephony/calls_backup.json"
@@ -1203,7 +1204,7 @@ class BackupEngine(private val context: Context) {
                             compressionSpeedBytesPerSec = progressEstimator.getEffectiveSpeedBytes()
                         )
                     )
-                    val contactsList = readContactsList()
+                    val contactsList = readContactsList(selectedCategoryItemIds)
                     if (contactsList.isNotEmpty()) {
                         val vcfBytes = exportContactsToVcf(contactsList)
                         val entryName = "system/contacts/contacts_backup.vcf"
@@ -1706,11 +1707,15 @@ class BackupEngine(private val context: Context) {
             var lastRecordedPercent = 0.40f
             var lastRecordedName = "Empacotando container..."
 
+            val activeAccountEmail = context.getSharedPreferences("swiftvault_prefs", Context.MODE_PRIVATE)
+                .getString("active_account_email", null)
+
             ArchiveEngine.createZipContainer(
                 outputFile = stagingFile,
                 manifest = manifest,
                 entries = packEntries,
                 encryptionPassword = resolvedPassword,
+                accountEmail = activeAccountEmail,
                 onItemProgress = { written, total, currentItemName, itemIndex, totalItems, itemType ->
                     val curEntry = packEntries.getOrNull(itemIndex - 1)
                     val curPkg = curEntry?.manifestItem?.metadata?.get("packageName") ?: ""
@@ -1842,6 +1847,14 @@ class BackupEngine(private val context: Context) {
             val lastEntry = packEntries.lastOrNull()
             if (lastEntry != null && completedItemsList.none { it.name == lastEntry.manifestItem.name }) {
                 completedItemsList.add(CompletedItemInfo(name = lastEntry.manifestItem.name, type = lastEntry.manifestItem.type, success = true, stage = "Compactação"))
+            }
+
+            // Higiene de segurança: limpar arquivos intermediários do staging imediatamente após empacotamento
+            packEntries.forEach { entry ->
+                val src = entry.sourceFile
+                if (src != null && src.exists() && src.absolutePath != stagingFile.absolutePath) {
+                    try { src.delete() } catch (_: Throwable) {}
+                }
             }
 
             // 10. RIGOROUS INTEGRITY VALIDATION ON STAGED FILE
@@ -2307,29 +2320,62 @@ class BackupEngine(private val context: Context) {
         return true
     }
 
-    private suspend fun readSmsMessages(): List<SmsRecord> {
+    private suspend fun readSmsMessages(selectedCategoryItemIds: Set<String>? = null): List<SmsRecord> {
         val list = mutableListOf<SmsRecord>()
         try {
+            DeviceCategoryInspector.ensurePermission(
+                context,
+                android.Manifest.permission.READ_SMS,
+                "android.permission.WRITE_SMS",
+                android.Manifest.permission.READ_CONTACTS
+            )
             val cursor = context.contentResolver.query(
                 Telephony.Sms.CONTENT_URI,
-                arrayOf(Telephony.Sms.ADDRESS, Telephony.Sms.BODY, Telephony.Sms.DATE, Telephony.Sms.TYPE, Telephony.Sms.READ),
-                null, null, "${Telephony.Sms.DATE} DESC LIMIT 5000"
+                arrayOf(
+                    Telephony.Sms._ID,
+                    Telephony.Sms.ADDRESS,
+                    Telephony.Sms.BODY,
+                    Telephony.Sms.DATE,
+                    Telephony.Sms.TYPE,
+                    Telephony.Sms.READ
+                ),
+                null, null, "${Telephony.Sms.DATE} DESC"
             )
             cursor?.use {
+                val idCol = it.getColumnIndex(Telephony.Sms._ID)
                 val addrCol = it.getColumnIndexOrThrow(Telephony.Sms.ADDRESS)
                 val bodyCol = it.getColumnIndexOrThrow(Telephony.Sms.BODY)
                 val dateCol = it.getColumnIndexOrThrow(Telephony.Sms.DATE)
                 val typeCol = it.getColumnIndexOrThrow(Telephony.Sms.TYPE)
                 val readCol = it.getColumnIndexOrThrow(Telephony.Sms.READ)
 
-                while (it.moveToNext()) {
+                var count = 0
+                while (it.moveToNext() && count < 5000) {
+                    count++
+                    val id = if (idCol != -1) it.getLong(idCol) else 0L
+                    val address = it.getString(addrCol) ?: ""
+                    val body = it.getString(bodyCol) ?: ""
+                    val date = it.getLong(dateCol)
+                    val type = it.getInt(typeCol)
+                    val read = it.getInt(readCol)
+
+                    if (selectedCategoryItemIds != null && selectedCategoryItemIds.isNotEmpty()) {
+                        val cleanAddr = DeviceCategoryInspector.cleanPhoneNumber(address)
+                        val match = selectedCategoryItemIds.any { sid ->
+                            sid == "sms_${id}_${address}" ||
+                            sid.contains(address) ||
+                            (cleanAddr.isNotBlank() && sid.contains(cleanAddr))
+                        }
+                        if (!match) continue
+                    }
+
                     list.add(
                         SmsRecord(
-                            address = it.getString(addrCol) ?: "",
-                            body = it.getString(bodyCol) ?: "",
-                            date = it.getLong(dateCol),
-                            type = it.getInt(typeCol),
-                            read = it.getInt(readCol)
+                            address = address,
+                            body = body,
+                            date = date,
+                            type = type,
+                            read = read
                         )
                     )
                 }
@@ -2340,12 +2386,20 @@ class BackupEngine(private val context: Context) {
         return list
     }
 
-    private suspend fun readCallLogs(): List<CallRecord> {
+    private suspend fun readCallLogs(selectedCategoryItemIds: Set<String>? = null): List<CallRecord> {
         val list = mutableListOf<CallRecord>()
         try {
+            DeviceCategoryInspector.ensurePermission(
+                context,
+                android.Manifest.permission.READ_CALL_LOG,
+                android.Manifest.permission.WRITE_CALL_LOG,
+                android.Manifest.permission.READ_CONTACTS
+            )
+            val contactNames = DeviceCategoryInspector.getContactNameMap(context)
             val cursor = context.contentResolver.query(
                 CallLog.Calls.CONTENT_URI,
                 arrayOf(
+                    CallLog.Calls._ID,
                     CallLog.Calls.NUMBER,
                     CallLog.Calls.DATE,
                     CallLog.Calls.DURATION,
@@ -2353,9 +2407,10 @@ class BackupEngine(private val context: Context) {
                     CallLog.Calls.CACHED_NAME,
                     CallLog.Calls.CACHED_NUMBER_TYPE
                 ),
-                null, null, "${CallLog.Calls.DATE} DESC LIMIT 5000"
+                null, null, "${CallLog.Calls.DATE} DESC"
             )
             cursor?.use {
+                val idCol = it.getColumnIndex(CallLog.Calls._ID)
                 val numCol = it.getColumnIndex(CallLog.Calls.NUMBER)
                 val dateCol = it.getColumnIndex(CallLog.Calls.DATE)
                 val durCol = it.getColumnIndex(CallLog.Calls.DURATION)
@@ -2363,13 +2418,34 @@ class BackupEngine(private val context: Context) {
                 val nameCol = it.getColumnIndex(CallLog.Calls.CACHED_NAME)
                 val numTypeCol = it.getColumnIndex(CallLog.Calls.CACHED_NUMBER_TYPE)
 
-                while (it.moveToNext()) {
+                var count = 0
+                while (it.moveToNext() && count < 5000) {
+                    count++
+                    val id = if (idCol != -1) it.getLong(idCol) else 0L
                     val number = if (numCol != -1) it.getString(numCol) ?: "" else ""
                     val date = if (dateCol != -1) it.getLong(dateCol) else 0L
                     val dur = if (durCol != -1) it.getLong(durCol) else 0L
                     val type = if (typeCol != -1) it.getInt(typeCol) else 1
-                    val cachedName = if (nameCol != -1) it.getString(nameCol) else null
+                    var cachedName = if (nameCol != -1) it.getString(nameCol) else null
                     val numType = if (numTypeCol != -1) it.getInt(numTypeCol) else 0
+
+                    if (cachedName.isNullOrBlank()) {
+                        val cleanNum = DeviceCategoryInspector.cleanPhoneNumber(number)
+                        if (cleanNum.isNotBlank()) {
+                            cachedName = contactNames[cleanNum]
+                        }
+                    }
+
+                    if (selectedCategoryItemIds != null && selectedCategoryItemIds.isNotEmpty()) {
+                        val cleanNum = DeviceCategoryInspector.cleanPhoneNumber(number)
+                        val match = selectedCategoryItemIds.any { sid ->
+                            (id > 0L && sid == "call_${id}_${date}") ||
+                            sid == "call_${number}_${date}_${dur}" ||
+                            sid.contains(number) ||
+                            (cleanNum.isNotBlank() && sid.contains(cleanNum))
+                        }
+                        if (!match) continue
+                    }
 
                     list.add(
                         CallRecord(
@@ -2414,6 +2490,15 @@ class BackupEngine(private val context: Context) {
                             }
                         }
                         if (number.isNotBlank() || date > 0L) {
+                            if (selectedCategoryItemIds != null && selectedCategoryItemIds.isNotEmpty()) {
+                                val cleanNum = DeviceCategoryInspector.cleanPhoneNumber(number)
+                                val match = selectedCategoryItemIds.any { sid ->
+                                    sid == "call_${number}_${date}_${duration}" ||
+                                    sid.contains(number) ||
+                                    (cleanNum.isNotBlank() && sid.contains(cleanNum))
+                                }
+                                if (!match) continue
+                            }
                             list.add(
                                 CallRecord(
                                     number = number,
@@ -2588,9 +2673,14 @@ class BackupEngine(private val context: Context) {
         }
     }
 
-    suspend fun readContactsList(): List<ContactRecord> {
+    suspend fun readContactsList(selectedCategoryItemIds: Set<String>? = null): List<ContactRecord> {
         val list = mutableListOf<ContactRecord>()
         try {
+            DeviceCategoryInspector.ensurePermission(
+                context,
+                android.Manifest.permission.READ_CONTACTS,
+                android.Manifest.permission.WRITE_CONTACTS
+            )
             val resolver = context.contentResolver
             val cursor = resolver.query(
                 android.provider.ContactsContract.Contacts.CONTENT_URI,
@@ -2647,6 +2737,18 @@ class BackupEngine(private val context: Context) {
                                 }
                             }
                         }
+                    }
+
+                    if (selectedCategoryItemIds != null && selectedCategoryItemIds.isNotEmpty()) {
+                        val match = selectedCategoryItemIds.any { sid ->
+                            sid.contains("contact_${id}_") ||
+                            sid.contains(id) ||
+                            phones.any { p ->
+                                val clean = DeviceCategoryInspector.cleanPhoneNumber(p)
+                                clean.isNotBlank() && sid.contains(clean)
+                            }
+                        }
+                        if (!match) continue
                     }
 
                     list.add(ContactRecord(id = id, displayName = name, phoneNumbers = phones, emails = emails))

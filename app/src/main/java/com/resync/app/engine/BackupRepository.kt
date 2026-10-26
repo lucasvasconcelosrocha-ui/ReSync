@@ -283,7 +283,8 @@ object BackupRepository {
         targetCloudProvider: CloudProviderType? = null,
         targetCloudAccountEmail: String? = null,
         destinationLabel: String? = null,
-        destinationType: BackupDestinationType = BackupDestinationType.SOMENTE_INTERNA
+        destinationType: BackupDestinationType = BackupDestinationType.SOMENTE_INTERNA,
+        selectedCategoryItemIds: Set<String>? = null
     ) {
         Log.d("BackupOrigin", "startBackup triggered: title='$title', apps=${selectedApps.size}, files=${selectedFiles.size}, dest='$destinationLabel', type=$destinationType\nCaller stack:\n" + Log.getStackTraceString(Throwable()))
         initialize(context)
@@ -354,7 +355,8 @@ object BackupRepository {
                     includeBluetooth = includeBluetooth,
                     encryptionPassword = encryptionPassword,
                     destinationLabel = destinationLabel,
-                    destinationType = destinationType
+                    destinationType = destinationType,
+                    selectedCategoryItemIds = selectedCategoryItemIds
                 ).collect { progress ->
                     hasReceivedFirstProgress = true
                     timeoutJob.cancel()

@@ -110,6 +110,15 @@ data class AppInfo(
 )
 
 /**
+ * Model representing an application's cached data and clearing state
+ */
+data class AppCacheItem(
+    val app: AppInfo,
+    val cacheBytes: Long,
+    val isClearing: Boolean = false
+)
+
+/**
  * Granular options when backing up an individual app
  */
 data class AppSelectionOptions(

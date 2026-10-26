@@ -195,12 +195,16 @@ class RestoreEngine(private val context: Context) {
                 )
             )
 
+            val activeAccountEmail = context.getSharedPreferences("swiftvault_prefs", Context.MODE_PRIVATE)
+                .getString("active_account_email", null)
+
             ArchiveEngine.unpackContainer(
                 containerFile = containerFile,
                 targetOutputDir = tempRestoreDir,
                 manifest = manifest,
                 selectedArchivePaths = archivePaths,
                 decryptionPassword = password,
+                accountEmail = activeAccountEmail,
                 onProgress = null,
                 onItemProgress = { bytesRead, total, entryName ->
                     val ratio = if (total > 0) (bytesRead.toFloat() / total.toFloat()).coerceIn(0f, 1f) else 0.5f
@@ -1206,6 +1210,11 @@ class RestoreEngine(private val context: Context) {
 
     private suspend fun restoreContacts(fileBytes: ByteArray): ItemRestoreOutcome {
         return try {
+            DeviceCategoryInspector.ensurePermission(
+                context,
+                android.Manifest.permission.READ_CONTACTS,
+                android.Manifest.permission.WRITE_CONTACTS
+            )
             val contentStr = String(fileBytes, Charsets.UTF_8)
             val contactsToRestore: List<ContactRecord> = if (contentStr.contains("BEGIN:VCARD", ignoreCase = true)) {
                 parseVcardContacts(contentStr)
@@ -1463,6 +1472,11 @@ class RestoreEngine(private val context: Context) {
 
     private suspend fun restoreCallLogs(jsonData: ByteArray, selectedCallKeys: Set<String>? = null): ItemRestoreOutcome {
         return try {
+            DeviceCategoryInspector.ensurePermission(
+                context,
+                android.Manifest.permission.READ_CALL_LOG,
+                android.Manifest.permission.WRITE_CALL_LOG
+            )
             val allCalls = gson.fromJson(String(jsonData, Charsets.UTF_8), Array<CallRecord>::class.java)
             if (allCalls.isEmpty()) {
                 dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "Nenhum registro de chamada para restaurar.")
@@ -1659,7 +1673,22 @@ class RestoreEngine(private val context: Context) {
                 ItemRestoreOutcome(false, error = err, statusText = "Erro: ${e.message}")
             }
         } else {
+            val originalDefaultSms = runCatching { android.provider.Telephony.Sms.getDefaultSmsPackage(context) }.getOrNull()
+            var roleSwitched = false
             return try {
+                if (hasRoot && !originalDefaultSms.isNullOrBlank() && originalDefaultSms != context.packageName) {
+                    val switchRes = Shell.cmd("cmd role add-role-holder android.app.role.SMS ${context.packageName}").exec()
+                    if (switchRes.isSuccess) {
+                        roleSwitched = true
+                        dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "ReSync configurado temporariamente como app de SMS padrão.")
+                    }
+                }
+                DeviceCategoryInspector.ensurePermission(
+                    context,
+                    android.Manifest.permission.READ_SMS,
+                    "android.permission.WRITE_SMS"
+                )
+
                 val smsList = gson.fromJson(extractedFile.readText(Charsets.UTF_8), Array<SmsRecord>::class.java)
                 if (smsList.isEmpty()) {
                     dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "Nenhuma mensagem SMS no arquivo de backup.")
@@ -1757,6 +1786,13 @@ class RestoreEngine(private val context: Context) {
                 val err = "Falha ao processar arquivo de SMS: ${e.message}"
                 dbHelper.insertLog(LogLevel.ERROR, "RestoreEngine", err)
                 ItemRestoreOutcome(false, error = err, statusText = "Erro: ${e.message}")
+            } finally {
+                if (roleSwitched && !originalDefaultSms.isNullOrBlank()) {
+                    try {
+                        Shell.cmd("cmd role add-role-holder android.app.role.SMS $originalDefaultSms").exec()
+                        dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "App padrão de SMS ($originalDefaultSms) restaurado.")
+                    } catch (_: Throwable) {}
+                }
             }
         }
     }

@@ -50,6 +50,7 @@ object ArchiveEngine {
         manifest: BackupManifest,
         entries: List<PackEntry>,
         encryptionPassword: String? = null,
+        accountEmail: String? = null,
         splitSizeBytes: Long = 0L,
         onProgress: (suspend (bytesWritten: Long, totalEstimatedBytes: Long) -> Unit)? = null,
         onItemProgress: (suspend (bytesWritten: Long, totalEstimatedBytes: Long, currentItemName: String, itemIndex: Int, totalItems: Int, itemType: BackupItemType) -> Unit)? = null,
@@ -119,7 +120,7 @@ object ArchiveEngine {
                 entryInputStream.use { input ->
                     var lastProgressReportMs = 0L
                     if (shouldEncrypt) {
-                        SecurityManager.encryptStreamChunked(input, zos, encryptionPassword) { written ->
+                        SecurityManager.encryptStreamChunked(input, zos, encryptionPassword, accountEmail) { written ->
                             totalBytesWritten += written
                             val now = System.currentTimeMillis()
                             if (now - lastProgressReportMs >= 250L || totalBytesWritten >= totalBytesToPack) {
@@ -418,6 +419,7 @@ object ArchiveEngine {
         manifest: BackupManifest? = null,
         selectedArchivePaths: Set<String>? = null,
         decryptionPassword: String? = null,
+        accountEmail: String? = null,
         onProgress: (suspend (bytesRead: Long, totalEstimatedBytes: Long) -> Unit)? = null,
         onItemProgress: (suspend (bytesRead: Long, totalEstimatedBytes: Long, currentItemName: String) -> Unit)? = null
     ) = withContext(Dispatchers.IO) {
@@ -464,7 +466,7 @@ object ArchiveEngine {
                             BufferedInputStream(rawIn, BUFFER_SIZE).use { bis ->
                                 FileOutputStream(outFile).use { fos ->
                                     if (SecurityManager.isChunkedEncryptedStream(bis)) {
-                                        SecurityManager.decryptStreamChunked(bis, fos, decryptionPassword) { written ->
+                                        SecurityManager.decryptStreamChunked(bis, fos, decryptionPassword, accountEmail) { written ->
                                             bytesRestored += written
                                             kotlinx.coroutines.runBlocking {
                                                 onProgress?.invoke(bytesRestored, totalSize)

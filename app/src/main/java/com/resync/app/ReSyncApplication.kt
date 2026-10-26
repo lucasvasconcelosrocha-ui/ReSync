@@ -34,6 +34,7 @@ class ReSyncApplication : Application() {
 
         // Inicializa o novo sistema de log central, monitor de rede reativo e controle térmico
         com.resync.app.util.AppLogger.initialize(this)
+        com.resync.app.engine.SecurityManager.initialize(this)
         com.resync.app.cloud.gdrive.CloudNetworkMonitor.initialize(this)
         com.resync.app.cloud.gdrive.CloudThermalGovernor.initialize(this)
 

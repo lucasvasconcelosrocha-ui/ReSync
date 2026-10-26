@@ -1,5 +1,6 @@
 package com.resync.app.engine
 
+import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import java.io.InputStream
@@ -23,6 +24,14 @@ import javax.crypto.spec.SecretKeySpec
  * Performs streaming SHA-256 integrity calculation.
  */
 object SecurityManager {
+
+    @Volatile private var appContext: Context? = null
+
+    fun initialize(context: Context) {
+        if (appContext == null) {
+            appContext = context.applicationContext
+        }
+    }
 
     private const val ANDROID_KEYSTORE = "AndroidKeyStore"
     private const val MASTER_KEY_ALIAS = "SwiftVault_Master_Key"
@@ -254,8 +263,16 @@ object SecurityManager {
             zeroCharArray(passChars)
             k
         } else {
-            val email = if (!accountEmail.isNullOrBlank()) accountEmail else "default_user@resync.local"
-            deriveAccountKey(email, salt)
+            val resolvedEmail = if (!accountEmail.isNullOrBlank()) {
+                accountEmail.trim().lowercase()
+            } else {
+                try {
+                    appContext?.getSharedPreferences("swiftvault_prefs", Context.MODE_PRIVATE)
+                        ?.getString("active_account_email", null)?.trim()?.lowercase()
+                } catch (_: Throwable) { null }
+            }
+            val finalEmail = if (!resolvedEmail.isNullOrBlank()) resolvedEmail else "default_user@resync.local"
+            deriveAccountKey(finalEmail, salt)
         }
 
         // Write RESY header
@@ -344,8 +361,9 @@ object SecurityManager {
             throw IllegalArgumentException("Formato de criptografia não reconhecido ou arquivo adulterado.")
         }
 
-        val secretKey: SecretKey
+        var secretKey: SecretKey? = null
         val chunkSize: Int
+        val candidateKeys = mutableListOf<SecretKey>()
 
         if (isResy) {
             val versionByte = inputStream.read()
@@ -370,17 +388,40 @@ object SecurityManager {
             if (rChunk < 4) throw IllegalArgumentException("Arquivo de backup corrompido ou adulterado.")
             chunkSize = java.nio.ByteBuffer.wrap(chunkSizeBuf).int.coerceIn(1024, 1024 * 1024)
 
-            secretKey = if (strategyByte == STRATEGY_ADVANCED.toInt()) {
-                if (password.isNullOrEmpty()) {
+            if (strategyByte == STRATEGY_ADVANCED.toInt()) {
+                val resolvedPass = if (!password.isNullOrEmpty()) {
+                    password
+                } else {
+                    try {
+                        val prefs = appContext?.getSharedPreferences("swiftvault_prefs", Context.MODE_PRIVATE)
+                        val enc = prefs?.getString("crypto_adv_pass", null)
+                        enc?.let { runCatching { decryptHardwareString(it) }.getOrNull() }
+                    } catch (_: Throwable) { null }
+                }
+                if (resolvedPass.isNullOrEmpty()) {
                     throw IllegalArgumentException("Senha incorreta: Este backup foi criptografado com senha personalizada.")
                 }
-                val passChars = password.toCharArray()
-                val k = deriveKeyFromPassword(passChars, salt, iterations)
+                val passChars = resolvedPass.toCharArray()
+                secretKey = deriveKeyFromPassword(passChars, salt, iterations)
                 zeroCharArray(passChars)
-                k
             } else {
-                val email = if (!accountEmail.isNullOrBlank()) accountEmail else "default_user@resync.local"
-                deriveAccountKey(email, salt)
+                // STRATEGY_ACCOUNT: build prioritized candidate keys
+                val explicitEmail = accountEmail?.trim()?.lowercase()
+                val prefsEmail = try {
+                    appContext?.getSharedPreferences("swiftvault_prefs", Context.MODE_PRIVATE)
+                        ?.getString("active_account_email", null)?.trim()?.lowercase()
+                } catch (_: Throwable) { null }
+
+                if (!explicitEmail.isNullOrBlank()) {
+                    candidateKeys.add(deriveAccountKey(explicitEmail, salt))
+                }
+                if (!prefsEmail.isNullOrBlank() && prefsEmail != explicitEmail) {
+                    candidateKeys.add(deriveAccountKey(prefsEmail, salt))
+                }
+                candidateKeys.add(deriveAccountKey("default_user@resync.local", salt))
+                try {
+                    candidateKeys.add(getOrCreateHardwareKey())
+                } catch (_: Throwable) {}
             }
         } else {
             // Legacy SVBE
@@ -404,6 +445,7 @@ object SecurityManager {
 
         val lenBuf = ByteArray(4)
         var totalWritten = 0L
+        var isFirstChunk = true
 
         while (true) {
             var lenRead = 0
@@ -432,9 +474,44 @@ object SecurityManager {
                 cipherReadTotal += r
             }
 
+            // Authenticate key on first chunk if using candidate keys
+            if (isFirstChunk && secretKey == null) {
+                var workingKey: SecretKey? = null
+                var decryptedBytes: ByteArray? = null
+                for (cand in candidateKeys) {
+                    try {
+                        val cipher = Cipher.getInstance(AES_GCM_TRANSFORMATION)
+                        val spec = GCMParameterSpec(GCM_TAG_LENGTH_BITS, iv)
+                        cipher.init(Cipher.DECRYPT_MODE, cand, spec)
+                        val res = cipher.doFinal(cipherBytes)
+                        workingKey = cand
+                        decryptedBytes = res
+                        break
+                    } catch (_: Exception) {
+                        // Candidate failed GCM tag verification, try next
+                    }
+                }
+                if (workingKey == null || decryptedBytes == null) {
+                    throw IllegalArgumentException("Falha na autenticação ou arquivo corrompido: chave incompatível.")
+                }
+                secretKey = workingKey
+                isFirstChunk = false
+                try {
+                    outputStream.write(decryptedBytes)
+                    totalWritten += decryptedBytes.size
+                    onProgress?.invoke(totalWritten)
+                } finally {
+                    zeroByteArray(decryptedBytes)
+                }
+                continue
+            }
+
+            isFirstChunk = false
+            val activeKey = secretKey ?: throw IllegalStateException("Chave de descriptografia indisponível.")
+
             val cipher = Cipher.getInstance(AES_GCM_TRANSFORMATION)
             val spec = GCMParameterSpec(GCM_TAG_LENGTH_BITS, iv)
-            cipher.init(Cipher.DECRYPT_MODE, secretKey, spec)
+            cipher.init(Cipher.DECRYPT_MODE, activeKey, spec)
 
             val plaintext = try {
                 cipher.doFinal(cipherBytes)
