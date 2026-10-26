@@ -126,7 +126,7 @@ fun AppDetailScreen(
 
     // Estado de medição real de APKs e Dados
     var apkDetails by remember(app.packageName) { mutableStateOf(AppStorageInspector.getCachedApkDetails(app.packageName)) }
-    var storageBreakdown by remember(app.packageName) { mutableStateOf(AppStorageInspector.getCachedStorage(app.packageName)) }
+    var storageBreakdown by remember(app.packageName) { mutableStateOf(AppStorageInspector.getInitialBreakdown(context, app.packageName)) }
     var isMeasuringData by remember(app.packageName) { mutableStateOf(storageBreakdown == null) }
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
 
@@ -138,8 +138,16 @@ fun AppDetailScreen(
             }
         }
         launch(Dispatchers.IO) {
-            isMeasuringData = true
-            val data = AppStorageInspector.measureAppData(context, app.packageName, forceRefresh = true)
+            if (storageBreakdown == null) {
+                val initial = AppStorageInspector.getInitialBreakdown(context, app.packageName)
+                if (initial != null) {
+                    withContext(Dispatchers.Main) {
+                        storageBreakdown = initial
+                        isMeasuringData = false
+                    }
+                }
+            }
+            val data = AppStorageInspector.measureAppData(context, app.packageName, forceRefresh = false)
             withContext(Dispatchers.Main) {
                 storageBreakdown = data
                 isMeasuringData = false
@@ -151,7 +159,7 @@ fun AppDetailScreen(
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
                 coroutineScope.launch(Dispatchers.IO) {
-                    val data = AppStorageInspector.measureAppData(context, app.packageName, forceRefresh = true)
+                    val data = AppStorageInspector.measureAppData(context, app.packageName, forceRefresh = false)
                     withContext(Dispatchers.Main) {
                         storageBreakdown = data
                     }
