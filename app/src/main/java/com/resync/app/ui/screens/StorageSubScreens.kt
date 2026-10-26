@@ -1,5 +1,6 @@
 package com.resync.app.ui.screens
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -8,6 +9,9 @@ import android.os.Environment
 import android.os.StatFs
 import android.provider.Settings
 import android.widget.Toast
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -299,6 +303,25 @@ fun StorageCacheScreen(
         }
     }
 
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                val hasRoot = runCatching { Shell.isAppGrantedRoot() == true }.getOrDefault(false)
+                val granted = checkUsageStatsPermission()
+                val newHasUsage = granted || hasRoot
+                hasUsagePermission = newHasUsage
+                if (granted && !isCalculating && cacheList.isEmpty()) {
+                    coroutineScope.launch { loadCacheData() }
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
     fun clearAppCache(item: AppCacheItem) {
         coroutineScope.launch {
             val hasRoot = withContext(Dispatchers.IO) {
@@ -556,9 +579,23 @@ fun StorageCacheScreen(
                         Button(
                             onClick = {
                                 try {
-                                    context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                    val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
+                                        data = Uri.parse("package:${context.packageName}")
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
+                                    context.startActivity(intent)
+                                } catch (_: ActivityNotFoundException) {
+                                    try {
+                                        context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                    } catch (_: Exception) {
+                                        Toast.makeText(context, "Abra as Configurações de Acesso de Uso", Toast.LENGTH_SHORT).show()
+                                    }
                                 } catch (_: Exception) {
-                                    Toast.makeText(context, "Abra as Configurações de Acesso de Uso", Toast.LENGTH_SHORT).show()
+                                    try {
+                                        context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                    } catch (_: Exception) {
+                                        Toast.makeText(context, "Abra as Configurações de Acesso de Uso", Toast.LENGTH_SHORT).show()
+                                    }
                                 }
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = StatusWarning),

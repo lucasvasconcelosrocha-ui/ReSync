@@ -1,6 +1,7 @@
 package com.resync.app.ui.screens
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -239,6 +240,23 @@ fun PermissionsScreen(
         }
     }
 
+    fun openUsageAccessSettings() {
+        try {
+            val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
+                data = Uri.parse("package:${context.packageName}")
+            }
+            context.startActivity(intent)
+        } catch (_: ActivityNotFoundException) {
+            try {
+                context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+            } catch (_: Exception) {}
+        } catch (_: Exception) {
+            try {
+                context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+            } catch (_: Exception) {}
+        }
+    }
+
     // Consolidated interactive list of permissions and system accesses
     val unifiedPermissions = remember(permissionsState) {
         val list = mutableListOf<UnifiedPermissionItem>()
@@ -373,6 +391,19 @@ fun PermissionsScreen(
                         permissionLauncher.launch(btPerms.toTypedArray())
                     }
                 }
+            )
+        )
+
+        // 8. Acesso a Dados de Uso
+        val usageOk = permissionsState.hasUsageStats
+        list.add(
+            UnifiedPermissionItem(
+                title = "Acesso a Dados de Uso",
+                description = "Necessário para cálculo de cache de aplicativos sem acesso root e diagnóstico de armazenamento.",
+                status = if (usageOk) PermissionStatusType.PERMITTED else PermissionStatusType.OPTIONAL,
+                icon = Icons.Default.Storage,
+                actionLabel = if (usageOk) "Concedido" else "Conceder",
+                onAction = { openUsageAccessSettings() }
             )
         )
 

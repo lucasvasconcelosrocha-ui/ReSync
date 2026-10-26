@@ -52,6 +52,12 @@ class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
     private val pendingRouteFlow = kotlinx.coroutines.flow.MutableSharedFlow<String>(extraBufferCapacity = 1)
 
+    private val notificationPermissionLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { _ ->
+        viewModel.refreshAllPermissions()
+    }
+
     override fun onResume() {
         super.onResume()
         viewModel.refreshAllPermissions()
@@ -69,11 +75,29 @@ class MainActivity : ComponentActivity() {
         if (intent?.getBooleanExtra("OPEN_ACTIVE_OPERATIONS", false) == true) {
             pendingRouteFlow.tryEmit(Screen.ActiveBackups.createRoute(fromStarted = false))
         }
+        if (intent?.getBooleanExtra("OPEN_APP_UPDATE", false) == true) {
+            try {
+                val nm = getSystemService(android.app.NotificationManager::class.java)
+                nm?.cancel(com.resync.app.worker.AppUpdateWorker.NOTIFICATION_ID)
+            } catch (_: Throwable) {}
+            viewModel.checkForUpdateManual()
+            pendingRouteFlow.tryEmit(Screen.SystemSettings.route)
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         handleNotificationIntent(intent)
+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            if (androidx.core.content.ContextCompat.checkSelfPermission(
+                    this,
+                    android.Manifest.permission.POST_NOTIFICATIONS
+                ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
 
         val prefs = getSharedPreferences("resync_prefs", Context.MODE_PRIVATE)
         val legacyPrefs = getSharedPreferences("odin_prefs", Context.MODE_PRIVATE)

@@ -361,6 +361,11 @@ class ReSyncApplication : Application() {
         try {
             com.resync.app.engine.ScheduleManager.getInstance(this)
         } catch (_: Throwable) {}
+
+        // Enfileira verificação periódica de atualização em background via WorkManager
+        try {
+            com.resync.app.worker.AppUpdateWorker.enqueuePeriodicWork(this)
+        } catch (_: Throwable) {}
     }
 }
 

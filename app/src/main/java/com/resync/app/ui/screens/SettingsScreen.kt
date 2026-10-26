@@ -299,7 +299,7 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Versão Atual: v$installedVersionName (teste de atualização)", fontWeight = FontWeight.SemiBold, color = TextPrimary, fontSize = 13.sp)
+                            Text("Versão Atual: v$installedVersionName", fontWeight = FontWeight.SemiBold, color = TextPrimary, fontSize = 13.sp)
                             Text("Build $installedVersionCode", fontSize = 11.sp, color = TextSecondary)
                         }
                         Button(

@@ -2244,6 +2244,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (releaseInfo != null) {
                     if (dismissedVersionForSession != releaseInfo.versionCode) {
                         _updateState.value = UpdateState.Available(releaseInfo)
+                        com.resync.app.worker.AppUpdateWorker.showUpdateNotification(context, releaseInfo)
                     }
                 }
             }.onFailure { e ->
