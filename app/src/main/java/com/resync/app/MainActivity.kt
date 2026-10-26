@@ -333,7 +333,8 @@ class MainActivity : ComponentActivity() {
                                         onNavigateToBackupManager = { navController.navigate(Screen.BackupManager.createRoute(source = "all", autoSingle = false)) },
                                         onNavigateToCategory = { cat -> navController.navigate(Screen.CategoryBackup.createRoute(cat)) },
                                         onNavigateToStorageDetails = { navController.navigate(Screen.StorageDetails.route) },
-                                        onNavigateToScheduledBackups = { navController.navigate(Screen.ScheduledBackups.route) }
+                                        onNavigateToScheduledBackups = { navController.navigate(Screen.ScheduledBackups.route) },
+                                        onNavigateToFolders = { navController.navigate(Screen.FoldersBackup.route) }
                                     )
                                 }
 
@@ -448,6 +449,13 @@ class MainActivity : ComponentActivity() {
 
                                 composable(Screen.ScheduledBackups.route) {
                                     ScheduledBackupsScreen(
+                                        viewModel = viewModel,
+                                        onBack = { navController.popBackStack() }
+                                    )
+                                }
+
+                                composable(Screen.FoldersBackup.route) {
+                                    FoldersBackupScreen(
                                         viewModel = viewModel,
                                         onBack = { navController.popBackStack() }
                                     )

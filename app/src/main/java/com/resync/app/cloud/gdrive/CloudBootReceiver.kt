@@ -26,7 +26,10 @@ class CloudBootReceiver : BroadcastReceiver() {
             return
         }
 
-        AppLogger.i(TAG, "Dispositivo reiniciado ou pacote atualizado (action=$action). Verificando transferências pendentes no Room...")
+        AppLogger.i(TAG, "Dispositivo reiniciado ou pacote atualizado (action=$action). Verificando transferências pendentes e reativando agendamentos...")
+        runCatching {
+            com.resync.app.engine.ScheduleManager.getInstance(context).rescheduleAll()
+        }
 
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {

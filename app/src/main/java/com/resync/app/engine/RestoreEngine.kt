@@ -606,14 +606,19 @@ class RestoreEngine(private val context: Context) {
             dbHelper.insertLog(LogLevel.WARN, "RestoreEngine", "Restauração cancelada pelo usuário.")
             throw e
         } catch (e: Exception) {
-            dbHelper.insertLog(LogLevel.ERROR, "RestoreEngine", "Erro crítico na restauração: ${e.message}")
+            val userMsg = when {
+                e.message?.contains("Senha", ignoreCase = true) == true -> "Senha incorreta ou chave de descriptografia inválida."
+                e.message?.contains("corrompido", ignoreCase = true) == true || e.message?.contains("adulterado", ignoreCase = true) == true -> "Arquivo corrompido ou adulterado."
+                else -> e.message ?: "Erro desconhecido durante a restauração."
+            }
+            dbHelper.insertLog(LogLevel.ERROR, "RestoreEngine", "Erro na restauração: $userMsg")
             send(
                 RestoreProgress(
-                    stage = "Erro Crítico",
-                    currentItemName = "Falha na restauração: ${e.message}",
+                    stage = "Erro na Restauração",
+                    currentItemName = userMsg,
                     progressPercent = 1.0f,
                     isFinished = true,
-                    error = e.message,
+                    error = userMsg,
                     currentItemIndex = currentItemIdx,
                     totalItems = totalRestoreItems,
                     completedItems = completedItemsList.toList()

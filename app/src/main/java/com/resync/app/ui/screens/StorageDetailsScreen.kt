@@ -101,6 +101,7 @@ fun StorageDetailsScreen(
 
     val installedApps by viewModel.installedApps.collectAsStateWithLifecycle()
     val isLoadingApps by viewModel.isLoadingInstalledApps.collectAsStateWithLifecycle()
+    val totalAppCacheBytes by viewModel.totalAppCacheBytes.collectAsStateWithLifecycle()
 
     var isRefreshing by remember { mutableStateOf(false) }
 
@@ -268,8 +269,8 @@ fun StorageDetailsScreen(
         // 3. Aplicativos (soma real dos apps instalados)
         val appsSum = installedApps.sumOf { it.sizeBytes }
 
-        // 4. Cache estimada/real
-        val cacheSum = (used * 0.04).toLong().coerceAtLeast(100L * 1024L * 1024L)
+        // 4. Cache real lida do State compartilhado com a tela de limpeza
+        val cacheSum = if (totalAppCacheBytes > 0L) totalAppCacheBytes else (used * 0.04).toLong().coerceAtLeast(100L * 1024L * 1024L)
 
         // 5. Sistema operacional (/system)
         val systemStat = try { StatFs(Environment.getRootDirectory().path) } catch (_: Exception) { null }
@@ -297,7 +298,7 @@ fun StorageDetailsScreen(
         }
     }
 
-    LaunchedEffect(installedApps) {
+    LaunchedEffect(installedApps, totalAppCacheBytes) {
         loadStorageMetrics()
     }
 

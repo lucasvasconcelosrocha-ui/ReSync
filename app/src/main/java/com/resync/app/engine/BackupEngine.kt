@@ -235,6 +235,16 @@ class BackupEngine(private val context: Context) {
 
         val completedItemsList = mutableListOf<CompletedItemInfo>()
         val rateLimiter = ProgressRateLimiter(500L) // Máximo 2 atualizações de progresso por segundo
+        val resolvedPassword = if (!encryptionPassword.isNullOrEmpty()) {
+            encryptionPassword
+        } else {
+            val prefs = context.getSharedPreferences("swiftvault_prefs", Context.MODE_PRIVATE)
+            val strategy = prefs.getString("crypto_strategy", "ACCOUNT")
+            if (strategy == "ADVANCED") {
+                val enc = prefs.getString("crypto_adv_pass", null)
+                enc?.let { runCatching { SecurityManager.decryptHardwareString(it) }.getOrNull() }
+            } else null
+        }
         var latestRollingSpeed = 0L
         cpuGovernor.startStage("Iniciando")
         cpuGovernor.startPeriodicCpuLogging(10000L) { latestRollingSpeed } // Log a cada 10s: CPU, MB/s e Temperatura
@@ -1667,8 +1677,8 @@ class BackupEngine(private val context: Context) {
                 androidRelease = android.os.Build.VERSION.RELEASE,
                 rootManager = CapabilityManager(context).getInstalledRootManagerPackage(),
                 createdAt = System.currentTimeMillis(),
-                isEncrypted = !encryptionPassword.isNullOrEmpty(),
-                encryptionAlgorithm = if (!encryptionPassword.isNullOrEmpty()) "AES-256-GCM-CHUNKED" else "NONE",
+                isEncrypted = true,
+                encryptionAlgorithm = if (!resolvedPassword.isNullOrEmpty()) "RESY-AES-256-GCM-ADVANCED" else "RESY-AES-256-GCM-ACCOUNT",
                 compressionAlgorithm = "ZIP-MIXED",
                 totalSizeBytes = totalEstimatedSize,
                 items = manifestItems,
@@ -1700,7 +1710,7 @@ class BackupEngine(private val context: Context) {
                 outputFile = stagingFile,
                 manifest = manifest,
                 entries = packEntries,
-                encryptionPassword = encryptionPassword,
+                encryptionPassword = resolvedPassword,
                 onItemProgress = { written, total, currentItemName, itemIndex, totalItems, itemType ->
                     val curEntry = packEntries.getOrNull(itemIndex - 1)
                     val curPkg = curEntry?.manifestItem?.metadata?.get("packageName") ?: ""

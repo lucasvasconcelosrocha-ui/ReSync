@@ -87,10 +87,16 @@ object ArchiveEngine {
 
                 val isPreCompressed = HighSpeedStreamingEngine.shouldBypassCompression(entry.entryName)
 
+                val isBypassedFromEncryption = entry.manifestItem.type == BackupItemType.APP_APK ||
+                        entry.manifestItem.type == BackupItemType.WALLPAPER ||
+                        entry.entryName.endsWith(".apk") ||
+                        entry.entryName.startsWith("wallpapers/")
+                val shouldEncrypt = !isBypassedFromEncryption || !encryptionPassword.isNullOrEmpty()
+
                 val shouldStore = entry.isStoreOnly ||
                         entry.manifestItem.compressionMethod == "STORED" ||
                         isPreCompressed ||
-                        !encryptionPassword.isNullOrEmpty()
+                        shouldEncrypt
 
                 if (shouldStore) {
                     zipEntry.method = ZipEntry.STORED
@@ -112,7 +118,7 @@ object ArchiveEngine {
 
                 entryInputStream.use { input ->
                     var lastProgressReportMs = 0L
-                    if (!encryptionPassword.isNullOrEmpty()) {
+                    if (shouldEncrypt) {
                         SecurityManager.encryptStreamChunked(input, zos, encryptionPassword) { written ->
                             totalBytesWritten += written
                             val now = System.currentTimeMillis()
@@ -458,9 +464,6 @@ object ArchiveEngine {
                             BufferedInputStream(rawIn, BUFFER_SIZE).use { bis ->
                                 FileOutputStream(outFile).use { fos ->
                                     if (SecurityManager.isChunkedEncryptedStream(bis)) {
-                                        if (decryptionPassword.isNullOrEmpty()) {
-                                            throw IllegalArgumentException("A entrada '${entry.name}' está criptografada e requer a senha.")
-                                        }
                                         SecurityManager.decryptStreamChunked(bis, fos, decryptionPassword) { written ->
                                             bytesRestored += written
                                             kotlinx.coroutines.runBlocking {

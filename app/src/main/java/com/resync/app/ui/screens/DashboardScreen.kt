@@ -109,7 +109,8 @@ fun DashboardScreen(
     onNavigateToBackupManager: () -> Unit = {},
     onNavigateToCategory: (String) -> Unit = {},
     onNavigateToStorageDetails: () -> Unit = {},
-    onNavigateToScheduledBackups: () -> Unit = {}
+    onNavigateToScheduledBackups: () -> Unit = {},
+    onNavigateToFolders: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -383,80 +384,12 @@ fun DashboardScreen(
                 modifier = Modifier.padding(start = 2.dp, bottom = 8.dp)
             )
 
-            // a) ARMAZENAMENTO INTERNO (Tempo Real com StatFs a cada 2s)
+            // a) CÁLCULOS DE ARMAZENAMENTO E DRIVE
             val freeGb = internalStorage.freeBytes.toDouble() / (1024.0 * 1024.0 * 1024.0)
             val totalGb = internalStorage.totalBytes.toDouble() / (1024.0 * 1024.0 * 1024.0)
             val internalProgress = (internalStorage.usedPercent / 100f).coerceIn(0f, 1f)
             val internalUsedText = String.format(Locale("pt", "BR"), "%.1f%% usado", internalStorage.usedPercent)
             val internalStorageText = String.format(Locale("pt", "BR"), "%.2f GB livres de %.2f GB", freeGb, totalGb)
-
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(StandardCardShape)
-                    .border(1.dp, StandardCardBorder, StandardCardShape)
-                    .clickable(onClick = onNavigateToStorageDetails),
-                colors = CardDefaults.cardColors(containerColor = StandardCardBg)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(primaryAccent.copy(alpha = 0.15f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.PhoneAndroid,
-                                contentDescription = null,
-                                tint = primaryAccent,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "Armazenamento interno",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = TextPrimary
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Text(
-                        text = internalStorageText,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = TextPrimary
-                    )
-
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    LinearProgressIndicator(
-                        progress = { internalProgress },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(8.dp)
-                            .clip(RoundedCornerShape(4.dp)),
-                        color = primaryAccent,
-                        trackColor = DarkBg
-                    )
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    Text(
-                        text = internalUsedText,
-                        fontSize = 12.sp,
-                        color = TextSecondary
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
 
             // b) GOOGLE DRIVE (Conta ativa, photoUrl/initial, quota e métricas)
             val isDriveOffline = googleDriveState == GoogleDriveState.CONNECTION_ERROR
@@ -470,183 +403,358 @@ fun DashboardScreen(
             val driveProgress = if (quotaLimit > 0) (quotaUsed.toFloat() / quotaLimit.toFloat()).coerceIn(0f, 1f) else 0f
             val driveUsedPercent = if (quotaLimit > 0) (quotaUsed.toDouble() / quotaLimit.toDouble() * 100.0) else 0.0
 
+            val backupsCountText = when (val b = remoteBackupsState) {
+                is RemoteBackupsState.Loaded -> "${b.backups.size}"
+                is RemoteBackupsState.Loading -> "..."
+                else -> if (activeAccount != null) "..." else "—"
+            }
+
+            val lastSyncFormatted = when {
+                remoteBackupsState is RemoteBackupsState.Loaded && (remoteBackupsState as RemoteBackupsState.Loaded).backups.isNotEmpty() -> {
+                    val maxTime = (remoteBackupsState as RemoteBackupsState.Loaded).backups.maxOf { it.modifiedTime }
+                    SimpleDateFormat("dd/MM/yyyy, HH:mm", Locale.getDefault()).format(Date(maxTime))
+                }
+                activeAccount?.lastSyncTimestamp != null && activeAccount.lastSyncTimestamp > 0L -> {
+                    SimpleDateFormat("dd/MM/yyyy, HH:mm", Locale.getDefault()).format(Date(activeAccount.lastSyncTimestamp))
+                }
+                googleDriveState == GoogleDriveState.CONNECTED -> "Nenhum backup"
+                else -> "—"
+            }
+
+            // CARD UNIFICADO: GOOGLE DRIVE + ARMAZENAMENTO INTERNO
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(StandardCardShape)
-                    .border(1.dp, StandardCardBorder, StandardCardShape)
-                    .clickable(onClick = onNavigateToCloud),
+                    .border(1.dp, StandardCardBorder, StandardCardShape),
                 colors = CardDefaults.cardColors(containerColor = StandardCardBg)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    // Linha Superior: Foto pequena + E-mail + Status/Atualizando
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                Column(modifier = Modifier.padding(14.dp)) {
+                    // PARTE 1: GOOGLE DRIVE
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(onClick = onNavigateToCloud)
                     ) {
                         Row(
+                            modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.weight(1f)
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            UserAvatar(
-                                photoUrl = activeAccount?.photoUrl,
-                                displayName = activeAccount?.name,
-                                email = activeAccount?.email,
-                                size = 28.dp,
-                                borderColor = AccentElectricCyan,
-                                borderWidth = 1.dp,
-                                accentColor = AccentElectricCyan
-                            )
-
-                            Spacer(modifier = Modifier.width(8.dp))
-
-                            Column {
-                                Text(
-                                    text = "Google Drive",
-                                    fontSize = 11.sp,
-                                    color = TextSecondary,
-                                    fontWeight = FontWeight.Medium
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                UserAvatar(
+                                    photoUrl = activeAccount?.photoUrl,
+                                    displayName = activeAccount?.name,
+                                    email = activeAccount?.email,
+                                    size = 26.dp,
+                                    borderColor = AccentElectricCyan,
+                                    borderWidth = 1.dp,
+                                    accentColor = AccentElectricCyan
                                 )
+
+                                Spacer(modifier = Modifier.width(8.dp))
+
+                                Column {
+                                    Text(
+                                        text = "Google Drive",
+                                        fontSize = 11.sp,
+                                        color = TextSecondary,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        text = activeAccount?.email ?: "Nenhuma conta ativa",
+                                        fontSize = 12.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextPrimary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (isRefreshingActiveAccount) {
+                                    Text(
+                                        text = "Atualizando…",
+                                        fontSize = 11.sp,
+                                        color = AccentElectricCyan,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                } else if (isDriveOffline) {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(StatusWarning.copy(alpha = 0.2f))
+                                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = "Sem conexão",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = StatusWarning
+                                        )
+                                    }
+                                } else if (isDriveSessionExpired) {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(AccentSunsetOrange.copy(alpha = 0.2f))
+                                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = "Reconectar",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = AccentSunsetOrange
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        if (activeAccount != null) {
+                            val quotaText = if (quotaLimit > 0) {
+                                val freeQuota = maxOf(0L, quotaLimit - quotaUsed)
+                                "${formatStorageMetric(freeQuota)} livres de ${formatStorageMetric(quotaLimit)}"
+                            } else {
+                                "${formatStorageMetric(quotaUsed)} usados"
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 Text(
-                                    text = activeAccount?.email ?: "Nenhuma conta ativa",
+                                    text = quotaText,
                                     fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimary,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = TextPrimary
                                 )
-                            }
-                        }
-
-                        // Badge de status / Atualizando
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (isRefreshingActiveAccount) {
                                 Text(
-                                    text = "Atualizando…",
-                                    fontSize = 11.sp,
-                                    color = AccentElectricCyan,
-                                    fontWeight = FontWeight.Medium
+                                    text = String.format(Locale("pt", "BR"), "%.1f%% usado", driveUsedPercent),
+                                    fontSize = 11.5.sp,
+                                    color = TextSecondary
                                 )
-                            } else if (isDriveOffline) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(StatusWarning.copy(alpha = 0.2f))
-                                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                                ) {
-                                    Text(
-                                        text = "Sem conexão",
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = StatusWarning
-                                    )
-                                }
-                            } else if (isDriveSessionExpired) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(AccentSunsetOrange.copy(alpha = 0.2f))
-                                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                                ) {
-                                    Text(
-                                        text = "Reconectar",
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = AccentSunsetOrange
-                                    )
-                                }
                             }
-                        }
-                    }
 
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Quota: livres de total ou usado
-                    if (activeAccount != null) {
-                        val quotaText = if (quotaLimit > 0) {
-                            val freeQuota = maxOf(0L, quotaLimit - quotaUsed)
-                            "${formatStorageMetric(freeQuota)} livres de ${formatStorageMetric(quotaLimit)}"
+                            if (quotaLimit > 0) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                LinearProgressIndicator(
+                                    progress = { driveProgress },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(6.dp)
+                                        .clip(RoundedCornerShape(3.dp)),
+                                    color = AccentElectricCyan,
+                                    trackColor = DarkBg
+                                )
+                            }
                         } else {
-                            "${formatStorageMetric(quotaUsed)} usados"
-                        }
-
-                        Text(
-                            text = quotaText,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = TextPrimary
-                        )
-
-                        if (quotaLimit > 0) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            LinearProgressIndicator(
-                                progress = { driveProgress },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(8.dp)
-                                    .clip(RoundedCornerShape(4.dp)),
-                                color = AccentElectricCyan,
-                                trackColor = DarkBg
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = String.format(Locale("pt", "BR"), "%.1f%% usado", driveUsedPercent),
+                                text = "Toque para vincular sua conta do Google Drive",
                                 fontSize = 12.sp,
                                 color = TextSecondary
                             )
                         }
-                    } else {
-                        Text(
-                            text = "Toque para vincular sua conta do Google Drive",
-                            fontSize = 13.sp,
-                            color = TextSecondary
-                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Backups em nuvem: ", fontSize = 11.sp, color = TextSecondary)
+                                Text(backupsCountText, fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                            }
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Última sincronização: ", fontSize = 11.sp, color = TextSecondary)
+                                Text(lastSyncFormatted, fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                            }
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(10.dp))
                     HorizontalDivider(color = DarkCardBorder.copy(alpha = 0.5f), thickness = 0.8.dp)
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // Backups em nuvem e Última sincronização (mantendo a fonte de dados de Backups)
-                    val backupsCountText = when (val b = remoteBackupsState) {
-                        is RemoteBackupsState.Loaded -> "${b.backups.size}"
-                        is RemoteBackupsState.Loading -> "..."
-                        else -> if (activeAccount != null) "..." else "—"
-                    }
-
-                    val lastSyncFormatted = when {
-                        remoteBackupsState is RemoteBackupsState.Loaded && (remoteBackupsState as RemoteBackupsState.Loaded).backups.isNotEmpty() -> {
-                            val maxTime = (remoteBackupsState as RemoteBackupsState.Loaded).backups.maxOf { it.modifiedTime }
-                            SimpleDateFormat("dd/MM/yyyy, HH:mm", Locale.getDefault()).format(Date(maxTime))
-                        }
-                        activeAccount?.lastSyncTimestamp != null && activeAccount.lastSyncTimestamp > 0L -> {
-                            SimpleDateFormat("dd/MM/yyyy, HH:mm", Locale.getDefault()).format(Date(activeAccount.lastSyncTimestamp))
-                        }
-                        googleDriveState == GoogleDriveState.CONNECTED -> "Nenhum backup"
-                        else -> "—"
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                    // PARTE 2: ARMAZENAMENTO INTERNO
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(onClick = onNavigateToStorageDetails)
                     ) {
-                        Column {
-                            Text("Backups em nuvem", fontSize = 11.sp, color = TextSecondary)
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(backupsCountText, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(26.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(primaryAccent.copy(alpha = 0.15f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PhoneAndroid,
+                                        contentDescription = null,
+                                        tint = primaryAccent,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Armazenamento interno",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+                            }
+
+                            Text(
+                                text = internalUsedText,
+                                fontSize = 11.5.sp,
+                                color = TextSecondary
+                            )
                         }
 
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text("Última sincronização", fontSize = 11.sp, color = TextSecondary)
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(lastSyncFormatted, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
-                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                            text = internalStorageText,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = TextPrimary
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        LinearProgressIndicator(
+                            progress = { internalProgress },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp)),
+                            color = primaryAccent,
+                            trackColor = DarkBg
+                        )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // ==========================================
+            // SEÇÃO CATEGORIAS (Subida para logo abaixo do card unificado)
+            // ==========================================
+            Text(
+                text = "CATEGORIAS",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+                color = TextSecondary,
+                modifier = Modifier.padding(start = 2.dp, bottom = 8.dp)
+            )
+
+            // Linha 1 de chips: Aplicativos, Mensagens, Chamadas
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                CategoryChip(
+                    title = "Aplicativos",
+                    icon = Icons.Default.Apps,
+                    primaryAccent = primaryAccent,
+                    modifier = Modifier.weight(1f),
+                    onClick = { onNavigateToCategory("apps") }
+                )
+                CategoryChip(
+                    title = "Mensagens",
+                    icon = Icons.Default.Message,
+                    primaryAccent = primaryAccent,
+                    modifier = Modifier.weight(1f),
+                    onClick = { onNavigateToCategory("messages") }
+                )
+                CategoryChip(
+                    title = "Chamadas",
+                    icon = Icons.Default.Call,
+                    primaryAccent = primaryAccent,
+                    modifier = Modifier.weight(1f),
+                    onClick = { onNavigateToCategory("calls") }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Linha 2 de chips: Contatos, Pastas, Wi-Fi
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                CategoryChip(
+                    title = "Contatos",
+                    icon = Icons.Default.Contacts,
+                    primaryAccent = primaryAccent,
+                    modifier = Modifier.weight(1f),
+                    onClick = { onNavigateToCategory("contacts") }
+                )
+                CategoryChip(
+                    title = "Pastas",
+                    icon = Icons.Default.Folder,
+                    primaryAccent = primaryAccent,
+                    modifier = Modifier.weight(1f),
+                    onClick = onNavigateToFolders
+                )
+                CategoryChip(
+                    title = "Wi-Fi",
+                    icon = Icons.Default.Wifi,
+                    primaryAccent = primaryAccent,
+                    modifier = Modifier.weight(1f),
+                    onClick = { onNavigateToCategory("wifi") }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Linha 3 de chips: Bluetooth, Papéis de parede, DNS
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                CategoryChip(
+                    title = "Bluetooth",
+                    icon = Icons.Default.Bluetooth,
+                    primaryAccent = primaryAccent,
+                    modifier = Modifier.weight(1f),
+                    onClick = { onNavigateToCategory("bluetooth") }
+                )
+                CategoryChip(
+                    title = "Papéis de parede",
+                    icon = Icons.Default.Wallpaper,
+                    primaryAccent = primaryAccent,
+                    modifier = Modifier.weight(1f),
+                    onClick = { onNavigateToCategory("wallpaper") }
+                )
+                CategoryChip(
+                    title = "DNS",
+                    icon = Icons.Default.Dns,
+                    primaryAccent = primaryAccent,
+                    modifier = Modifier.weight(1f),
+                    onClick = { onNavigateToCategory("dns") }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
 
             // c) STATUS DO ROOT (Estilo Swift Backup)
             val isRootGranted = permissionsState.isRootGranted
@@ -973,106 +1081,6 @@ fun DashboardScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // CHIPS DE CATEGORIAS (Estilo Swift Backup: Aplicativos, Mensagens, Registro de chamadas, Pastas, Papéis de parede, Wi-Fi)
-            Text(
-                text = "CATEGORIAS",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp,
-                color = TextSecondary,
-                modifier = Modifier.padding(start = 2.dp, bottom = 10.dp)
-            )
-
-            // Linha 1 de chips: Aplicativos, Mensagens, Chamadas
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                CategoryChip(
-                    title = "Aplicativos",
-                    icon = Icons.Default.Apps,
-                    primaryAccent = primaryAccent,
-                    modifier = Modifier.weight(1f),
-                    onClick = { onNavigateToCategory("apps") }
-                )
-                CategoryChip(
-                    title = "Mensagens",
-                    icon = Icons.Default.Message,
-                    primaryAccent = primaryAccent,
-                    modifier = Modifier.weight(1f),
-                    onClick = { onNavigateToCategory("messages") }
-                )
-                CategoryChip(
-                    title = "Chamadas",
-                    icon = Icons.Default.Call,
-                    primaryAccent = primaryAccent,
-                    modifier = Modifier.weight(1f),
-                    onClick = { onNavigateToCategory("calls") }
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Linha 2 de chips: Contatos, Pastas, Wi-Fi
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                CategoryChip(
-                    title = "Contatos",
-                    icon = Icons.Default.Contacts,
-                    primaryAccent = primaryAccent,
-                    modifier = Modifier.weight(1f),
-                    onClick = { onNavigateToCategory("contacts") }
-                )
-                CategoryChip(
-                    title = "Pastas",
-                    icon = Icons.Default.Folder,
-                    primaryAccent = primaryAccent,
-                    modifier = Modifier.weight(1f),
-                    onClick = onNavigateToFiles
-                )
-                CategoryChip(
-                    title = "Wi-Fi",
-                    icon = Icons.Default.Wifi,
-                    primaryAccent = primaryAccent,
-                    modifier = Modifier.weight(1f),
-                    onClick = { onNavigateToCategory("wifi") }
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Linha 3 de chips: Bluetooth, Papéis de parede, DNS
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                CategoryChip(
-                    title = "Bluetooth",
-                    icon = Icons.Default.Bluetooth,
-                    primaryAccent = primaryAccent,
-                    modifier = Modifier.weight(1f),
-                    onClick = { onNavigateToCategory("bluetooth") }
-                )
-                CategoryChip(
-                    title = "Papéis de parede",
-                    icon = Icons.Default.Wallpaper,
-                    primaryAccent = primaryAccent,
-                    modifier = Modifier.weight(1f),
-                    onClick = { onNavigateToCategory("wallpaper") }
-                )
-                CategoryChip(
-                    title = "DNS",
-                    icon = Icons.Default.Dns,
-                    primaryAccent = primaryAccent,
-                    modifier = Modifier.weight(1f),
-                    onClick = { onNavigateToCategory("dns") }
-                )
-            }
-
             // Espaço seguro inferior para a lista não ficar coberta pela barra flutuante
             Spacer(modifier = Modifier.height(36.dp))
         }
@@ -1097,14 +1105,14 @@ private fun CategoryChip(
 ) {
     Surface(
         modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
-            .border(1.dp, DarkCardBorder, RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(16.dp))
+            .border(1.dp, DarkCardBorder, RoundedCornerShape(16.dp))
             .clickable(onClick = onClick),
         color = DarkSurfaceVariant.copy(alpha = 0.85f),
-        shape = RoundedCornerShape(20.dp)
+        shape = RoundedCornerShape(16.dp)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp),
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
@@ -1112,16 +1120,16 @@ private fun CategoryChip(
                 imageVector = icon,
                 contentDescription = title,
                 tint = primaryAccent,
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(15.dp)
             )
-            Spacer(modifier = Modifier.width(6.dp))
+            Spacer(modifier = Modifier.width(3.dp))
             Text(
                 text = title,
-                fontSize = 11.5.sp,
+                fontSize = 10.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = TextPrimary,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                softWrap = false
             )
         }
     }

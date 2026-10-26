@@ -36,7 +36,7 @@ import com.resync.app.ui.viewmodel.MainViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ScheduledBackupsScreen(
     viewModel: MainViewModel,
@@ -381,12 +381,11 @@ fun ScheduledBackupsScreen(
 
                             Spacer(modifier = Modifier.height(10.dp))
 
-                            // Chips de alvos incluídos
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState()),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            // Chips de alvos incluídos usando FlowRow para não cortar
+                            FlowRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 item.targetItems.forEach { target ->
                                     val (label, color) = when (target) {
@@ -414,40 +413,68 @@ fun ScheduledBackupsScreen(
                             HorizontalDivider(color = DarkCardBorder.copy(alpha = 0.5f))
                             Spacer(modifier = Modifier.height(8.dp))
 
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                val lastRunText = if (item.lastRunTimestamp > 0L) {
-                                    val dateStr = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(item.lastRunTimestamp))
-                                    "Último: $dateStr (${item.lastRunStatus})"
-                                } else {
-                                    item.lastRunStatus
-                                }
+                            val nextRunTimestamp = remember(item) { scheduleManager.calculateNextRun(item) }
+                            val nextRunStr = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(nextRunTimestamp))
+                            val lastRunText = if (item.lastRunTimestamp > 0L) {
+                                val dateStr = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(item.lastRunTimestamp))
+                                "Último: $dateStr (${item.lastRunStatus})"
+                            } else {
+                                item.lastRunStatus
+                            }
 
-                                Text(
-                                    text = lastRunText,
-                                    fontSize = 11.sp,
-                                    color = TextMuted,
-                                    modifier = Modifier.weight(1f)
-                                )
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Column(modifier = Modifier.weight(1f).padding(end = 6.dp)) {
+                                        Text(
+                                            text = "Próxima: $nextRunStr",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = primaryAccent
+                                        )
+                                        Text(
+                                            text = lastRunText,
+                                            fontSize = 10.sp,
+                                            color = TextMuted,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
 
-                                Row {
+                                    Button(
+                                        onClick = {
+                                            scheduleManager.runScheduleNow(item.id)
+                                            Toast.makeText(context, "Executando '${item.title}' agora...", Toast.LENGTH_SHORT).show()
+                                        },
+                                        shape = RoundedCornerShape(8.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = primaryAccent),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                        modifier = Modifier.height(30.dp)
+                                    ) {
+                                        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.Black, modifier = Modifier.size(13.dp))
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Text("Executar agora", fontSize = 11.sp, color = Color.Black, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
+                                    }
+
+                                    Spacer(modifier = Modifier.width(4.dp))
+
                                     IconButton(
                                         onClick = {
                                             editingSchedule = item
                                             showCreateEditDialog = true
                                         },
-                                        modifier = Modifier.size(32.dp)
+                                        modifier = Modifier.size(30.dp)
                                     ) {
-                                        Icon(Icons.Default.Edit, contentDescription = "Editar", tint = primaryAccent, modifier = Modifier.size(16.dp))
+                                        Icon(Icons.Default.Edit, contentDescription = "Editar", tint = primaryAccent, modifier = Modifier.size(15.dp))
                                     }
                                     IconButton(
                                         onClick = { scheduleToDelete = item },
-                                        modifier = Modifier.size(32.dp)
+                                        modifier = Modifier.size(30.dp)
                                     ) {
-                                        Icon(Icons.Default.Delete, contentDescription = "Excluir", tint = StatusError, modifier = Modifier.size(16.dp))
+                                        Icon(Icons.Default.Delete, contentDescription = "Excluir", tint = StatusError, modifier = Modifier.size(15.dp))
                                     }
                                 }
                             }

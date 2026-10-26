@@ -100,6 +100,51 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     )
     val themeAccent: StateFlow<ThemeAccent> = _themeAccent.asStateFlow()
 
+    // Shared Cache Bytes for Storage Cache & Storage Details single source of truth
+    private val _totalAppCacheBytes = MutableStateFlow<Long>(0L)
+    val totalAppCacheBytes: StateFlow<Long> = _totalAppCacheBytes.asStateFlow()
+
+    fun updateTotalCacheBytes(bytes: Long) {
+        _totalAppCacheBytes.value = bytes
+    }
+
+    // Custom Device Label
+    private val _customDeviceLabel = MutableStateFlow(
+        prefs.getString("custom_device_label", null) ?: com.resync.app.util.FormatUtils.getDeviceIdentifier(context)
+    )
+    val customDeviceLabel: StateFlow<String> = _customDeviceLabel.asStateFlow()
+
+    fun setCustomDeviceLabel(label: String) {
+        val trimmed = label.trim()
+        if (trimmed.isNotBlank()) {
+            prefs.edit().putString("custom_device_label", trimmed).apply()
+            _customDeviceLabel.value = trimmed
+        }
+    }
+
+    // Military Grade AES-256-GCM Security & Encryption
+    private val _cryptoStrategy = MutableStateFlow(prefs.getString("crypto_strategy", "ACCOUNT") ?: "ACCOUNT")
+    val cryptoStrategy: StateFlow<String> = _cryptoStrategy.asStateFlow()
+
+    fun setCryptoStrategy(strategy: String) {
+        prefs.edit().putString("crypto_strategy", strategy).apply()
+        _cryptoStrategy.value = strategy
+    }
+
+    fun saveAdvancedPassword(password: String) {
+        val encrypted = SecurityManager.encryptHardwareString(password)
+        prefs.edit().putString("crypto_adv_pass", encrypted).apply()
+    }
+
+    fun getAdvancedPassword(): String? {
+        val enc = prefs.getString("crypto_adv_pass", null) ?: return null
+        return runCatching { SecurityManager.decryptHardwareString(enc) }.getOrNull()
+    }
+
+    fun testPassphrase(password: String): Boolean {
+        return SecurityManager.testPassphrase(password)
+    }
+
     // Performance Mode — removed from UI; optimization is now native and automatic.
     // Kept as no-op stub for binary compatibility during transition.
     @Deprecated("Mode selection removed. Performance is always native/high-speed.")

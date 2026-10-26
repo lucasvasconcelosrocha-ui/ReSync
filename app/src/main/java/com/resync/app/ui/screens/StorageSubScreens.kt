@@ -502,6 +502,9 @@ fun StorageCacheScreen(
     }
 
     val totalCacheBytes = remember(cacheList) { cacheList.sumOf { it.cacheBytes } }
+    LaunchedEffect(totalCacheBytes) {
+        viewModel.updateTotalCacheBytes(totalCacheBytes)
+    }
 
     Scaffold(
         containerColor = DarkBg,
@@ -551,17 +554,18 @@ fun StorageCacheScreen(
 
                         Spacer(modifier = Modifier.height(2.dp))
 
-                        // Linha 2: "Total ocupado: 2,55 GB • 232 de 454 analisados"
+                        // Linha 2: "Total ocupado: 2,55 GB \n 232 de 454 analisados"
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.padding(start = 40.dp)
                         ) {
                             Text(
-                                text = "Total ocupado: ${FormatUtils.formatBytes(totalCacheBytes)} • $analyzedCount de ${totalAppsCount.coerceAtLeast(installedApps.size)} analisados",
+                                text = "Total ocupado: ${FormatUtils.formatBytes(totalCacheBytes)}\n$analyzedCount de ${totalAppsCount.coerceAtLeast(installedApps.size)} analisados",
                                 fontSize = 11.sp,
                                 color = primaryAccent,
                                 fontWeight = FontWeight.Medium,
-                                maxLines = 2
+                                maxLines = 2,
+                                softWrap = true
                             )
                             if (isCalculating) {
                                 Spacer(modifier = Modifier.width(6.dp))

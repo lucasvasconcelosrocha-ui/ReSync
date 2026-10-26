@@ -232,11 +232,12 @@ fun AppUpdateDialog(
                                 onClick = { viewModel.startUpdateDownload(release) },
                                 colors = ButtonDefaults.buttonColors(containerColor = primaryAccent),
                                 shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(44.dp)
                             ) {
-                                Text("Atualizar agora", fontSize = 13.5.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                                Text("Atualizar agora", fontSize = 12.sp, color = Color.Black, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
                             }
                         }
                     }

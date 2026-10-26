@@ -33,6 +33,7 @@ sealed class Screen(val route: String) {
     object CategoryBackup : Screen("category_backup/{category}") {
         fun createRoute(category: String) = "category_backup/$category"
     }
+    object FoldersBackup : Screen("folders_backup")
     object StorageCache : Screen("storage_cache")
     object StorageSystem : Screen("storage_system")
 }

@@ -138,10 +138,9 @@ fun CloudSyncCenterScreen(
     var remoteBackupToDelete by remember { mutableStateOf<DriveFileMetadata?>(null) }
     var showDeleteLabelDialog by remember { mutableStateOf(false) }
     var isDeletingLabelBackups by remember { mutableStateOf(false) }
+    var showEditLabelDialog by remember { mutableStateOf(false) }
 
-    val fullDeviceLabel = remember {
-        FormatUtils.getDeviceIdentifier(context)
-    }
+    val fullDeviceLabel by viewModel.customDeviceLabel.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -1008,7 +1007,7 @@ fun CloudSyncCenterScreen(
                                     shape = RoundedCornerShape(8.dp),
                                     color = DarkBg,
                                     border = BorderStroke(1.dp, DarkCardBorder),
-                                    modifier = Modifier.fillMaxWidth()
+                                    modifier = Modifier.fillMaxWidth().clickable { showEditLabelDialog = true }
                                 ) {
                                     Row(
                                         modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
@@ -1016,10 +1015,11 @@ fun CloudSyncCenterScreen(
                                     ) {
                                         Icon(Icons.Default.Smartphone, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(18.dp))
                                         Spacer(modifier = Modifier.width(8.dp))
-                                        Column {
-                                            Text("Etiqueta atual do dispositivo", fontSize = 10.sp, color = TextMuted)
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text("Etiqueta atual do dispositivo (toque para renomear)", fontSize = 10.sp, color = TextMuted)
                                             Text(fullDeviceLabel, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
                                         }
+                                        Icon(Icons.Default.Edit, contentDescription = "Editar", tint = primaryAccent, modifier = Modifier.size(18.dp))
                                     }
                                 }
 
@@ -1148,30 +1148,62 @@ fun CloudSyncCenterScreen(
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Button(
                                     onClick = {
-                                        activeAccountEmail?.let { viewModel.refreshActiveAccountData(it, isManual = true) }
+                                        activeAccountEmail?.let {
+                                            viewModel.refreshActiveAccountData(it, isManual = true) {
+                                                val qErr = (viewModel.driveQuotaState.value as? DriveQuotaState.Error)?.message
+                                                val bErr = (viewModel.remoteBackupsState.value as? RemoteBackupsState.Error)?.message
+                                                val err = qErr ?: bErr
+                                                if (err != null) {
+                                                    Toast.makeText(context, "Erro na sincronização: $err", Toast.LENGTH_LONG).show()
+                                                }
+                                            }
+                                        }
                                         Toast.makeText(context, "Sincronizando conta ativa...", Toast.LENGTH_SHORT).show()
                                     },
                                     modifier = Modifier.weight(1f).height(48.dp),
                                     shape = RoundedCornerShape(12.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = primaryAccent)
+                                    colors = ButtonDefaults.buttonColors(containerColor = primaryAccent),
+                                    enabled = !isRefreshingActiveAccount
                                 ) {
-                                    Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("SINCRONIZAR", fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, softWrap = false)
+                                    if (isRefreshingActiveAccount) {
+                                        CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.Black, strokeWidth = 2.dp)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("SINCRONIZANDO...", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Color.Black, maxLines = 1)
+                                    } else {
+                                        Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("SINCRONIZAR", fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, softWrap = false)
+                                    }
                                 }
 
                                 OutlinedButton(
                                     onClick = {
-                                        activeAccountEmail?.let { viewModel.refreshActiveAccountData(it, isManual = true) }
+                                        activeAccountEmail?.let {
+                                            viewModel.refreshActiveAccountData(it, isManual = true) {
+                                                val qErr = (viewModel.driveQuotaState.value as? DriveQuotaState.Error)?.message
+                                                val bErr = (viewModel.remoteBackupsState.value as? RemoteBackupsState.Error)?.message
+                                                val err = qErr ?: bErr
+                                                if (err != null) {
+                                                    Toast.makeText(context, "Erro na atualização: $err", Toast.LENGTH_LONG).show()
+                                                }
+                                            }
+                                        }
                                         Toast.makeText(context, "Atualizando dados da conta ativa...", Toast.LENGTH_SHORT).show()
                                     },
                                     modifier = Modifier.weight(1f).height(48.dp),
                                     shape = RoundedCornerShape(12.dp),
-                                    border = BorderStroke(1.dp, primaryAccent)
+                                    border = BorderStroke(1.dp, primaryAccent),
+                                    enabled = !isRefreshingActiveAccount
                                 ) {
-                                    Icon(Icons.Default.Refresh, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("ATUALIZAR", color = primaryAccent, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, softWrap = false)
+                                    if (isRefreshingActiveAccount) {
+                                        CircularProgressIndicator(modifier = Modifier.size(18.dp), color = primaryAccent, strokeWidth = 2.dp)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("ATUALIZANDO...", color = primaryAccent, fontWeight = FontWeight.Bold, fontSize = 11.sp, maxLines = 1)
+                                    } else {
+                                        Icon(Icons.Default.Refresh, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("ATUALIZAR", color = primaryAccent, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, softWrap = false)
+                                    }
                                 }
                             }
 
@@ -1662,7 +1694,10 @@ fun CloudSyncCenterScreen(
         val remoteSmsCount = remoteList.count { it.name.contains("sms", ignoreCase = true) || it.name.contains("message", ignoreCase = true) || it.name.contains("mensag", ignoreCase = true) }
         val remoteCallsCount = remoteList.count { it.name.contains("call", ignoreCase = true) || it.name.contains("chamada", ignoreCase = true) }
         val remoteFoldersCount = remoteList.count { it.name.contains("folder", ignoreCase = true) || it.name.contains("pasta", ignoreCase = true) || it.name.contains("file", ignoreCase = true) }
-        val totalLabelBackups = remoteAppsCount + remoteSmsCount + remoteCallsCount + remoteFoldersCount
+        val remoteBluetoothCount = remoteList.count { it.name.contains("bluetooth", ignoreCase = true) }
+        val remoteDnsCount = remoteList.count { it.name.contains("dns", ignoreCase = true) }
+        val remoteWifiCount = remoteList.count { it.name.contains("wifi", ignoreCase = true) || it.name.contains("wi-fi", ignoreCase = true) }
+        val remoteContactsCount = remoteList.count { it.name.contains("contact", ignoreCase = true) || it.name.contains("contato", ignoreCase = true) }
 
         AlertDialog(
             onDismissRequest = { if (!isDeletingLabelBackups) showDeleteLabelDialog = false },
@@ -1694,11 +1729,15 @@ fun CloudSyncCenterScreen(
                             Text("• $remoteSmsCount Mensagens", fontSize = 12.sp, color = TextSecondary)
                             Text("• $remoteCallsCount Chamadas", fontSize = 12.sp, color = TextSecondary)
                             Text("• $remoteFoldersCount Pastas", fontSize = 12.sp, color = TextSecondary)
+                            Text("• $remoteBluetoothCount Bluetooth", fontSize = 12.sp, color = TextSecondary)
+                            Text("• $remoteDnsCount DNS", fontSize = 12.sp, color = TextSecondary)
+                            Text("• $remoteWifiCount Wi-Fi", fontSize = 12.sp, color = TextSecondary)
+                            Text("• $remoteContactsCount Contatos", fontSize = 12.sp, color = TextSecondary)
                         }
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        "Essa ação não afeta backups locais no aparelho. Papéis de parede e Wi-Fi não são apagados.",
+                        "Essa ação não afeta backups locais no aparelho. Papéis de parede não são apagados.",
                         fontSize = 11.sp,
                         color = TextMuted
                     )
@@ -1712,6 +1751,7 @@ fun CloudSyncCenterScreen(
                             isDeletingLabelBackups = false
                             showDeleteLabelDialog = false
                             Toast.makeText(context, "$deletedCount backup(s) foram excluídos da nuvem.", Toast.LENGTH_LONG).show()
+                            viewModel.fetchRemoteDriveBackups()
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = StatusError),
@@ -1731,6 +1771,52 @@ fun CloudSyncCenterScreen(
                     onClick = { showDeleteLabelDialog = false },
                     enabled = !isDeletingLabelBackups
                 ) {
+                    Text("Cancelar", color = TextSecondary)
+                }
+            }
+        )
+    }
+
+    if (showEditLabelDialog) {
+        var tempLabel by remember { mutableStateOf(fullDeviceLabel) }
+        AlertDialog(
+            onDismissRequest = { showEditLabelDialog = false },
+            containerColor = DarkSurface,
+            title = {
+                Text("Editar Etiqueta do Dispositivo", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 16.sp)
+            },
+            text = {
+                Column {
+                    Text("Digite o nome ou identificador para este dispositivo na nuvem:", fontSize = 12.sp, color = TextSecondary)
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = tempLabel,
+                        onValueChange = { tempLabel = it },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = primaryAccent,
+                            unfocusedBorderColor = DarkCardBorder,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.setCustomDeviceLabel(tempLabel)
+                        showEditLabelDialog = false
+                        viewModel.fetchRemoteDriveBackups()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = primaryAccent)
+                ) {
+                    Text("Salvar", color = Color.Black, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEditLabelDialog = false }) {
                     Text("Cancelar", color = TextSecondary)
                 }
             }

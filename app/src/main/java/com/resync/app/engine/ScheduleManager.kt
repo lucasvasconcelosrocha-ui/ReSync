@@ -28,7 +28,9 @@ data class BackupScheduleItem(
     val time: String = "03:00",
     val isEnabled: Boolean = true,
     val lastRunTimestamp: Long = 0L,
-    val lastRunStatus: String = "Nunca executado"
+    val lastRunStatus: String = "Nunca executado",
+    val specificApps: List<String> = emptyList(),
+    val appBackupMode: String = "BOTH" // "APK", "DATA", "BOTH"
 )
 
 data class ScheduleGlobalConfig(
@@ -140,6 +142,63 @@ class ScheduleManager private constructor(private val context: Context) {
         val now = System.currentTimeMillis()
         val current = _schedules.value.map {
             if (it.id == id) it.copy(lastRunTimestamp = now, lastRunStatus = status) else it
+        }
+        persistSchedules(current)
+    }
+
+    fun rescheduleAll() {
+        syncWorkManager()
+    }
+
+    fun calculateNextRun(item: BackupScheduleItem): Long {
+        val parts = item.time.split(":")
+        val hour = parts.getOrNull(0)?.toIntOrNull() ?: 3
+        val minute = parts.getOrNull(1)?.toIntOrNull() ?: 0
+
+        val now = Calendar.getInstance()
+        val candidate = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, hour)
+            set(Calendar.MINUTE, minute)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+
+        var daysChecked = 0
+        while (daysChecked < 8) {
+            val dayOfWeek = candidate.get(Calendar.DAY_OF_WEEK)
+            if (candidate.timeInMillis > now.timeInMillis && (item.daysOfWeek.isEmpty() || item.daysOfWeek.contains(dayOfWeek))) {
+                return candidate.timeInMillis
+            }
+            candidate.add(Calendar.DAY_OF_YEAR, 1)
+            daysChecked++
+        }
+        return candidate.timeInMillis
+    }
+
+    fun runScheduleNow(scheduleId: String) {
+        val workManager = WorkManager.getInstance(context)
+        val constraintsBuilder = Constraints.Builder()
+        when (_globalConfig.value.batteryRequirement) {
+            BatteryRequirement.CHARGING -> constraintsBuilder.setRequiresCharging(true)
+            BatteryRequirement.BATTERY_ABOVE_20, BatteryRequirement.BATTERY_ABOVE_50 -> constraintsBuilder.setRequiresBatteryNotLow(true)
+            BatteryRequirement.NONE -> {}
+        }
+
+        val inputData = Data.Builder()
+            .putString("schedule_id", scheduleId)
+            .build()
+
+        val oneTimeWork = OneTimeWorkRequestBuilder<ScheduledBackupWorker>()
+            .setConstraints(constraintsBuilder.build())
+            .setInputData(inputData)
+            .addTag("MANUAL_RUN_NOW")
+            .build()
+
+        workManager.enqueue(oneTimeWork)
+
+        val now = System.currentTimeMillis()
+        val current = _schedules.value.map {
+            if (it.id == scheduleId) it.copy(lastRunTimestamp = now, lastRunStatus = "Executando em segundo plano...") else it
         }
         persistSchedules(current)
     }

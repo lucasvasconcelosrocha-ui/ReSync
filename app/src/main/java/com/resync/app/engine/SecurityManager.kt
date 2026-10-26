@@ -120,11 +120,14 @@ object SecurityManager {
     /**
      * Derive AES-256 SecretKey from user password using PBKDF2WithHmacSHA256
      */
-    fun deriveKeyFromPassword(password: CharArray, salt: ByteArray): SecretKey {
+    fun deriveKeyFromPassword(password: CharArray, salt: ByteArray, iterations: Int = PBKDF2_MILITARY_ITERATIONS): SecretKey {
         val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
-        val spec = PBEKeySpec(password, salt, PBKDF2_ITERATIONS, KEY_LENGTH_BITS)
+        val spec = PBEKeySpec(password, salt, iterations, KEY_LENGTH_BITS)
         val tmp = factory.generateSecret(spec)
-        return SecretKeySpec(tmp.encoded, "AES")
+        val encoded = tmp.encoded
+        val key = SecretKeySpec(encoded, "AES")
+        zeroByteArray(encoded)
+        return key
     }
 
     /**
@@ -197,96 +200,218 @@ object SecurityManager {
         return CipherInputStream(inputStream, cipher)
     }
 
+    val RESY_MAGIC = byteArrayOf(0x52, 0x45, 0x53, 0x59) // "RESY"
     val SVBE_MAGIC = byteArrayOf(0x53, 0x56, 0x42, 0x45) // "SVBE"
+    val ZIP_PK_MAGIC = byteArrayOf(0x50, 0x4B, 0x03, 0x04) // "PK\x03\x04"
+    const val RESY_VERSION_V2: Byte = 0x02
+    const val STRATEGY_ACCOUNT: Byte = 0x01
+    const val STRATEGY_ADVANCED: Byte = 0x02
+    const val PBKDF2_MILITARY_ITERATIONS = 600_000
     const val DEFAULT_CHUNK_SIZE = 64 * 1024
 
+    fun zeroByteArray(array: ByteArray?) {
+        if (array != null) java.util.Arrays.fill(array, 0.toByte())
+    }
+
+    fun zeroCharArray(array: CharArray?) {
+        if (array != null) java.util.Arrays.fill(array, '\u0000')
+    }
+
+    fun deriveAccountKey(accountEmail: String, salt: ByteArray): SecretKey {
+        val seed = "$accountEmail:ReSync_Master_Account_Salt".toByteArray(Charsets.UTF_8)
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(seed)
+        digest.update(salt)
+        val hash = digest.digest()
+        val key = SecretKeySpec(hash, "AES")
+        zeroByteArray(hash)
+        return key
+    }
+
     /**
-     * Encrypt an input stream into an output stream in 64 KiB chunks using AES-256-GCM.
-     * Header format: [SVBE: 4 bytes] + [Salt: 16 bytes] + [ChunkSize: 4 bytes]
+     * Encrypt an input stream into an output stream using RESY AES-256-GCM streaming block format.
+     * Header format:
+     * [RESY_MAGIC: 4 bytes] + [Version: 1 byte (0x02)] + [Strategy: 1 byte] + [Iterations: 4 bytes] + [Salt: 16 bytes] + [ChunkSize: 4 bytes]
      * Chunks: [CiphertextLen: 4 bytes] + [IV: 12 bytes] + [Ciphertext + Tag: N bytes]
      * Terminator: [0: 4 bytes]
      */
     fun encryptStreamChunked(
         inputStream: InputStream,
         outputStream: OutputStream,
-        password: String,
+        password: String? = null,
+        accountEmail: String? = null,
         chunkSize: Int = DEFAULT_CHUNK_SIZE,
         onProgress: ((bytesRead: Long) -> Unit)? = null
     ) {
         val salt = generateRandomBytes(SALT_LENGTH_BYTES)
-        val secretKey = deriveKeyFromPassword(password.toCharArray(), salt)
+        val isAdvanced = !password.isNullOrEmpty()
+        val strategyByte = if (isAdvanced) STRATEGY_ADVANCED else STRATEGY_ACCOUNT
+        val iterations = if (isAdvanced) PBKDF2_MILITARY_ITERATIONS else 1
 
-        // Write header
-        outputStream.write(SVBE_MAGIC)
+        val secretKey = if (isAdvanced) {
+            val passChars = password!!.toCharArray()
+            val k = deriveKeyFromPassword(passChars, salt, iterations)
+            zeroCharArray(passChars)
+            k
+        } else {
+            val email = if (!accountEmail.isNullOrBlank()) accountEmail else "default_user@resync.local"
+            deriveAccountKey(email, salt)
+        }
+
+        // Write RESY header
+        outputStream.write(RESY_MAGIC)
+        outputStream.write(byteArrayOf(RESY_VERSION_V2, strategyByte))
+        outputStream.write(java.nio.ByteBuffer.allocate(4).putInt(iterations).array())
         outputStream.write(salt)
         outputStream.write(java.nio.ByteBuffer.allocate(4).putInt(chunkSize).array())
 
         val buffer = ByteArray(chunkSize)
         var totalBytesRead = 0L
 
-        while (true) {
-            var bytesReadThisChunk = 0
-            while (bytesReadThisChunk < chunkSize) {
-                val r = inputStream.read(buffer, bytesReadThisChunk, chunkSize - bytesReadThisChunk)
-                if (r == -1) break
-                bytesReadThisChunk += r
+        try {
+            while (true) {
+                var bytesReadThisChunk = 0
+                while (bytesReadThisChunk < chunkSize) {
+                    val r = inputStream.read(buffer, bytesReadThisChunk, chunkSize - bytesReadThisChunk)
+                    if (r == -1) break
+                    bytesReadThisChunk += r
+                }
+
+                if (bytesReadThisChunk == 0) break
+
+                totalBytesRead += bytesReadThisChunk
+                val iv = generateRandomBytes(GCM_IV_LENGTH_BYTES)
+                val cipher = Cipher.getInstance(AES_GCM_TRANSFORMATION)
+                val spec = GCMParameterSpec(GCM_TAG_LENGTH_BITS, iv)
+                cipher.init(Cipher.ENCRYPT_MODE, secretKey, spec)
+
+                val ciphertext = cipher.doFinal(buffer, 0, bytesReadThisChunk)
+
+                // Write chunk header: [CiphertextLen: 4 bytes] + [IV: 12 bytes] + [Ciphertext: N bytes]
+                outputStream.write(java.nio.ByteBuffer.allocate(4).putInt(ciphertext.size).array())
+                outputStream.write(iv)
+                outputStream.write(ciphertext)
+
+                onProgress?.invoke(totalBytesRead)
             }
 
-            if (bytesReadThisChunk == 0) break
-
-            totalBytesRead += bytesReadThisChunk
-            val iv = generateRandomBytes(GCM_IV_LENGTH_BYTES)
-            val cipher = Cipher.getInstance(AES_GCM_TRANSFORMATION)
-            val spec = GCMParameterSpec(GCM_TAG_LENGTH_BITS, iv)
-            cipher.init(Cipher.ENCRYPT_MODE, secretKey, spec)
-
-            val ciphertext = cipher.doFinal(buffer, 0, bytesReadThisChunk)
-
-            // Write chunk header
-            outputStream.write(java.nio.ByteBuffer.allocate(4).putInt(ciphertext.size).array())
-            outputStream.write(iv)
-            outputStream.write(ciphertext)
-
-            onProgress?.invoke(totalBytesRead)
+            // Write end-of-stream indicator (0 length chunk)
+            outputStream.write(java.nio.ByteBuffer.allocate(4).putInt(0).array())
+            outputStream.flush()
+        } finally {
+            zeroByteArray(buffer)
         }
-
-        // Write end-of-stream indicator (0 length chunk)
-        outputStream.write(java.nio.ByteBuffer.allocate(4).putInt(0).array())
-        outputStream.flush()
     }
 
     /**
-     * Decrypt a chunked SVBE stream into the output stream using AES-256-GCM.
+     * Decrypt a chunked stream into the output stream.
+     * Supports RESY, legacy SVBE, and unencrypted ZIP containers.
      */
     fun decryptStreamChunked(
         inputStream: InputStream,
         outputStream: OutputStream,
-        password: String,
+        password: String? = null,
+        accountEmail: String? = null,
         onProgress: ((bytesWritten: Long) -> Unit)? = null
     ) {
         val magic = ByteArray(4)
-        val readMagic = inputStream.read(magic)
-        if (readMagic != 4 || !magic.contentEquals(SVBE_MAGIC)) {
-            throw IllegalArgumentException("Cabeçalho de criptografia por entrada (SVBE) inválido ou ausente.")
+        var magicRead = 0
+        while (magicRead < 4) {
+            val r = inputStream.read(magic, magicRead, 4 - magicRead)
+            if (r == -1) break
+            magicRead += r
         }
 
-        val salt = ByteArray(SALT_LENGTH_BYTES)
-        val readSalt = inputStream.read(salt)
-        if (readSalt != SALT_LENGTH_BYTES) {
-            throw IllegalArgumentException("Salt da entrada criptografada corrompido.")
+        if (magicRead < 4) {
+            throw IllegalArgumentException("Arquivo de backup corrompido ou incompleto.")
         }
 
-        val secretKey = deriveKeyFromPassword(password.toCharArray(), salt)
+        val isResy = magic.contentEquals(RESY_MAGIC)
+        val isSvbe = magic.contentEquals(SVBE_MAGIC)
 
-        val chunkSizeBuf = ByteArray(4)
-        inputStream.read(chunkSizeBuf)
-        val chunkSize = java.nio.ByteBuffer.wrap(chunkSizeBuf).int
+        if (!isResy && !isSvbe) {
+            // Check if standard uncompressed/zip local file header (PK\x03\x04)
+            if (magic[0] == 0x50.toByte() && magic[1] == 0x4B.toByte()) {
+                outputStream.write(magic)
+                val buf = ByteArray(64 * 1024)
+                var read: Int
+                while (inputStream.read(buf).also { read = it } != -1) {
+                    outputStream.write(buf, 0, read)
+                }
+                outputStream.flush()
+                return
+            }
+            throw IllegalArgumentException("Formato de criptografia não reconhecido ou arquivo adulterado.")
+        }
+
+        val secretKey: SecretKey
+        val chunkSize: Int
+
+        if (isResy) {
+            val versionByte = inputStream.read()
+            val strategyByte = inputStream.read()
+            if (versionByte == -1 || strategyByte == -1) {
+                throw IllegalArgumentException("Cabeçalho RESY incompleto.")
+            }
+
+            val iterBuf = ByteArray(4)
+            val rIter = inputStream.read(iterBuf)
+            if (rIter < 4) throw IllegalArgumentException("Arquivo de backup corrompido ou adulterado.")
+            val iterations = java.nio.ByteBuffer.wrap(iterBuf).int.coerceAtLeast(1)
+
+            val salt = ByteArray(SALT_LENGTH_BYTES)
+            val saltRead = inputStream.read(salt)
+            if (saltRead != SALT_LENGTH_BYTES) {
+                throw IllegalArgumentException("Arquivo de backup corrompido ou adulterado.")
+            }
+
+            val chunkSizeBuf = ByteArray(4)
+            val rChunk = inputStream.read(chunkSizeBuf)
+            if (rChunk < 4) throw IllegalArgumentException("Arquivo de backup corrompido ou adulterado.")
+            chunkSize = java.nio.ByteBuffer.wrap(chunkSizeBuf).int.coerceIn(1024, 1024 * 1024)
+
+            secretKey = if (strategyByte == STRATEGY_ADVANCED.toInt()) {
+                if (password.isNullOrEmpty()) {
+                    throw IllegalArgumentException("Senha incorreta: Este backup foi criptografado com senha personalizada.")
+                }
+                val passChars = password.toCharArray()
+                val k = deriveKeyFromPassword(passChars, salt, iterations)
+                zeroCharArray(passChars)
+                k
+            } else {
+                val email = if (!accountEmail.isNullOrBlank()) accountEmail else "default_user@resync.local"
+                deriveAccountKey(email, salt)
+            }
+        } else {
+            // Legacy SVBE
+            val salt = ByteArray(SALT_LENGTH_BYTES)
+            val saltRead = inputStream.read(salt)
+            if (saltRead != SALT_LENGTH_BYTES) {
+                throw IllegalArgumentException("Arquivo de backup corrompido ou adulterado.")
+            }
+
+            val chunkSizeBuf = ByteArray(4)
+            inputStream.read(chunkSizeBuf)
+            chunkSize = java.nio.ByteBuffer.wrap(chunkSizeBuf).int
+
+            if (password.isNullOrEmpty()) {
+                throw IllegalArgumentException("Senha incorreta: Senha necessária para descriptografar.")
+            }
+            val passChars = password.toCharArray()
+            secretKey = deriveKeyFromPassword(passChars, salt, 100_000)
+            zeroCharArray(passChars)
+        }
 
         val lenBuf = ByteArray(4)
         var totalWritten = 0L
 
         while (true) {
-            val lenRead = inputStream.read(lenBuf)
+            var lenRead = 0
+            while (lenRead < 4) {
+                val r = inputStream.read(lenBuf, lenRead, 4 - lenRead)
+                if (r == -1) break
+                lenRead += r
+            }
             if (lenRead < 4) break
             val cipherLen = java.nio.ByteBuffer.wrap(lenBuf).int
             if (cipherLen == 0) break // EOF indicator
@@ -295,7 +420,7 @@ object SecurityManager {
             var ivReadTotal = 0
             while (ivReadTotal < GCM_IV_LENGTH_BYTES) {
                 val r = inputStream.read(iv, ivReadTotal, GCM_IV_LENGTH_BYTES - ivReadTotal)
-                if (r == -1) throw IllegalArgumentException("Fim de fluxo prematuro ao ler IV do chunk.")
+                if (r == -1) throw IllegalArgumentException("Arquivo de backup corrompido ou adulterado.")
                 ivReadTotal += r
             }
 
@@ -303,7 +428,7 @@ object SecurityManager {
             var cipherReadTotal = 0
             while (cipherReadTotal < cipherLen) {
                 val r = inputStream.read(cipherBytes, cipherReadTotal, cipherLen - cipherReadTotal)
-                if (r == -1) throw IllegalArgumentException("Fim de fluxo prematuro ao ler dados do chunk cifrado.")
+                if (r == -1) throw IllegalArgumentException("Arquivo de backup corrompido ou adulterado.")
                 cipherReadTotal += r
             }
 
@@ -314,26 +439,48 @@ object SecurityManager {
             val plaintext = try {
                 cipher.doFinal(cipherBytes)
             } catch (e: Exception) {
-                throw IllegalArgumentException("Senha incorreta ou integridade do bloco violada: ${e.message}", e)
+                throw IllegalArgumentException("Senha incorreta ou arquivo corrompido / adulterado.", e)
             }
 
-            outputStream.write(plaintext)
-            totalWritten += plaintext.size
-            onProgress?.invoke(totalWritten)
+            try {
+                outputStream.write(plaintext)
+                totalWritten += plaintext.size
+                onProgress?.invoke(totalWritten)
+            } finally {
+                zeroByteArray(plaintext)
+            }
         }
 
         outputStream.flush()
     }
 
     /**
-     * Checks if an input stream starts with SVBE magic header without consuming it if it can be reset.
+     * Checks if an input stream starts with RESY or SVBE magic header without consuming it if it can be reset.
      */
     fun isChunkedEncryptedStream(bis: java.io.BufferedInputStream): Boolean {
         bis.mark(4)
         val magic = ByteArray(4)
         val r = bis.read(magic)
         bis.reset()
-        return r == 4 && magic.contentEquals(SVBE_MAGIC)
+        return r == 4 && (magic.contentEquals(RESY_MAGIC) || magic.contentEquals(SVBE_MAGIC))
+    }
+
+    /**
+     * Tests a passphrase by encrypting and decrypting a sample payload.
+     */
+    fun testPassphrase(passphrase: String): Boolean {
+        return try {
+            val testData = "RESY_CRYPTO_VERIFICATION_PAYLOAD".toByteArray(Charsets.UTF_8)
+            val bos = java.io.ByteArrayOutputStream()
+            encryptStreamChunked(java.io.ByteArrayInputStream(testData), bos, password = passphrase)
+            val encryptedBytes = bos.toByteArray()
+            val decryptedBos = java.io.ByteArrayOutputStream()
+            decryptStreamChunked(java.io.ByteArrayInputStream(encryptedBytes), decryptedBos, password = passphrase)
+            val result = decryptedBos.toString("UTF-8")
+            result == "RESY_CRYPTO_VERIFICATION_PAYLOAD"
+        } catch (_: Exception) {
+            false
+        }
     }
 
     /**

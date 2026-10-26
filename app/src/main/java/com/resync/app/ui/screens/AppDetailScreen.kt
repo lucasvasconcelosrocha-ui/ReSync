@@ -128,6 +128,7 @@ fun AppDetailScreen(
     var apkDetails by remember(app.packageName) { mutableStateOf(AppStorageInspector.getCachedApkDetails(app.packageName)) }
     var storageBreakdown by remember(app.packageName) { mutableStateOf(AppStorageInspector.getCachedStorage(app.packageName)) }
     var isMeasuringData by remember(app.packageName) { mutableStateOf(storageBreakdown == null) }
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
 
     LaunchedEffect(app.packageName) {
         launch(Dispatchers.IO) {
@@ -138,11 +139,28 @@ fun AppDetailScreen(
         }
         launch(Dispatchers.IO) {
             isMeasuringData = true
-            val data = AppStorageInspector.measureAppData(context, app.packageName)
+            val data = AppStorageInspector.measureAppData(context, app.packageName, forceRefresh = true)
             withContext(Dispatchers.Main) {
                 storageBreakdown = data
                 isMeasuringData = false
             }
+        }
+    }
+
+    DisposableEffect(lifecycleOwner, app.packageName) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                coroutineScope.launch(Dispatchers.IO) {
+                    val data = AppStorageInspector.measureAppData(context, app.packageName, forceRefresh = true)
+                    withContext(Dispatchers.Main) {
+                        storageBreakdown = data
+                    }
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
         }
     }
 
@@ -558,7 +576,10 @@ fun AppDetailScreen(
                                         AppSelectionOptions(
                                             includeBaseApk = backupIncludeApk,
                                             includeSplits = backupIncludeApk && app.splitSourceDirs.isNotEmpty(),
-                                            includeData = backupIncludeInternalData || backupIncludeExternalData,
+                                            includeData = backupIncludeInternalData || backupIncludeExternalData || backupIncludeObb,
+                                            includeInternalData = backupIncludeInternalData,
+                                            includeExternalData = backupIncludeExternalData,
+                                            includeObb = backupIncludeObb,
                                             relatedSettings = true
                                         )
                                     )
@@ -588,7 +609,10 @@ fun AppDetailScreen(
                                         AppSelectionOptions(
                                             includeBaseApk = backupIncludeApk,
                                             includeSplits = backupIncludeApk && app.splitSourceDirs.isNotEmpty(),
-                                            includeData = backupIncludeInternalData || backupIncludeExternalData,
+                                            includeData = backupIncludeInternalData || backupIncludeExternalData || backupIncludeObb,
+                                            includeInternalData = backupIncludeInternalData,
+                                            includeExternalData = backupIncludeExternalData,
+                                            includeObb = backupIncludeObb,
                                             relatedSettings = true
                                         )
                                     )
@@ -619,7 +643,10 @@ fun AppDetailScreen(
                                         AppSelectionOptions(
                                             includeBaseApk = backupIncludeApk,
                                             includeSplits = backupIncludeApk && app.splitSourceDirs.isNotEmpty(),
-                                            includeData = backupIncludeInternalData || backupIncludeExternalData,
+                                            includeData = backupIncludeInternalData || backupIncludeExternalData || backupIncludeObb,
+                                            includeInternalData = backupIncludeInternalData,
+                                            includeExternalData = backupIncludeExternalData,
+                                            includeObb = backupIncludeObb,
                                             relatedSettings = true
                                         )
                                     )
@@ -1187,11 +1214,11 @@ fun AppDetailScreen(
 
                 // Detalhamento por partição
                 val items = listOf(
-                    storageBreakdown?.internalData ?: com.resync.app.engine.StoragePathBreakdown("Dados Internos", "/data/data/${app.packageName}", 0L),
-                    storageBreakdown?.externalData ?: com.resync.app.engine.StoragePathBreakdown("Dados Externos", "/storage/emulated/0/Android/data/${app.packageName}", 0L),
-                    storageBreakdown?.obbData ?: com.resync.app.engine.StoragePathBreakdown("Arquivos OBB", "/storage/emulated/0/Android/obb/${app.packageName}", 0L),
-                    storageBreakdown?.mediaData ?: com.resync.app.engine.StoragePathBreakdown("Mídia", "/storage/emulated/0/Android/media/${app.packageName}", 0L),
-                    storageBreakdown?.cacheData ?: com.resync.app.engine.StoragePathBreakdown("Cache", "/data/data/${app.packageName}/cache", 0L)
+                    storageBreakdown?.internalData ?: com.resync.app.engine.StoragePathBreakdown("Dados Internos", "/data/data/${app.packageName}", -1L, false),
+                    storageBreakdown?.externalData ?: com.resync.app.engine.StoragePathBreakdown("Dados Externos", "/storage/emulated/0/Android/data/${app.packageName}", -1L, false),
+                    storageBreakdown?.obbData ?: com.resync.app.engine.StoragePathBreakdown("Arquivos OBB", "/storage/emulated/0/Android/obb/${app.packageName}", -1L, false),
+                    storageBreakdown?.mediaData ?: com.resync.app.engine.StoragePathBreakdown("Mídia", "/storage/emulated/0/Android/media/${app.packageName}", -1L, false),
+                    storageBreakdown?.cacheData ?: com.resync.app.engine.StoragePathBreakdown("Cache", "/data/data/${app.packageName}/cache", -1L, false)
                 )
 
                 items.forEach { item ->
@@ -1216,12 +1243,25 @@ fun AppDetailScreen(
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
-                            Text(
-                                text = formatStorageSize(item.sizeBytes),
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (item.sizeBytes > 0) TextPrimary else TextMuted
-                            )
+                            if (isMeasuringData) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp),
+                                    color = AccentSunsetOrange,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                val sizeText = when {
+                                    item.sizeBytes < 0L || !item.exists -> "Não existe"
+                                    item.sizeBytes == 0L -> "0 B"
+                                    else -> formatStorageSize(item.sizeBytes)
+                                }
+                                Text(
+                                    text = sizeText,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (item.sizeBytes > 0) TextPrimary else TextMuted
+                                )
+                            }
                         }
                     }
                 }
@@ -1250,7 +1290,14 @@ fun AppDetailScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("APK (base e splits)", fontSize = 13.sp, color = TextPrimary)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("APK (base e splits)", fontSize = 13.sp, color = TextPrimary)
+                                Text(
+                                    text = formatStorageSize(apkDetails?.totalSizeBytes ?: 0L),
+                                    fontSize = 11.sp,
+                                    color = TextSecondary
+                                )
+                            }
                             Switch(
                                 checked = backupIncludeApk,
                                 onCheckedChange = { backupIncludeApk = it },
@@ -1263,7 +1310,15 @@ fun AppDetailScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("Dados Internos (/data/data)", fontSize = 13.sp, color = TextPrimary)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Dados Internos (/data/data)", fontSize = 13.sp, color = TextPrimary)
+                                val intSize = storageBreakdown?.internalData?.sizeBytes ?: -1L
+                                Text(
+                                    text = if (intSize < 0L) "Não existe" else formatStorageSize(intSize),
+                                    fontSize = 11.sp,
+                                    color = TextSecondary
+                                )
+                            }
                             Switch(
                                 checked = backupIncludeInternalData,
                                 onCheckedChange = { backupIncludeInternalData = it },
@@ -1276,7 +1331,15 @@ fun AppDetailScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("Dados Externos (Android/data)", fontSize = 13.sp, color = TextPrimary)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Dados Externos (Android/data)", fontSize = 13.sp, color = TextPrimary)
+                                val extSize = storageBreakdown?.externalData?.sizeBytes ?: -1L
+                                Text(
+                                    text = if (extSize < 0L) "Não existe" else formatStorageSize(extSize),
+                                    fontSize = 11.sp,
+                                    color = TextSecondary
+                                )
+                            }
                             Switch(
                                 checked = backupIncludeExternalData,
                                 onCheckedChange = { backupIncludeExternalData = it },
@@ -1289,7 +1352,15 @@ fun AppDetailScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("Arquivos OBB (Android/obb)", fontSize = 13.sp, color = TextPrimary)
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Arquivos OBB (Android/obb)", fontSize = 13.sp, color = TextPrimary)
+                                val obbSize = storageBreakdown?.obbData?.sizeBytes ?: -1L
+                                Text(
+                                    text = if (obbSize < 0L) "Não existe" else formatStorageSize(obbSize),
+                                    fontSize = 11.sp,
+                                    color = TextSecondary
+                                )
+                            }
                             Switch(
                                 checked = backupIncludeObb,
                                 onCheckedChange = { backupIncludeObb = it },

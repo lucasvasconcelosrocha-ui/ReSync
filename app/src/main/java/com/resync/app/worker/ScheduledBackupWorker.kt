@@ -43,7 +43,12 @@ class ScheduledBackupWorker(
             return Result.success()
         }
 
-        val activeSchedules = scheduleManager.schedules.value.filter { it.isEnabled }
+        val targetScheduleId = inputData.getString("schedule_id")
+        val activeSchedules = if (!targetScheduleId.isNullOrBlank()) {
+            scheduleManager.schedules.value.filter { it.id == targetScheduleId }
+        } else {
+            scheduleManager.schedules.value.filter { it.isEnabled }
+        }
         if (activeSchedules.isEmpty()) {
             Log.d("BackupOrigin", "ScheduledBackupWorker skipped: activeSchedules is empty")
             return Result.success()
@@ -65,20 +70,44 @@ class ScheduledBackupWorker(
         return try {
             val backupEngine = BackupEngine(appContext)
 
+            val includeApps = activeSchedules.any { it.targetItems.contains("APPS") }
+            val includeContacts = activeSchedules.any { it.targetItems.contains("CONTACTS") }
             val includeSms = activeSchedules.any { it.targetItems.contains("MESSAGES") }
             val includeCalls = activeSchedules.any { it.targetItems.contains("CALLS") }
             val includeWifi = activeSchedules.any { it.targetItems.contains("WIFI") }
             val includeWallpaper = activeSchedules.any { it.targetItems.contains("WALLPAPER") }
             val includeBluetooth = activeSchedules.any { it.targetItems.contains("BLUETOOTH") }
+            val includeDns = activeSchedules.any { it.targetItems.contains("DNS") }
 
-            val backupTitle = "Backup Agendado"
+            val installedApps = com.resync.app.engine.InstalledAppsRepository.getInstance(appContext).appsFlow.value
+            val specificPkgList = activeSchedules.flatMap { it.specificApps }.toSet()
+            val appPairs = if (includeApps) {
+                installedApps.filter { app ->
+                    specificPkgList.isEmpty() || specificPkgList.contains(app.packageName)
+                }.take(if (specificPkgList.isEmpty()) 20 else specificPkgList.size).map { app ->
+                    val scheduleWithApp = activeSchedules.find { it.specificApps.contains(app.packageName) }
+                    val mode = scheduleWithApp?.appBackupMode ?: "BOTH"
+                    val opt = com.resync.app.data.model.AppSelectionOptions(
+                        includeBaseApk = mode == "APK" || mode == "BOTH",
+                        includeSplits = mode == "APK" || mode == "BOTH",
+                        includeData = mode == "DATA" || mode == "BOTH",
+                        includeInternalData = mode == "DATA" || mode == "BOTH",
+                        includeExternalData = mode == "DATA" || mode == "BOTH"
+                    )
+                    Pair(app, opt)
+                }
+            } else emptyList()
+
+            val backupTitle = if (activeSchedules.size == 1) activeSchedules.first().title else "Backup Agendado"
             val dateStr = SimpleDateFormat("HH:mm - dd/MM/yyyy", java.util.Locale.getDefault()).format(java.util.Date())
             var lastProgress: com.resync.app.engine.BackupProgress? = null
             backupEngine.performSelectiveBackup(
                 backupTitle = backupTitle,
+                selectedApps = appPairs,
                 includeSms = includeSms,
                 includeCalls = includeCalls,
-                includeDns = true,
+                includeContacts = includeContacts,
+                includeDns = includeDns,
                 includeWifi = includeWifi,
                 includeWallpaper = includeWallpaper,
                 includeBluetooth = includeBluetooth
