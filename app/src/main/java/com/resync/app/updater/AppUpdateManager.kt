@@ -1,7 +1,9 @@
 package com.resync.app.updater
 
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -12,6 +14,8 @@ import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import com.resync.app.BuildConfig
+import com.resync.app.engine.CapabilityManager
+import com.resync.app.engine.RestoreResultReceiver
 import com.resync.app.engine.SecurityManager
 import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.Dispatchers
@@ -51,6 +55,8 @@ class AppUpdateManager(private val context: Context) {
         .build()
 
     private var cachedReleaseInfo: AppReleaseInfo? = null
+
+    fun getCachedReleaseInfo(): AppReleaseInfo? = cachedReleaseInfo
 
     fun isAutoCheckEnabled(): Boolean {
         return prefs.getBoolean(PREF_AUTO_CHECK, true)
@@ -131,6 +137,7 @@ class AppUpdateManager(private val context: Context) {
 
             if (isNewer) {
                 Log.i(TAG, "Nova atualização detectada: ${releaseInfo.versionName} (build ${releaseInfo.versionCode}) vs instalado (${getInstalledVersionName()} - $currentCode)")
+                cachedReleaseInfo = releaseInfo
                 Result.success(releaseInfo)
             } else {
                 Log.d(TAG, "Aplicativo atualizado. Versão instalada: ${getInstalledVersionName()} ($currentCode), Remota: ${releaseInfo.versionName} (${releaseInfo.versionCode})")
@@ -291,7 +298,7 @@ class AppUpdateManager(private val context: Context) {
             // Fallback: se não existirem functions nem fixes, use releaseNotes como lista única
             if (functionsList.isEmpty() && fixesList.isEmpty() && releaseNotes.isNotBlank()) {
                 val lines = releaseNotes.lines()
-                    .map { it.trim().removePrefix("*").removePrefix("-").trim() }
+                    .map { it.trim().removePrefix("*").removePrefix("-").removePrefix("•").trim() }
                     .filter { it.isNotBlank() && !it.startsWith("#") }
                 if (lines.isNotEmpty()) {
                     fixesList.addAll(lines)
@@ -561,32 +568,51 @@ class AppUpdateManager(private val context: Context) {
             return@withContext Result.failure(IllegalStateException("Arquivo do instalador não encontrado."))
         }
 
-        // Try root installation if requested and shell is available
-        if (preferRoot && Shell.isAppGrantedRoot() == true) {
-            try {
-                Log.i(TAG, "Iniciando instalação silenciosa via Root (pm install -r)...")
-                val installCommand = "pm install -r \"${apkFile.absolutePath}\""
-                val installResult = Shell.cmd(installCommand).exec()
+        // Solução 1 (Prioritária - ROOT):
+        // Copia/passa o arquivo para /data/local/tmp/update.apk e executa "pm install -r -d /data/local/tmp/update.apk"
+        val hasRoot = preferRoot && runCatching {
+            Shell.isAppGrantedRoot() == true || CapabilityManager(context).verifyRootAccess(timeoutMs = 2500L)
+        }.getOrDefault(false)
 
-                if (installResult.isSuccess) {
-                    Log.i(TAG, "Instalação silenciosa concluída com sucesso! Reabrindo o app...")
-                    // Restart app automatically
-                    Shell.cmd("am start -n ${context.packageName}/${context.packageName}.MainActivity").exec()
-                    // Cleanup APK
+        if (hasRoot) {
+            try {
+                Log.i(TAG, "Iniciando instalação silenciosa via Root (pm install -r -d /data/local/tmp/update.apk)...")
+                val tmpApk = "/data/local/tmp/update.apk"
+
+                // Passa o arquivo para /data/local/tmp/update.apk com permissões mundiais de leitura
+                val copyCmd = "cp -f \"${apkFile.absolutePath}\" \"$tmpApk\" || cat \"${apkFile.absolutePath}\" > \"$tmpApk\""
+                Shell.cmd(copyCmd, "chmod 644 \"$tmpApk\"").exec()
+
+                var installResult = Shell.cmd("pm install -r -d \"$tmpApk\"").exec()
+                var outStr = installResult.out.joinToString("\n")
+
+                if (!installResult.isSuccess && !outStr.contains("Success", ignoreCase = true)) {
+                    // Fallback de comando pm sem flag de downgrade (-d) e com --user 0
+                    installResult = Shell.cmd("pm install -r --user 0 \"$tmpApk\" || pm install -r \"$tmpApk\"").exec()
+                    outStr = installResult.out.joinToString("\n")
+                }
+
+                if (installResult.isSuccess || outStr.contains("Success", ignoreCase = true)) {
+                    Log.i(TAG, "Instalação silenciosa concluída com sucesso via Root! Reiniciando app...")
+                    Shell.cmd("rm -f \"$tmpApk\"").exec()
                     try { apkFile.delete() } catch (_: Exception) {}
+
+                    // Reinicia o app automaticamente
+                    Shell.cmd("am start -n ${context.packageName}/.MainActivity || monkey -p ${context.packageName} -c android.intent.category.LAUNCHER 1").exec()
                     return@withContext Result.success(true)
                 } else {
-                    val errOutput = installResult.out.joinToString("\n")
-                    Log.w(TAG, "Falha na instalação via Root: $errOutput. Tentando fluxo padrão do sistema...")
+                    Log.w(TAG, "Falha na instalação via Root: $outStr. Recorrendo ao instalador do sistema...")
+                    Shell.cmd("rm -f \"$tmpApk\"").exec()
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "Erro no comando Root: ${e.message}. Recorrendo ao fluxo padrão.")
+                Log.w(TAG, "Erro na tentativa de instalação via Root: ${e.message}. Recorrendo ao fluxo padrão.")
+                try { Shell.cmd("rm -f /data/local/tmp/update.apk").exec() } catch (_: Exception) {}
             }
         }
 
-        // Non-root installation via system package installer
+        // Solução 2 (Fallback sem root - PackageInstaller API):
         try {
-            // Check unknown sources permission on Android 8+
+            // Verifica permissão de fontes desconhecidas no Android 8+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 if (!context.packageManager.canRequestPackageInstalls()) {
                     return@withContext Result.failure(
@@ -600,23 +626,102 @@ class AppUpdateManager(private val context: Context) {
                 }
             }
 
+            // Tenta a API oficial PackageInstaller.Session
+            val sessionResult = installViaPackageInstallerSession(apkFile)
+            if (sessionResult.isSuccess) {
+                return@withContext sessionResult
+            }
+
+            // Fallback via Intent
+            installViaIntentFallback(apkFile)
+        } catch (e: Exception) {
+            Log.e(TAG, "Falha ao iniciar instalador do sistema: ${e.message}", e)
+            try { apkFile.delete() } catch (_: Exception) {}
+            Result.failure(e)
+        }
+    }
+
+    private fun installViaPackageInstallerSession(apkFile: File): Result<Boolean> {
+        return try {
+            val packageInstaller = context.packageManager.packageInstaller
+            val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_REQUIRED)
+            }
+            val sessionId = packageInstaller.createSession(params)
+            val session = packageInstaller.openSession(sessionId)
+            session.use { s ->
+                apkFile.inputStream().use { input ->
+                    s.openWrite("resync_update_${System.currentTimeMillis()}", 0, apkFile.length()).use { output ->
+                        input.copyTo(output)
+                        s.fsync(output)
+                    }
+                }
+                val pendingIntent = RestoreResultReceiver.createPendingIntent(context, sessionId)
+                s.commit(pendingIntent.intentSender)
+            }
+            Result.success(true)
+        } catch (e: Exception) {
+            Log.w(TAG, "Falha na instalação via PackageInstaller.Session: ${e.message}")
+            Result.failure(e)
+        }
+    }
+
+    private fun installViaIntentFallback(apkFile: File): Result<Boolean> {
+        return try {
             val apkUri = FileProvider.getUriForFile(
                 context,
                 "${context.packageName}.fileprovider",
                 apkFile
             )
 
-            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+            val installPackageIntent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
+                setDataAndType(apkUri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
+                putExtra(Intent.EXTRA_RETURN_RESULT, true)
+            }
+            if (installPackageIntent.resolveActivity(context.packageManager) != null) {
+                context.startActivity(installPackageIntent)
+                return Result.success(true)
+            }
+
+            val viewIntent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(apkUri, "application/vnd.android.package-archive")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
+            if (viewIntent.resolveActivity(context.packageManager) != null) {
+                context.startActivity(viewIntent)
+                return Result.success(true)
+            }
 
-            context.startActivity(installIntent)
-            Result.success(true)
+            // Tentar explicitamente os pacotes oficiais de instalador de pacotes do Android/AOSP
+            for (installerPkg in listOf("com.google.android.packageinstaller", "com.android.packageinstaller")) {
+                try {
+                    val explicitIntent = Intent(Intent.ACTION_VIEW).apply {
+                        setPackage(installerPkg)
+                        setDataAndType(apkUri, "application/vnd.android.package-archive")
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    if (explicitIntent.resolveActivity(context.packageManager) != null) {
+                        context.startActivity(explicitIntent)
+                        return Result.success(true)
+                    }
+                } catch (_: Throwable) {}
+            }
+
+            try {
+                context.startActivity(viewIntent)
+                Result.success(true)
+            } catch (anfe: android.content.ActivityNotFoundException) {
+                Log.w(TAG, "Nenhum instalador encontrado no sistema para abrir APK: ${anfe.message}")
+                Result.failure(IllegalStateException("Nenhum aplicativo encontrado para instalar o pacote APK.", anfe))
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "Falha ao iniciar instalador do sistema: ${e.message}", e)
-            try { apkFile.delete() } catch (_: Exception) {}
+            Log.e(TAG, "Falha no instalador via Intent: ${e.message}", e)
             Result.failure(e)
         }
     }

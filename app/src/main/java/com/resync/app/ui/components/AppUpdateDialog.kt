@@ -206,6 +206,35 @@ fun AppUpdateDialog(
                                     }
                                 }
                             }
+
+                            if (release.functions.isEmpty() && release.fixes.isEmpty() && release.releaseNotes.isNotBlank()) {
+                                val lines = release.releaseNotes.lines()
+                                    .map { it.trim().removePrefix("*").removePrefix("-").removePrefix("•").trim() }
+                                    .filter { it.isNotBlank() && !it.startsWith("#") }
+                                lines.forEach { item ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 3.dp),
+                                        verticalAlignment = Alignment.Top
+                                    ) {
+                                        Text(
+                                            text = "•",
+                                            color = primaryAccent,
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(end = 8.dp)
+                                        )
+                                        Text(
+                                            text = item,
+                                            color = TextSecondary,
+                                            fontSize = 13.5.sp,
+                                            lineHeight = 19.sp,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                }
+                            }
                         }
 
                         Spacer(modifier = Modifier.height(20.dp))
@@ -213,7 +242,7 @@ fun AppUpdateDialog(
                         // Botões "Depois" e "Atualizar agora"
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             OutlinedButton(
@@ -221,23 +250,39 @@ fun AppUpdateDialog(
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = TextSecondary),
                                 border = BorderStroke(1.dp, DarkCardBorder),
                                 shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .height(44.dp)
+                                    .weight(0.75f)
+                                    .heightIn(min = 48.dp)
                             ) {
-                                Text("Depois", fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    text = "Depois",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
                             }
 
                             Button(
                                 onClick = { viewModel.startUpdateDownload(release) },
                                 colors = ButtonDefaults.buttonColors(containerColor = primaryAccent),
                                 shape = RoundedCornerShape(12.dp),
-                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 4.dp),
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .height(44.dp)
+                                    .weight(1.25f)
+                                    .heightIn(min = 48.dp)
                             ) {
-                                Text("Atualizar agora", fontSize = 12.sp, color = Color.Black, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
+                                Text(
+                                    text = "Atualizar agora",
+                                    fontSize = 13.sp,
+                                    color = Color.Black,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
                             }
                         }
                     }
@@ -356,7 +401,7 @@ fun AppUpdateDialog(
 
                         Text(
                             text = if (state.isRootAvailable && preferSilentRoot)
-                                "O ReSync será atualizado silenciosamente via Root (pm install -r) e reiniciado automaticamente."
+                                "O ReSync será atualizado silenciosamente via Root (pm install -r -d) e reiniciado automaticamente."
                             else
                                 "O Android exibirá a confirmação do instalador de pacotes para concluir a atualização.",
                             color = TextSecondary,
@@ -406,7 +451,7 @@ fun AppUpdateDialog(
                                     fontSize = 14.sp
                                 )
                                 Text(
-                                    text = if (state.isRoot) "Executando via Root silencioso (pm install -r)..." else "Aguardando instalador do sistema...",
+                                    text = if (state.isRoot) "Executando via Root silencioso (pm install -r -d)..." else "Aguardando instalador do sistema...",
                                     color = TextSecondary,
                                     fontSize = 11.sp
                                 )
