@@ -285,7 +285,8 @@ fun parseLsOutputLine(rawLine: String, parentDirPath: String): ExplorerItem? {
 fun FileExplorerScreen(
     viewModel: MainViewModel,
     onBack: () -> Unit,
-    onStartBackupWithFiles: (List<String>, BackupFilter?) -> Unit
+    onStartBackupWithFiles: (List<String>, BackupFilter?) -> Unit,
+    title: String = "Arquivos"
 ) {
     val context = LocalContext.current
     val currentAccent by viewModel.themeAccent.collectAsState()
@@ -614,7 +615,7 @@ fun FileExplorerScreen(
                         Spacer(modifier = Modifier.width(4.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Arquivos",
+                                text = title,
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = TextPrimary,

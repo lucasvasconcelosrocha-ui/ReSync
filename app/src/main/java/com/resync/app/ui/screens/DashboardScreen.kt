@@ -742,14 +742,14 @@ fun DashboardScreen(
                     title = "Papéis de parede",
                     icon = Icons.Default.Wallpaper,
                     primaryAccent = primaryAccent,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1.35f),
                     onClick = { onNavigateToCategory("wallpaper") }
                 )
                 CategoryChip(
                     title = "DNS",
                     icon = Icons.Default.Dns,
                     primaryAccent = primaryAccent,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(0.75f),
                     onClick = { onNavigateToCategory("dns") }
                 )
             }
@@ -1112,7 +1112,7 @@ private fun CategoryChip(
         shape = RoundedCornerShape(16.dp)
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 2.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
@@ -1120,12 +1120,12 @@ private fun CategoryChip(
                 imageVector = icon,
                 contentDescription = title,
                 tint = primaryAccent,
-                modifier = Modifier.size(15.dp)
+                modifier = Modifier.size(13.dp)
             )
-            Spacer(modifier = Modifier.width(3.dp))
+            Spacer(modifier = Modifier.width(2.5.dp))
             Text(
                 text = title,
-                fontSize = 10.sp,
+                fontSize = if (title.length > 12) 8.5.sp else 10.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = TextPrimary,
                 maxLines = 1,

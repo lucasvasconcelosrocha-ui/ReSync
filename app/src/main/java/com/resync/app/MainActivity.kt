@@ -455,9 +455,22 @@ class MainActivity : ComponentActivity() {
                                 }
 
                                 composable(Screen.FoldersBackup.route) {
-                                    FoldersBackupScreen(
+                                    FileExplorerScreen(
                                         viewModel = viewModel,
-                                        onBack = { navController.popBackStack() }
+                                        title = "Pastas",
+                                        onBack = { navController.popBackStack() },
+                                        onStartBackupWithFiles = { paths, _ ->
+                                            viewModel.launchBackup(
+                                                title = "Backup de Pastas",
+                                                selectedApps = emptyList(),
+                                                selectedFiles = paths,
+                                                includeSms = false,
+                                                includeCalls = false,
+                                                includeContacts = false,
+                                                includeDns = false,
+                                                includeWallpaper = false
+                                            )
+                                        }
                                     )
                                 }
 
