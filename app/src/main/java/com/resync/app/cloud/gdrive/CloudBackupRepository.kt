@@ -93,12 +93,16 @@ class CloudBackupRepository(
         val targetFolderId = hierarchy?.backupsFolderId ?: hierarchy?.rootFolderId
 
         // 3. Resumable Upload
+        val currentLabel = context.getSharedPreferences("swiftvault_prefs", Context.MODE_PRIVATE)
+            .getString("custom_device_label", null) ?: com.resync.app.util.FormatUtils.getDeviceIdentifier(context)
+
         val appProps = mapOf(
             "backupId" to backupRecord.id,
             "title" to backupRecord.title,
             "version" to "1.0",
             "isEncrypted" to backupRecord.isEncrypted.toString(),
-            "sha256" to backupRecord.checksumSha256
+            "sha256" to backupRecord.checksumSha256,
+            "deviceLabel" to currentLabel
         )
 
         dbHelper.updateBackupSyncStatus(backupRecord.id, SyncStatus.UPLOADING)

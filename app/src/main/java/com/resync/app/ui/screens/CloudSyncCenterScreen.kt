@@ -424,7 +424,7 @@ fun CloudSyncCenterScreen(
         floatingActionButton = {
             Column(
                 horizontalAlignment = Alignment.End,
-                modifier = Modifier.padding(bottom = 76.dp, end = 4.dp)
+                modifier = Modifier.padding(bottom = 16.dp, end = 16.dp)
             ) {
                 AnimatedVisibility(
                     visible = isFabExpanded,
@@ -968,14 +968,25 @@ fun CloudSyncCenterScreen(
 
                         // Cartão "Etiqueta do backup na nuvem"
                         val remoteList = (remoteBackupsState as? RemoteBackupsState.Loaded)?.backups ?: remoteBackups
-                        val remoteAppsCount = remoteList.count { it.name.endsWith(".apk") || it.name.endsWith(".resync") || it.name.endsWith(".svb") || it.name.contains("app", ignoreCase = true) }
-                        val remoteSmsCount = remoteList.count { it.name.contains("sms", ignoreCase = true) || it.name.contains("message", ignoreCase = true) || it.name.contains("mensag", ignoreCase = true) }
-                        val remoteCallsCount = remoteList.count { it.name.contains("call", ignoreCase = true) || it.name.contains("chamada", ignoreCase = true) }
-                        val remoteFoldersCount = remoteList.count { it.name.contains("folder", ignoreCase = true) || it.name.contains("pasta", ignoreCase = true) || it.name.contains("file", ignoreCase = true) }
-                        val remoteBluetoothCount = remoteList.count { it.name.contains("bluetooth", ignoreCase = true) }
-                        val remoteDnsCount = remoteList.count { it.name.contains("dns", ignoreCase = true) }
-                        val remoteWifiCount = remoteList.count { it.name.contains("wifi", ignoreCase = true) || it.name.contains("wi-fi", ignoreCase = true) }
-                        val remoteContactsCount = remoteList.count { it.name.contains("contact", ignoreCase = true) || it.name.contains("contato", ignoreCase = true) }
+                        val currentLabelTrimmed = fullDeviceLabel.trim()
+                        val labelBackups = remember(remoteList, fullDeviceLabel) {
+                            remoteList.filter { file ->
+                                val prop = file.appProperties["deviceLabel"]?.trim()
+                                if (!prop.isNullOrBlank()) {
+                                    prop.equals(currentLabelTrimmed, ignoreCase = true)
+                                } else {
+                                    currentLabelTrimmed.isNotBlank() && file.name.contains(currentLabelTrimmed, ignoreCase = true)
+                                }
+                            }
+                        }
+                        val remoteAppsCount = labelBackups.count { it.name.endsWith(".apk") || it.name.endsWith(".resync") || it.name.endsWith(".svb") || it.name.contains("app", ignoreCase = true) }
+                        val remoteSmsCount = labelBackups.count { it.name.contains("sms", ignoreCase = true) || it.name.contains("message", ignoreCase = true) || it.name.contains("mensag", ignoreCase = true) }
+                        val remoteCallsCount = labelBackups.count { it.name.contains("call", ignoreCase = true) || it.name.contains("chamada", ignoreCase = true) }
+                        val remoteFoldersCount = labelBackups.count { it.name.contains("folder", ignoreCase = true) || it.name.contains("pasta", ignoreCase = true) || it.name.contains("file", ignoreCase = true) }
+                        val remoteBluetoothCount = labelBackups.count { it.name.contains("bluetooth", ignoreCase = true) }
+                        val remoteDnsCount = labelBackups.count { it.name.contains("dns", ignoreCase = true) }
+                        val remoteWifiCount = labelBackups.count { it.name.contains("wifi", ignoreCase = true) || it.name.contains("wi-fi", ignoreCase = true) }
+                        val remoteContactsCount = labelBackups.count { it.name.contains("contact", ignoreCase = true) || it.name.contains("contato", ignoreCase = true) }
 
                         Card(
                             modifier = Modifier
@@ -1148,17 +1159,22 @@ fun CloudSyncCenterScreen(
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Button(
                                     onClick = {
-                                        activeAccountEmail?.let {
-                                            viewModel.refreshActiveAccountData(it, isManual = true) {
+                                        val targetEmail = activeAccountEmail ?: multiAccounts.firstOrNull()?.email
+                                        if (targetEmail.isNullOrBlank()) {
+                                            Toast.makeText(context, "Nenhuma conta Google Drive conectada.", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            Toast.makeText(context, "Sincronizando conta ativa...", Toast.LENGTH_SHORT).show()
+                                            viewModel.refreshActiveAccountData(targetEmail, isManual = true) {
                                                 val qErr = (viewModel.driveQuotaState.value as? DriveQuotaState.Error)?.message
                                                 val bErr = (viewModel.remoteBackupsState.value as? RemoteBackupsState.Error)?.message
                                                 val err = qErr ?: bErr
                                                 if (err != null) {
                                                     Toast.makeText(context, "Erro na sincronização: $err", Toast.LENGTH_LONG).show()
+                                                } else {
+                                                    Toast.makeText(context, "Sincronização concluída com sucesso!", Toast.LENGTH_SHORT).show()
                                                 }
                                             }
                                         }
-                                        Toast.makeText(context, "Sincronizando conta ativa...", Toast.LENGTH_SHORT).show()
                                     },
                                     modifier = Modifier.weight(1f).height(48.dp),
                                     shape = RoundedCornerShape(12.dp),
@@ -1178,17 +1194,22 @@ fun CloudSyncCenterScreen(
 
                                 OutlinedButton(
                                     onClick = {
-                                        activeAccountEmail?.let {
-                                            viewModel.refreshActiveAccountData(it, isManual = true) {
+                                        val targetEmail = activeAccountEmail ?: multiAccounts.firstOrNull()?.email
+                                        if (targetEmail.isNullOrBlank()) {
+                                            Toast.makeText(context, "Nenhuma conta Google Drive conectada.", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            Toast.makeText(context, "Atualizando dados da conta ativa...", Toast.LENGTH_SHORT).show()
+                                            viewModel.refreshActiveAccountData(targetEmail, isManual = true) {
                                                 val qErr = (viewModel.driveQuotaState.value as? DriveQuotaState.Error)?.message
                                                 val bErr = (viewModel.remoteBackupsState.value as? RemoteBackupsState.Error)?.message
                                                 val err = qErr ?: bErr
                                                 if (err != null) {
                                                     Toast.makeText(context, "Erro na atualização: $err", Toast.LENGTH_LONG).show()
+                                                } else {
+                                                    Toast.makeText(context, "Dados atualizados com sucesso!", Toast.LENGTH_SHORT).show()
                                                 }
                                             }
                                         }
-                                        Toast.makeText(context, "Atualizando dados da conta ativa...", Toast.LENGTH_SHORT).show()
                                     },
                                     modifier = Modifier.weight(1f).height(48.dp),
                                     shape = RoundedCornerShape(12.dp),
@@ -1292,7 +1313,7 @@ fun CloudSyncCenterScreen(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(96.dp))
+                        Spacer(modifier = Modifier.height(140.dp))
                     }
                 }
 
@@ -1690,14 +1711,23 @@ fun CloudSyncCenterScreen(
 
     if (showDeleteLabelDialog) {
         val remoteList = (remoteBackupsState as? RemoteBackupsState.Loaded)?.backups ?: remoteBackups
-        val remoteAppsCount = remoteList.count { it.name.endsWith(".apk") || it.name.endsWith(".resync") || it.name.endsWith(".svb") || it.name.contains("app", ignoreCase = true) }
-        val remoteSmsCount = remoteList.count { it.name.contains("sms", ignoreCase = true) || it.name.contains("message", ignoreCase = true) || it.name.contains("mensag", ignoreCase = true) }
-        val remoteCallsCount = remoteList.count { it.name.contains("call", ignoreCase = true) || it.name.contains("chamada", ignoreCase = true) }
-        val remoteFoldersCount = remoteList.count { it.name.contains("folder", ignoreCase = true) || it.name.contains("pasta", ignoreCase = true) || it.name.contains("file", ignoreCase = true) }
-        val remoteBluetoothCount = remoteList.count { it.name.contains("bluetooth", ignoreCase = true) }
-        val remoteDnsCount = remoteList.count { it.name.contains("dns", ignoreCase = true) }
-        val remoteWifiCount = remoteList.count { it.name.contains("wifi", ignoreCase = true) || it.name.contains("wi-fi", ignoreCase = true) }
-        val remoteContactsCount = remoteList.count { it.name.contains("contact", ignoreCase = true) || it.name.contains("contato", ignoreCase = true) }
+        val currentLabelTrimmed = fullDeviceLabel.trim()
+        val labelBackups = remoteList.filter { file ->
+            val prop = file.appProperties["deviceLabel"]?.trim()
+            if (!prop.isNullOrBlank()) {
+                prop.equals(currentLabelTrimmed, ignoreCase = true)
+            } else {
+                currentLabelTrimmed.isNotBlank() && file.name.contains(currentLabelTrimmed, ignoreCase = true)
+            }
+        }
+        val remoteAppsCount = labelBackups.count { it.name.endsWith(".apk") || it.name.endsWith(".resync") || it.name.endsWith(".svb") || it.name.contains("app", ignoreCase = true) }
+        val remoteSmsCount = labelBackups.count { it.name.contains("sms", ignoreCase = true) || it.name.contains("message", ignoreCase = true) || it.name.contains("mensag", ignoreCase = true) }
+        val remoteCallsCount = labelBackups.count { it.name.contains("call", ignoreCase = true) || it.name.contains("chamada", ignoreCase = true) }
+        val remoteFoldersCount = labelBackups.count { it.name.contains("folder", ignoreCase = true) || it.name.contains("pasta", ignoreCase = true) || it.name.contains("file", ignoreCase = true) }
+        val remoteBluetoothCount = labelBackups.count { it.name.contains("bluetooth", ignoreCase = true) }
+        val remoteDnsCount = labelBackups.count { it.name.contains("dns", ignoreCase = true) }
+        val remoteWifiCount = labelBackups.count { it.name.contains("wifi", ignoreCase = true) || it.name.contains("wi-fi", ignoreCase = true) }
+        val remoteContactsCount = labelBackups.count { it.name.contains("contact", ignoreCase = true) || it.name.contains("contato", ignoreCase = true) }
 
         AlertDialog(
             onDismissRequest = { if (!isDeletingLabelBackups) showDeleteLabelDialog = false },

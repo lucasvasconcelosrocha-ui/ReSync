@@ -12,7 +12,8 @@ import com.resync.app.data.database.AppDatabaseHelper
 import com.resync.app.data.model.LogLevel
 import com.resync.app.engine.BackupEngine
 import com.resync.app.engine.ScheduleManager
-import kotlinx.coroutines.flow.last
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import java.text.SimpleDateFormat
 import android.util.Log
 import java.util.Calendar
@@ -68,87 +69,88 @@ class ScheduledBackupWorker(
         postNotification("ReSync: Backup agendado", "Executando rotina de backup em segundo plano...")
 
         return try {
-            val backupEngine = BackupEngine(appContext)
-
-            val includeApps = activeSchedules.any { it.targetItems.contains("APPS") }
-            val includeContacts = activeSchedules.any { it.targetItems.contains("CONTACTS") }
-            val includeSms = activeSchedules.any { it.targetItems.contains("MESSAGES") }
-            val includeCalls = activeSchedules.any { it.targetItems.contains("CALLS") }
-            val includeWifi = activeSchedules.any { it.targetItems.contains("WIFI") }
-            val includeWallpaper = activeSchedules.any { it.targetItems.contains("WALLPAPER") }
-            val includeBluetooth = activeSchedules.any { it.targetItems.contains("BLUETOOTH") }
-            val includeDns = activeSchedules.any { it.targetItems.contains("DNS") }
-
             val installedApps = com.resync.app.engine.InstalledAppsRepository.getInstance(appContext).appsFlow.value
-            val specificPkgList = activeSchedules.flatMap { it.specificApps }.toSet()
-            val appPairs = if (includeApps) {
-                installedApps.filter { app ->
-                    specificPkgList.isEmpty() || specificPkgList.contains(app.packageName)
-                }.take(if (specificPkgList.isEmpty()) 20 else specificPkgList.size).map { app ->
-                    val scheduleWithApp = activeSchedules.find { it.specificApps.contains(app.packageName) }
-                    val mode = scheduleWithApp?.appBackupMode ?: "BOTH"
-                    val opt = com.resync.app.data.model.AppSelectionOptions(
-                        includeBaseApk = mode == "APK" || mode == "BOTH",
-                        includeSplits = mode == "APK" || mode == "BOTH",
-                        includeData = mode == "DATA" || mode == "BOTH",
-                        includeInternalData = mode == "DATA" || mode == "BOTH",
-                        includeExternalData = mode == "DATA" || mode == "BOTH"
-                    )
-                    Pair(app, opt)
-                }
-            } else emptyList()
+            val prefs = appContext.getSharedPreferences("swiftvault_prefs", Context.MODE_PRIVATE)
+            val activeEmail = prefs.getString("active_account_email", null)
 
-            val backupTitle = if (activeSchedules.size == 1) activeSchedules.first().title else "Backup Agendado"
-            val dateStr = SimpleDateFormat("HH:mm - dd/MM/yyyy", java.util.Locale.getDefault()).format(java.util.Date())
-            var lastProgress: com.resync.app.engine.BackupProgress? = null
-            backupEngine.performSelectiveBackup(
-                backupTitle = backupTitle,
-                selectedApps = appPairs,
-                includeSms = includeSms,
-                includeCalls = includeCalls,
-                includeContacts = includeContacts,
-                includeDns = includeDns,
-                includeWifi = includeWifi,
-                includeWallpaper = includeWallpaper,
-                includeBluetooth = includeBluetooth
-            ).collect { step ->
-                lastProgress = step
-                com.resync.app.engine.OperationRepository.updateBackupOperation(
-                    stage = step.stage,
-                    currentItemName = step.currentItemName,
-                    progressPercent = step.progressPercent,
-                    bytesProcessed = step.bytesProcessed,
-                    totalBytesEstimated = step.totalBytesEstimated,
-                    isFinished = step.isFinished,
-                    error = step.error,
-                    currentItemIndex = step.currentItemIndex,
-                    totalItems = step.totalItems
+            var anyError: String? = null
+
+            for (schedule in activeSchedules) {
+                scheduleManager.recordExecutionResult(schedule.id, "Executando em segundo plano...")
+
+                val includeApps = schedule.targetItems.contains("APPS")
+                val appPairs = if (includeApps) {
+                    val specificSet = schedule.specificApps.toSet()
+                    val appsToBackup = if (specificSet.isEmpty()) installedApps else installedApps.filter { specificSet.contains(it.packageName) }
+                    val mode = schedule.appBackupMode
+                    appsToBackup.map { app ->
+                        Pair(
+                            app,
+                            com.resync.app.data.model.AppSelectionOptions(
+                                includeBaseApk = mode == "APK" || mode == "BOTH",
+                                includeSplits = mode == "APK" || mode == "BOTH",
+                                includeData = mode == "DATA" || mode == "BOTH",
+                                includeInternalData = mode == "DATA" || mode == "BOTH",
+                                includeExternalData = mode == "DATA" || mode == "BOTH"
+                            )
+                        )
+                    }
+                } else emptyList()
+
+                val destType = when (schedule.destination) {
+                    "Nuvem" -> com.resync.app.data.model.BackupDestinationType.SOMENTE_DRIVE
+                    "Ambos" -> com.resync.app.data.model.BackupDestinationType.INTERNA_E_DRIVE
+                    else -> com.resync.app.data.model.BackupDestinationType.SOMENTE_INTERNA
+                }
+
+                val cloudProvider = if (destType != com.resync.app.data.model.BackupDestinationType.SOMENTE_INTERNA) {
+                    com.resync.app.data.model.CloudProviderType.GOOGLE_DRIVE
+                } else null
+
+                val destLabel = when (schedule.destination) {
+                    "Nuvem" -> "Google Drive"
+                    "Ambos" -> "Memória interna + Google Drive"
+                    else -> "Memória interna"
+                }
+
+                com.resync.app.engine.BackupRepository.startBackup(
+                    context = appContext,
+                    title = schedule.title,
+                    selectedApps = appPairs,
+                    selectedFiles = schedule.selectedFolders,
+                    includeSms = schedule.targetItems.contains("MESSAGES"),
+                    includeCalls = schedule.targetItems.contains("CALLS"),
+                    includeContacts = schedule.targetItems.contains("CONTACTS"),
+                    includeDns = schedule.targetItems.contains("DNS"),
+                    includeWallpaper = schedule.targetItems.contains("WALLPAPER"),
+                    includeWallpaperHome = schedule.targetItems.contains("WALLPAPER"),
+                    includeWallpaperLock = schedule.targetItems.contains("WALLPAPER"),
+                    includeWifi = schedule.targetItems.contains("WIFI"),
+                    includeBluetooth = schedule.targetItems.contains("BLUETOOTH"),
+                    targetCloudProvider = cloudProvider,
+                    targetCloudAccountEmail = activeEmail,
+                    destinationLabel = destLabel,
+                    destinationType = destType
                 )
+
+                val finishProgress = com.resync.app.engine.BackupRepository.backupProgress.filterNotNull().first { it.isFinished }
+                val dateStr = SimpleDateFormat("HH:mm - dd/MM/yyyy", java.util.Locale.getDefault()).format(java.util.Date())
+                if (finishProgress.error != null) {
+                    anyError = finishProgress.error
+                    scheduleManager.recordExecutionResult(schedule.id, "Falha: ${finishProgress.error}")
+                } else {
+                    scheduleManager.recordExecutionResult(schedule.id, "Sucesso ($dateStr)")
+                }
             }
 
-            val progress = lastProgress ?: com.resync.app.engine.BackupProgress(
-                stage = "Concluído",
-                currentItemName = backupTitle,
-                progressPercent = 1.0f,
-                isFinished = true
-            )
-
-            // Remove da lista de operações ativas
-            com.resync.app.engine.OperationRepository.removeOperationByType(com.resync.app.engine.OperationType.BACKUP)
-
-            if (progress.error != null) {
-                dbHelper.insertLog(LogLevel.ERROR, "ScheduledBackup", "Falha no backup agendado: ${progress.error}")
-                postNotification("ReSync: Falha no backup agendado", progress.error ?: "Erro desconhecido")
-                activeSchedules.forEach {
-                    scheduleManager.recordExecutionResult(it.id, "Erro: ${progress.error}")
-                }
+            if (anyError != null) {
+                dbHelper.insertLog(LogLevel.ERROR, "ScheduledBackup", "Falha no backup agendado: $anyError")
+                postNotification("ReSync: Falha no backup agendado", anyError)
                 Result.retry()
             } else {
+                val dateStr = SimpleDateFormat("HH:mm - dd/MM/yyyy", java.util.Locale.getDefault()).format(java.util.Date())
                 dbHelper.insertLog(LogLevel.INFO, "ScheduledBackup", "Backup agendado concluído com sucesso.")
                 postNotification("ReSync: Backup agendado concluído", "Rotina de backup concluída com sucesso às $dateStr")
-                activeSchedules.forEach {
-                    scheduleManager.recordExecutionResult(it.id, "Sucesso ($dateStr)")
-                }
                 Result.success()
             }
         } catch (e: Exception) {

@@ -1,9 +1,14 @@
 package com.resync.app.engine
 
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
+import android.os.Build
 import androidx.work.*
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.resync.app.receiver.ScheduledBackupAlarmReceiver
 import com.resync.app.worker.ScheduledBackupWorker
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,13 +29,14 @@ data class BackupScheduleItem(
     val title: String = "Agendamento Padrão",
     val targetItems: List<String> = listOf("MESSAGES", "CALLS", "WIFI"),
     val destination: String = "Dispositivo", // "Dispositivo", "Nuvem", "Ambos"
-    val daysOfWeek: List<Int> = listOf(Calendar.MONDAY, Calendar.WEDNESDAY, Calendar.FRIDAY),
+    val daysOfWeek: List<Int> = listOf(Calendar.SUNDAY, Calendar.MONDAY, Calendar.TUESDAY, Calendar.WEDNESDAY, Calendar.THURSDAY, Calendar.FRIDAY, Calendar.SATURDAY),
     val time: String = "03:00",
     val isEnabled: Boolean = true,
     val lastRunTimestamp: Long = 0L,
     val lastRunStatus: String = "Nunca executado",
     val specificApps: List<String> = emptyList(),
-    val appBackupMode: String = "BOTH" // "APK", "DATA", "BOTH"
+    val appBackupMode: String = "BOTH", // "APK", "DATA", "BOTH"
+    val selectedFolders: List<String> = emptyList()
 )
 
 data class ScheduleGlobalConfig(
@@ -177,19 +183,11 @@ class ScheduleManager private constructor(private val context: Context) {
 
     fun runScheduleNow(scheduleId: String) {
         val workManager = WorkManager.getInstance(context)
-        val constraintsBuilder = Constraints.Builder()
-        when (_globalConfig.value.batteryRequirement) {
-            BatteryRequirement.CHARGING -> constraintsBuilder.setRequiresCharging(true)
-            BatteryRequirement.BATTERY_ABOVE_20, BatteryRequirement.BATTERY_ABOVE_50 -> constraintsBuilder.setRequiresBatteryNotLow(true)
-            BatteryRequirement.NONE -> {}
-        }
-
         val inputData = Data.Builder()
             .putString("schedule_id", scheduleId)
             .build()
 
         val oneTimeWork = OneTimeWorkRequestBuilder<ScheduledBackupWorker>()
-            .setConstraints(constraintsBuilder.build())
             .setInputData(inputData)
             .addTag("MANUAL_RUN_NOW")
             .build()
@@ -198,22 +196,14 @@ class ScheduleManager private constructor(private val context: Context) {
 
         val now = System.currentTimeMillis()
         val current = _schedules.value.map {
-            if (it.id == scheduleId) it.copy(lastRunTimestamp = now, lastRunStatus = "Executando em segundo plano...") else it
+            if (it.id == scheduleId) it.copy(lastRunTimestamp = now, lastRunStatus = "Executando...") else it
         }
         persistSchedules(current)
     }
 
     fun runAllSchedulesNow() {
         val workManager = WorkManager.getInstance(context)
-        val constraintsBuilder = Constraints.Builder()
-        when (_globalConfig.value.batteryRequirement) {
-            BatteryRequirement.CHARGING -> constraintsBuilder.setRequiresCharging(true)
-            BatteryRequirement.BATTERY_ABOVE_20, BatteryRequirement.BATTERY_ABOVE_50 -> constraintsBuilder.setRequiresBatteryNotLow(true)
-            BatteryRequirement.NONE -> {}
-        }
-
         val oneTimeWork = OneTimeWorkRequestBuilder<ScheduledBackupWorker>()
-            .setConstraints(constraintsBuilder.build())
             .addTag("MANUAL_RUN_NOW")
             .build()
 
@@ -221,12 +211,57 @@ class ScheduleManager private constructor(private val context: Context) {
 
         val now = System.currentTimeMillis()
         val current = _schedules.value.map {
-            it.copy(lastRunTimestamp = now, lastRunStatus = "Executando em segundo plano...")
+            it.copy(lastRunTimestamp = now, lastRunStatus = "Executando...")
         }
         persistSchedules(current)
     }
 
+    private fun scheduleExactAlarm() {
+        val config = _globalConfig.value
+        val enabledSchedules = _schedules.value.filter { it.isEnabled }
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+
+        val intent = Intent(context, ScheduledBackupAlarmReceiver::class.java).apply {
+            action = "com.resync.app.ACTION_SCHEDULED_BACKUP"
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            1001,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        if (!config.isMasterEnabled || enabledSchedules.isEmpty()) {
+            alarmManager.cancel(pendingIntent)
+            return
+        }
+
+        val nextTriggerMs = enabledSchedules.minOfOrNull { calculateNextRun(it) } ?: return
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    if (alarmManager.canScheduleExactAlarms()) {
+                        alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, nextTriggerMs, pendingIntent)
+                    } else {
+                        alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, nextTriggerMs, pendingIntent)
+                    }
+                } else {
+                    alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, nextTriggerMs, pendingIntent)
+                }
+            } else {
+                alarmManager.setExact(AlarmManager.RTC_WAKEUP, nextTriggerMs, pendingIntent)
+            }
+        } catch (_: Exception) {
+            try {
+                alarmManager.set(AlarmManager.RTC_WAKEUP, nextTriggerMs, pendingIntent)
+            } catch (_: Exception) {}
+        }
+    }
+
     private fun syncWorkManager() {
+        scheduleExactAlarm()
+
         val workManager = WorkManager.getInstance(context)
         val config = _globalConfig.value
         val hasActiveSchedules = _schedules.value.any { it.isEnabled }
