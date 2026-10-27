@@ -7,10 +7,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -51,10 +48,29 @@ fun ScheduledBackupsScreen(
     val currentAccent by viewModel.themeAccent.collectAsStateWithLifecycle()
     val primaryAccent = getAccentColor(currentAccent)
 
-    var showCreateEditDialog by remember { mutableStateOf(false) }
+    var isEditingRoutine by remember { mutableStateOf(false) }
     var editingSchedule by remember { mutableStateOf<BackupScheduleItem?>(null) }
     var scheduleToDelete by remember { mutableStateOf<BackupScheduleItem?>(null) }
     var showBatteryReqDialog by remember { mutableStateOf(false) }
+
+    if (isEditingRoutine) {
+        ScheduleRoutineWizardScreen(
+            initialSchedule = editingSchedule,
+            installedApps = installedApps,
+            primaryAccent = primaryAccent,
+            onSave = { updatedSchedule ->
+                scheduleManager.saveSchedule(updatedSchedule)
+                isEditingRoutine = false
+                editingSchedule = null
+                Toast.makeText(context, "Rotina '${updatedSchedule.title}' salva com sucesso!", Toast.LENGTH_SHORT).show()
+            },
+            onCancel = {
+                isEditingRoutine = false
+                editingSchedule = null
+            }
+        )
+        return
+    }
 
     fun openTimePicker(initialTime: String, onTimeSelected: (String) -> Unit) {
         val parts = initialTime.split(":")
@@ -82,29 +98,17 @@ fun ScheduledBackupsScreen(
                     .background(DarkSurface)
                     .statusBarsPadding()
                     .padding(horizontal = 14.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onBack) {
-                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar", tint = TextPrimary)
-                    }
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Backups agendados",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = TextPrimary
-                    )
+                IconButton(onClick = onBack) {
+                    Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar", tint = TextPrimary)
                 }
-
-                IconButton(
-                    onClick = {
-                        editingSchedule = null
-                        showCreateEditDialog = true
-                    }
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = "Novo agendamento", tint = primaryAccent)
-                }
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "Backups agendados",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = TextPrimary
+                )
             }
         }
     ) { innerPadding ->
@@ -234,28 +238,29 @@ fun ScheduledBackupsScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Botão Executar Todos os Agendamentos
-                    Button(
-                        onClick = {
-                            val enabledRoutines = schedules.filter { it.isEnabled }
-                            if (enabledRoutines.isEmpty()) {
-                                Toast.makeText(context, "Nenhum agendamento ativo para executar.", Toast.LENGTH_SHORT).show()
-                            } else {
-                                viewModel.executeAllScheduleRoutines(enabledRoutines)
-                                Toast.makeText(context, "Iniciando ${enabledRoutines.size} agendamento(s) em segundo plano...", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(46.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = primaryAccent)
-                    ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Executar todos os agendamentos", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                    // Botão Executar Todos os Agendamentos (SÓ aparece se houver pelo menos 1 rotina cadastrada)
+                    if (schedules.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = {
+                                val enabledRoutines = schedules.filter { it.isEnabled }
+                                if (enabledRoutines.isEmpty()) {
+                                    Toast.makeText(context, "Nenhum agendamento ativo para executar.", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    viewModel.executeAllScheduleRoutines(enabledRoutines)
+                                    Toast.makeText(context, "Iniciando ${enabledRoutines.size} agendamento(s) em segundo plano...", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(46.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = primaryAccent)
+                        ) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Executar todos os agendamentos", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                        }
                     }
                 }
             }
@@ -320,7 +325,7 @@ fun ScheduledBackupsScreen(
                         Button(
                             onClick = {
                                 editingSchedule = null
-                                showCreateEditDialog = true
+                                isEditingRoutine = true
                             },
                             shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = primaryAccent)
@@ -476,7 +481,7 @@ fun ScheduledBackupsScreen(
                                     IconButton(
                                         onClick = {
                                             editingSchedule = item
-                                            showCreateEditDialog = true
+                                            isEditingRoutine = true
                                         },
                                         modifier = Modifier.size(30.dp)
                                     ) {
@@ -492,6 +497,28 @@ fun ScheduledBackupsScreen(
                             }
                         }
                     }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                OutlinedButton(
+                    onClick = {
+                        editingSchedule = null
+                        isEditingRoutine = true
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(46.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, primaryAccent.copy(alpha = 0.6f)),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = DarkSurfaceVariant,
+                        contentColor = primaryAccent
+                    )
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("Novo agendamento", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = primaryAccent)
                 }
             }
 
@@ -539,327 +566,6 @@ fun ScheduledBackupsScreen(
             containerColor = DarkSurface,
             titleContentColor = TextPrimary
         )
-    }
-
-    // Diálogo Criar / Editar Agendamento
-    if (showCreateEditDialog) {
-        val initial = editingSchedule ?: BackupScheduleItem()
-        var title by remember { mutableStateOf(initial.title) }
-        var time by remember { mutableStateOf(initial.time) }
-        var destination by remember { mutableStateOf(initial.destination) }
-        var selectedTargets by remember { mutableStateOf(initial.targetItems.toSet()) }
-        var selectedDays by remember { mutableStateOf(initial.daysOfWeek.toSet()) }
-        var appBackupMode by remember { mutableStateOf(initial.appBackupMode) }
-        var isAllAppsSelected by remember { mutableStateOf(initial.specificApps.isEmpty()) }
-        var selectedSpecificApps by remember { mutableStateOf(initial.specificApps.toSet()) }
-        var showAppPicker by remember { mutableStateOf(false) }
-
-        val availableTargets = listOf(
-            "APPS" to "Aplicativos",
-            "MESSAGES" to "Mensagens",
-            "CALLS" to "Histórico de Chamadas",
-            "CONTACTS" to "Contatos",
-            "FOLDERS" to "Pastas do Armazenamento",
-            "WIFI" to "Redes Wi-Fi",
-            "BLUETOOTH" to "Bluetooth",
-            "WALLPAPER" to "Papéis de Parede",
-            "DNS" to "Configurações de DNS"
-        )
-
-        val dayOptions = listOf(
-            Calendar.SUNDAY to "Dom",
-            Calendar.MONDAY to "Seg",
-            Calendar.TUESDAY to "Ter",
-            Calendar.WEDNESDAY to "Qua",
-            Calendar.THURSDAY to "Qui",
-            Calendar.FRIDAY to "Sex",
-            Calendar.SATURDAY to "Sáb"
-        )
-
-        AlertDialog(
-            onDismissRequest = { showCreateEditDialog = false },
-            title = { Text(if (editingSchedule == null) "Novo agendamento" else "Editar agendamento", fontWeight = FontWeight.Bold) },
-            text = {
-                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                    OutlinedTextField(
-                        value = title,
-                        onValueChange = { title = it },
-                        label = { Text("Nome da rotina") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                openTimePicker(time) { newT -> time = newT }
-                            }
-                            .padding(vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Horário de execução:", fontSize = 13.sp, color = TextPrimary)
-                        Text(time, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = primaryAccent)
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Dias da Semana
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Dias da semana:", fontSize = 12.sp, color = TextSecondary)
-                        Row {
-                            Text(
-                                text = "Todos",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = primaryAccent,
-                                modifier = Modifier
-                                    .clickable { selectedDays = dayOptions.map { it.first }.toSet() }
-                                    .padding(4.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Seg-Sex",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = TextSecondary,
-                                modifier = Modifier
-                                    .clickable {
-                                        selectedDays = setOf(Calendar.MONDAY, Calendar.TUESDAY, Calendar.WEDNESDAY, Calendar.THURSDAY, Calendar.FRIDAY)
-                                    }
-                                    .padding(4.dp)
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        dayOptions.forEach { (dayInt, dayLabel) ->
-                            val isSelected = selectedDays.contains(dayInt)
-                            Box(
-                                modifier = Modifier
-                                    .size(34.dp)
-                                    .clip(CircleShape)
-                                    .background(if (isSelected) primaryAccent else DarkBg)
-                                    .border(1.dp, if (isSelected) primaryAccent else DarkCardBorder, CircleShape)
-                                    .clickable {
-                                        selectedDays = if (isSelected) {
-                                            if (selectedDays.size > 1) selectedDays - dayInt else selectedDays
-                                        } else {
-                                            selectedDays + dayInt
-                                        }
-                                    },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = dayLabel,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isSelected) Color.Black else TextSecondary
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Text("Destino do backup:", fontSize = 12.sp, color = TextSecondary)
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        listOf("Dispositivo", "Nuvem", "Ambos").forEach { dest ->
-                            FilterChip(
-                                selected = destination == dest,
-                                onClick = { destination = dest },
-                                label = { Text(dest, fontSize = 11.sp) }
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Text("Categorias incluídas:", fontSize = 12.sp, color = TextSecondary)
-                    availableTargets.forEach { (key, label) ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    selectedTargets = if (selectedTargets.contains(key)) selectedTargets - key else selectedTargets + key
-                                }
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Checkbox(
-                                checked = selectedTargets.contains(key),
-                                onCheckedChange = { checked ->
-                                    selectedTargets = if (checked) selectedTargets + key else selectedTargets - key
-                                }
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(label, fontSize = 12.5.sp, color = TextPrimary)
-                        }
-                    }
-
-                    // Seletor específico de Aplicativos (APK / Dados / Ambos e escolha de apps)
-                    if (selectedTargets.contains("APPS")) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .border(1.dp, DarkCardBorder, RoundedCornerShape(10.dp)),
-                            colors = CardDefaults.cardColors(containerColor = DarkBg)
-                        ) {
-                            Column(modifier = Modifier.padding(10.dp)) {
-                                Text("Opções dos Aplicativos", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = primaryAccent)
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text("O que salvar nos apps:", fontSize = 11.sp, color = TextSecondary)
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    listOf("BOTH" to "Ambos", "APK" to "Apenas APK", "DATA" to "Apenas Dados").forEach { (modeKey, modeLabel) ->
-                                        FilterChip(
-                                            selected = appBackupMode == modeKey,
-                                            onClick = { appBackupMode = modeKey },
-                                            label = { Text(modeLabel, fontSize = 10.sp) }
-                                        )
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { isAllAppsSelected = !isAllAppsSelected },
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Checkbox(
-                                        checked = isAllAppsSelected,
-                                        onCheckedChange = { isAllAppsSelected = it }
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Todos os aplicativos instalados (${installedApps.size})", fontSize = 11.5.sp, color = TextPrimary)
-                                }
-
-                                if (!isAllAppsSelected) {
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    OutlinedButton(
-                                        onClick = { showAppPicker = true },
-                                        modifier = Modifier.fillMaxWidth().height(36.dp),
-                                        shape = RoundedCornerShape(8.dp),
-                                        border = BorderStroke(1.dp, primaryAccent)
-                                    ) {
-                                        Icon(Icons.Default.Apps, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(14.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(
-                                            text = if (selectedSpecificApps.isEmpty()) "Escolher apps específicos" else "${selectedSpecificApps.size} app(s) selecionado(s)",
-                                            fontSize = 11.sp,
-                                            color = primaryAccent,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val newItem = initial.copy(
-                            title = title.ifBlank { "Backup Agendado" },
-                            time = time,
-                            destination = destination,
-                            targetItems = selectedTargets.toList(),
-                            daysOfWeek = if (selectedDays.isEmpty()) dayOptions.map { it.first } else selectedDays.toList(),
-                            appBackupMode = appBackupMode,
-                            specificApps = if (isAllAppsSelected) emptyList() else selectedSpecificApps.toList()
-                        )
-                        scheduleManager.saveSchedule(newItem)
-                        showCreateEditDialog = false
-                        Toast.makeText(context, "Agendamento salvo!", Toast.LENGTH_SHORT).show()
-                    }
-                ) {
-                    Text("Salvar", color = primaryAccent, fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showCreateEditDialog = false }) {
-                    Text("Cancelar", color = TextSecondary)
-                }
-            },
-            containerColor = DarkSurface,
-            titleContentColor = TextPrimary
-        )
-
-        // Modal de seleção individual de aplicativos
-        if (showAppPicker) {
-            var appSearchQuery by remember { mutableStateOf("") }
-            val filteredApps = remember(installedApps, appSearchQuery) {
-                if (appSearchQuery.isBlank()) installedApps else installedApps.filter {
-                    it.appName.contains(appSearchQuery, ignoreCase = true) || it.packageName.contains(appSearchQuery, ignoreCase = true)
-                }
-            }
-
-            AlertDialog(
-                onDismissRequest = { showAppPicker = false },
-                containerColor = DarkSurface,
-                title = {
-                    Text("Selecionar Aplicativos (${selectedSpecificApps.size})", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 15.sp)
-                },
-                text = {
-                    Column(modifier = Modifier.fillMaxWidth().height(360.dp)) {
-                        OutlinedTextField(
-                            value = appSearchQuery,
-                            onValueChange = { appSearchQuery = it },
-                            placeholder = { Text("Buscar app...", fontSize = 12.sp) },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth().height(48.dp)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        LazyColumn(modifier = Modifier.weight(1f)) {
-                            items(filteredApps, key = { it.packageName }) { app ->
-                                val isChecked = selectedSpecificApps.contains(app.packageName)
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            selectedSpecificApps = if (isChecked) selectedSpecificApps - app.packageName else selectedSpecificApps + app.packageName
-                                        }
-                                        .padding(vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Checkbox(
-                                        checked = isChecked,
-                                        onCheckedChange = { checked ->
-                                            selectedSpecificApps = if (checked) selectedSpecificApps + app.packageName else selectedSpecificApps - app.packageName
-                                        }
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(app.appName, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        Text(app.packageName, fontSize = 10.sp, color = TextMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
-                confirmButton = {
-                    Button(
-                        onClick = { showAppPicker = false },
-                        colors = ButtonDefaults.buttonColors(containerColor = primaryAccent)
-                    ) {
-                        Text("Concluir (${selectedSpecificApps.size})", color = Color.Black, fontWeight = FontWeight.Bold)
-                    }
-                }
-            )
-        }
     }
 
     // Diálogo de confirmação para exclusão

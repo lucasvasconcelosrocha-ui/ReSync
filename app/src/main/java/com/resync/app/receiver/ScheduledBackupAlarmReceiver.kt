@@ -113,11 +113,13 @@ class ScheduledBackupAlarmReceiver : BroadcastReceiver() {
                             Pair(
                                 app,
                                 com.resync.app.data.model.AppSelectionOptions(
-                                    includeBaseApk = mode == "APK" || mode == "BOTH",
-                                    includeSplits = mode == "APK" || mode == "BOTH",
-                                    includeData = mode == "DATA" || mode == "BOTH",
-                                    includeInternalData = mode == "DATA" || mode == "BOTH",
-                                    includeExternalData = mode == "DATA" || mode == "BOTH"
+                                    includeBaseApk = schedule.includeBaseApk && (mode == "APK" || mode == "BOTH"),
+                                    includeSplits = schedule.includeAppSplits && (mode == "APK" || mode == "BOTH"),
+                                    includeData = schedule.includeAppData && (mode == "DATA" || mode == "BOTH"),
+                                    includeInternalData = schedule.includeAppData && (mode == "DATA" || mode == "BOTH"),
+                                    includeExternalData = schedule.includeExternalData && (mode == "DATA" || mode == "BOTH"),
+                                    includeObb = schedule.includeObb,
+                                    includePermissions = schedule.includeAppPermissions
                                 )
                             )
                         }

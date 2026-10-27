@@ -36,7 +36,14 @@ data class BackupScheduleItem(
     val lastRunStatus: String = "Nunca executado",
     val specificApps: List<String> = emptyList(),
     val appBackupMode: String = "BOTH", // "APK", "DATA", "BOTH"
-    val selectedFolders: List<String> = emptyList()
+    val selectedFolders: List<String> = emptyList(),
+    val includeBaseApk: Boolean = true,
+    val includeAppSplits: Boolean = true,
+    val includeAppData: Boolean = true,
+    val includeExternalData: Boolean = true,
+    val includeObb: Boolean = true,
+    val includeAppPermissions: Boolean = true,
+    val batteryRequirement: BatteryRequirement? = BatteryRequirement.CHARGING
 )
 
 data class ScheduleGlobalConfig(
@@ -88,7 +95,22 @@ class ScheduleManager private constructor(private val context: Context) {
         val json = prefs.getString(KEY_SCHEDULES, null) ?: return emptyList()
         return try {
             val type = object : TypeToken<List<BackupScheduleItem>>() {}.type
-            gson.fromJson(json, type) ?: emptyList()
+            val list = gson.fromJson<List<BackupScheduleItem>>(json, type) ?: emptyList()
+            list.map { item ->
+                if (item.targetItems.contains("APPS") && !item.includeBaseApk && !item.includeAppData && !item.includeAppSplits) {
+                    item.copy(
+                        includeBaseApk = item.appBackupMode != "DATA",
+                        includeAppSplits = item.appBackupMode != "DATA",
+                        includeAppData = item.appBackupMode != "APK",
+                        includeExternalData = item.appBackupMode != "APK",
+                        includeObb = false,
+                        includeAppPermissions = true,
+                        batteryRequirement = item.batteryRequirement ?: BatteryRequirement.CHARGING
+                    )
+                } else {
+                    item.copy(batteryRequirement = item.batteryRequirement ?: BatteryRequirement.CHARGING)
+                }
+            }
         } catch (_: Exception) {
             emptyList()
         }
