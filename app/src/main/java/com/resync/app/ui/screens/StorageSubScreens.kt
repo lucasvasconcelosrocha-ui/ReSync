@@ -231,107 +231,55 @@ fun StorageCacheScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 8.dp, end = 14.dp, top = 6.dp, bottom = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+                        .height(56.dp)
+                        .padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier.size(40.dp)
                     ) {
-                        IconButton(
-                            onClick = onBack,
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Voltar",
-                                tint = TextPrimary
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Limpeza de Cache",
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                color = TextPrimary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            // Linha 1: Total ocupado: X GB
-                            Text(
-                                text = "Total ocupado: ${FormatUtils.formatBytes(totalCacheBytes)}",
-                                fontSize = 11.5.sp,
-                                color = primaryAccent,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            // Linha 2: X de Y analisados
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                val totalDisplay = if (totalAppsCount > 0) totalAppsCount else installedApps.size
-                                Text(
-                                    text = "$analyzedCount de $totalDisplay analisados",
-                                    fontSize = 10.5.sp,
-                                    color = TextSecondary,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                if (isScanning) {
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(10.dp),
-                                        strokeWidth = 1.5.dp,
-                                        color = primaryAccent
-                                    )
-                                }
-                            }
-                        }
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Voltar",
+                            tint = TextPrimary
+                        )
                     }
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    // Botões à direita
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Limpeza de Cache",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = TextPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (isScanning) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = primaryAccent
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    IconButton(
+                        onClick = { viewModel.scanAppCache(force = true) },
+                        enabled = !isScanning && !isClearingAll,
+                        modifier = Modifier.size(40.dp)
                     ) {
-                        if (!isScanning && analyzedCount < installedApps.size && installedApps.isNotEmpty()) {
-                            TextButton(
-                                onClick = { viewModel.scanAppCache(force = true) },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                modifier = Modifier.height(36.dp)
-                            ) {
-                                Text("Recarregar", fontSize = 11.sp, color = primaryAccent, maxLines = 1)
-                            }
-                        }
-
-                        if (totalCacheBytes > 0L) {
-                            Button(
-                                onClick = { showConfirmClearAll = true },
-                                colors = ButtonDefaults.buttonColors(containerColor = StatusWarning),
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
-                                modifier = Modifier.height(40.dp),
-                                enabled = !isClearingAll
-                            ) {
-                                if (isClearingAll) {
-                                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = Color.Black)
-                                } else {
-                                    Text("Limpar tudo", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black, maxLines = 1)
-                                }
-                            }
-                        }
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Recarregar",
+                            tint = primaryAccent
+                        )
                     }
                 }
-
-                if (isScanning && (totalAppsCount > 0 || installedApps.isNotEmpty())) {
+                if (isScanning) {
                     val totalDisplay = if (totalAppsCount > 0) totalAppsCount else installedApps.size
-                    val progress = (analyzedCount.toFloat() / totalDisplay.toFloat()).coerceIn(0f, 1f)
+                    val progress = if (totalDisplay > 0) (analyzedCount.toFloat() / totalDisplay.toFloat()).coerceIn(0f, 1f) else 0f
                     LinearProgressIndicator(
                         progress = { progress },
-                        modifier = Modifier.fillMaxWidth().height(3.dp),
+                        modifier = Modifier.fillMaxWidth().height(2.5.dp),
                         color = primaryAccent,
                         trackColor = DarkBg
                     )
@@ -384,129 +332,201 @@ fun StorageCacheScreen(
             )
         }
 
-        Column(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            contentPadding = PaddingValues(top = 12.dp, bottom = 80.dp)
         ) {
-            // Banner de resultado final ("X GB liberados")
-            if (lastFreedMessage != null) {
+            // 1. Card de Resumo do Cache Total (com botão Limpar Tudo)
+            item(key = "summary_card") {
+                val totalDisplay = if (totalAppsCount > 0) totalAppsCount else installedApps.size
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp),
-                    colors = CardDefaults.cardColors(containerColor = StatusSuccess.copy(alpha = 0.12f)),
-                    border = BorderStroke(1.dp, StatusSuccess.copy(alpha = 0.5f))
+                        .clip(RoundedCornerShape(16.dp))
+                        .border(1.dp, if (totalCacheBytes > 0) StatusWarning.copy(alpha = 0.35f) else DarkCardBorder, RoundedCornerShape(16.dp)),
+                    colors = CardDefaults.cardColors(containerColor = DarkSurfaceVariant)
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = StatusSuccess, modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(lastFreedMessage!!, fontWeight = FontWeight.Bold, fontSize = 12.5.sp, color = StatusSuccess)
-                        Spacer(modifier = Modifier.weight(1f))
-                        IconButton(onClick = { viewModel.dismissLastCacheFreedMessage() }, modifier = Modifier.size(24.dp)) {
-                            Icon(Icons.Default.Close, contentDescription = "Fechar", tint = StatusSuccess, modifier = Modifier.size(16.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(42.dp)
+                                    .clip(CircleShape)
+                                    .background(if (totalCacheBytes > 0) StatusWarning.copy(alpha = 0.15f) else AccentEmeraldGreen.copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (totalCacheBytes > 0) Icons.Default.CleaningServices else Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = if (totalCacheBytes > 0) StatusWarning else StatusSuccess,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = "Total ocupado: ${FormatUtils.formatBytes(totalCacheBytes)}",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (totalCacheBytes > 0) TextPrimary else StatusSuccess
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "$analyzedCount de $totalDisplay analisados",
+                                    fontSize = 11.5.sp,
+                                    color = TextSecondary
+                                )
+                            }
+                        }
+
+                        if (totalCacheBytes > 0L) {
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Button(
+                                onClick = { showConfirmClearAll = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = StatusWarning),
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                                modifier = Modifier.height(38.dp),
+                                enabled = !isClearingAll
+                            ) {
+                                if (isClearingAll) {
+                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.Black)
+                                } else {
+                                    Text("Limpar tudo", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black, maxLines = 1)
+                                }
+                            }
                         }
                     }
                 }
             }
 
+            // 2. Banner de resultado final ("X liberados")
+            if (lastFreedMessage != null) {
+                item(key = "freed_banner") {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = StatusSuccess.copy(alpha = 0.12f)),
+                        border = BorderStroke(1.dp, StatusSuccess.copy(alpha = 0.5f)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = StatusSuccess, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(lastFreedMessage!!, fontWeight = FontWeight.Bold, fontSize = 12.5.sp, color = StatusSuccess, modifier = Modifier.weight(1f))
+                            IconButton(onClick = { viewModel.dismissLastCacheFreedMessage() }, modifier = Modifier.size(24.dp)) {
+                                Icon(Icons.Default.Close, contentDescription = "Fechar", tint = StatusSuccess, modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 3. Estado de Carregamento inicial ou Vazio
             if (isScanning && cacheList.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(color = primaryAccent)
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text("Calculando cache dos aplicativos...", fontSize = 12.sp, color = TextMuted)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        val totalDisplay = if (totalAppsCount > 0) totalAppsCount else installedApps.size
-                        Text("$analyzedCount de $totalDisplay analisados", fontSize = 11.sp, color = primaryAccent)
+                item(key = "scanning_state") {
+                    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator(color = primaryAccent)
+                            Spacer(modifier = Modifier.height(14.dp))
+                            Text("Calculando cache dos aplicativos...", fontSize = 12.5.sp, color = TextMuted)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            val totalDisplay = if (totalAppsCount > 0) totalAppsCount else installedApps.size
+                            Text("$analyzedCount de $totalDisplay analisados", fontSize = 11.5.sp, color = primaryAccent)
+                        }
                     }
                 }
             } else if (cacheList.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(24.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = StatusSuccess,
-                            modifier = Modifier.size(48.dp)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = "Cache limpo!",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = TextPrimary
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Nenhum aplicativo possui arquivos temporários acumulados.",
-                            fontSize = 12.sp,
-                            color = TextSecondary
-                        )
+                item(key = "empty_state") {
+                    Box(modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp), contentAlignment = Alignment.Center) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.padding(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = StatusSuccess,
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "Cache limpo!",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = TextPrimary
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Nenhum aplicativo possui arquivos temporários acumulados.",
+                                fontSize = 12.sp,
+                                color = TextSecondary
+                            )
+                        }
                     }
                 }
             } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(bottom = 80.dp)
-                ) {
-                    items(cacheList, key = { it.app.packageName }) { item ->
-                        Card(
+                // 4. Lista de aplicativos com cache
+                items(cacheList, key = { it.app.packageName }) { item ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .border(1.dp, DarkCardBorder, RoundedCornerShape(14.dp)),
+                        colors = CardDefaults.cardColors(containerColor = DarkSurfaceVariant)
+                    ) {
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(14.dp))
-                                .border(1.dp, DarkCardBorder, RoundedCornerShape(14.dp)),
-                            colors = CardDefaults.cardColors(containerColor = DarkSurfaceVariant)
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                RealAppIcon(packageName = item.app.packageName, size = 38.dp)
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = item.app.appName,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = TextPrimary,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Text(
-                                            text = "Cache: ${FormatUtils.formatBytes(item.cacheBytes)}",
-                                            fontSize = 11.sp,
-                                            color = if (item.cacheBytes > 0) StatusWarning else TextMuted
-                                        )
-                                    }
+                            RealAppIcon(packageName = item.app.packageName, size = 38.dp)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = item.app.appName,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = TextPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "Cache: ${FormatUtils.formatBytes(item.cacheBytes)}",
+                                    fontSize = 11.5.sp,
+                                    fontWeight = if (item.cacheBytes > 0) FontWeight.SemiBold else FontWeight.Normal,
+                                    color = if (item.cacheBytes > 0) StatusWarning else TextMuted
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            if (item.cacheBytes > 0) {
+                                OutlinedButton(
+                                    onClick = { viewModel.clearSingleAppCache(item) },
+                                    shape = RoundedCornerShape(8.dp),
+                                    border = BorderStroke(1.dp, DarkCardBorder),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                                    modifier = Modifier.height(32.dp)
+                                ) {
+                                    Text("Limpar", fontSize = 11.5.sp, color = primaryAccent, fontWeight = FontWeight.Bold)
                                 }
-                                if (item.cacheBytes > 0) {
-                                    OutlinedButton(
-                                        onClick = { viewModel.clearSingleAppCache(item) },
-                                        shape = RoundedCornerShape(8.dp),
-                                        border = BorderStroke(1.dp, DarkCardBorder),
-                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                        modifier = Modifier.height(32.dp)
-                                    ) {
-                                        Text("Limpar", fontSize = 11.sp, color = primaryAccent, fontWeight = FontWeight.Bold)
-                                    }
-                                } else {
-                                    Text("Limpo", fontSize = 11.sp, color = StatusSuccess, fontWeight = FontWeight.Bold)
-                                }
+                            } else {
+                                Text("Limpo", fontSize = 11.5.sp, color = StatusSuccess, fontWeight = FontWeight.Bold)
                             }
                         }
                     }

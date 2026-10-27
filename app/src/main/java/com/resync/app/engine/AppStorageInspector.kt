@@ -71,6 +71,20 @@ object AppStorageInspector {
         apkDetailsCache.remove(packageName)
     }
 
+    fun notifyCacheCleared(packageName: String) {
+        val existing = memoryCache[packageName]
+        if (existing != null) {
+            val oldCacheBytes = existing.cacheData.sizeBytes.coerceAtLeast(0L)
+            val newTotal = (existing.totalDataBytes - oldCacheBytes).coerceAtLeast(0L)
+            memoryCache[packageName] = existing.copy(
+                cacheData = existing.cacheData.copy(sizeBytes = 0L),
+                totalDataBytes = newTotal
+            )
+        } else {
+            invalidateCache(packageName)
+        }
+    }
+
     /**
      * Inspects all APK files (base and splits), version details, SDK levels, and SHA-256 signature.
      */
