@@ -104,7 +104,7 @@ object AppCacheRepository {
                         async(Dispatchers.IO) {
                             val rootBytes = rootCacheByPkg[app.packageName] ?: 0L
                             var statsBytes = 0L
-                            if (storageStatsManager != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            if (!isRoot && storageStatsManager != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                                 try {
                                     val stats = storageStatsManager.queryStatsForPackage(
                                         StorageManager.UUID_DEFAULT,
@@ -115,8 +115,8 @@ object AppCacheRepository {
                                 } catch (_: Exception) {}
                             }
 
-                            // Utiliza o valor real máximo (para capturar cache externo como AyuGram/Telegram)
-                            val effectiveBytes = maxOf(rootBytes, statsBytes)
+                            // Quando root está ativo, utiliza estritamente o valor real do disco (evita storaged atrasado)
+                            val effectiveBytes = if (isRoot) rootBytes else statsBytes
                             if (effectiveBytes > 10_000L) { // > 10 KB
                                 AppCacheItem(app, effectiveBytes)
                             } else null
@@ -216,7 +216,7 @@ object AppCacheRepository {
 
             if (isRoot) {
                 // 1. pm trim-caches no sistema
-                Shell.cmd("pm trim-caches 999999999999999999").exec()
+                Shell.cmd("pm trim-caches 999999999999999G").exec()
 
                 // 2. Limpeza cirúrgica em lote por pacote (25 apps por comando)
                 itemsToClean.chunked(25).forEach { batch ->
@@ -232,7 +232,7 @@ object AppCacheRepository {
                 Shell.cmd("rm -rf /data/data/*/cache/* /data/data/*/code_cache/* /data/user_de/0/*/cache/* /data/user_de/0/*/code_cache/* /data/media/0/Android/data/*/cache/* /sdcard/Android/data/*/cache/* 2>/dev/null").exec()
 
                 // 4. Verificação residual estritamente via 'du -sk' (PROIBIDO StorageStatsManager)
-                val checkRes = Shell.cmd("du -sk /data/data/*/cache /data/data/*/code_cache /data/user_de/0/*/cache /data/media/0/Android/data/*/cache 2>/dev/null").exec()
+                val checkRes = Shell.cmd("du -sk /data/data/*/cache /data/data/*/code_cache /data/user_de/0/*/cache /data/user_de/0/*/code_cache /data/media/0/Android/data/*/cache 2>/dev/null").exec()
                 val residualMap = mutableMapOf<String, Long>()
                 for (line in checkRes.out) {
                     val tokens = line.trim().split(Regex("\\s+"), limit = 2)

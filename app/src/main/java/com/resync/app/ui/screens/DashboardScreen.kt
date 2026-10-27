@@ -249,12 +249,11 @@ fun DashboardScreen(
                 // Direita: Vassoura (Limpeza de Cache) e Terminal / Logs
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    IconButton(
-                        onClick = onNavigateToStorageCache,
+                    Box(
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(42.dp)
                             .clip(RoundedCornerShape(12.dp))
                             .background(if (totalAppCacheBytes > 0L) StatusWarning.copy(alpha = 0.15f) else DarkSurfaceVariant)
                             .border(
@@ -262,13 +261,15 @@ fun DashboardScreen(
                                 if (totalAppCacheBytes > 0L) StatusWarning.copy(alpha = 0.6f) else DarkCardBorder,
                                 RoundedCornerShape(12.dp)
                             )
+                            .clickable(onClick = onNavigateToStorageCache),
+                        contentAlignment = Alignment.Center
                     ) {
                         BadgedBox(
                             badge = {
                                 if (totalAppCacheBytes > 0L) {
                                     Badge(
                                         containerColor = StatusWarning,
-                                        modifier = Modifier.size(8.dp)
+                                        modifier = Modifier.size(7.dp)
                                     )
                                 }
                             }
@@ -282,13 +283,14 @@ fun DashboardScreen(
                         }
                     }
 
-                    IconButton(
-                        onClick = onNavigateToLogs,
+                    Box(
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(42.dp)
                             .clip(RoundedCornerShape(12.dp))
                             .background(DarkSurfaceVariant)
                             .border(1.dp, DarkCardBorder, RoundedCornerShape(12.dp))
+                            .clickable(onClick = onNavigateToLogs),
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Terminal,
@@ -613,15 +615,22 @@ fun DashboardScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("Backups em nuvem: ", fontSize = 11.sp, color = TextSecondary)
-                                Text(backupsCountText, fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                            }
+                            Text(
+                                text = "Backups em nuvem: $backupsCountText",
+                                fontSize = 11.5.sp,
+                                color = TextSecondary,
+                                maxLines = 1,
+                                softWrap = false
+                            )
 
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("Última sincronização: ", fontSize = 11.sp, color = TextSecondary)
-                                Text(lastSyncFormatted, fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
-                            }
+                            Text(
+                                text = if (lastSyncFormatted.isNotBlank() && lastSyncFormatted != "Nunca") "Sinc.: $lastSyncFormatted" else "Sinc.: Nunca",
+                                fontSize = 11.5.sp,
+                                color = TextSecondary,
+                                maxLines = 1,
+                                softWrap = false,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.End
+                            )
                         }
                     }
 

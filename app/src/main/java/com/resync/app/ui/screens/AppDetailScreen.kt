@@ -55,10 +55,11 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import java.text.SimpleDateFormat
 import java.util.*
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AppDetailScreen(
     app: AppInfo,
@@ -151,7 +152,8 @@ fun AppDetailScreen(
     }
 
     val hasAnyBackup = deviceBackupsForApp.isNotEmpty() || cloudBackupsForApp.isNotEmpty()
-    var selectedBackupToRestore by remember { mutableStateOf<Pair<BackupRecord, RestoreSource>?>(null) }
+    var showIndividualRestoreScreen by remember { mutableStateOf(false) }
+    var selectedIndividualPoint by remember { mutableStateOf<AppBackupPoint?>(null) }
 
     // Estados e Preferências do App
     var isFavorite by remember(app.packageName) { mutableStateOf(viewModel.isAppFavorite(app.packageName)) }
@@ -290,16 +292,26 @@ fun AppDetailScreen(
         Toast.makeText(context, "$label copiado para a área de transferência", Toast.LENGTH_SHORT).show()
     }
 
-    if (selectedBackupToRestore != null) {
-        val (rec, src) = selectedBackupToRestore!!
-        BackHandler { selectedBackupToRestore = null }
-        RestoreSelectionScreen(
-            backup = rec,
-            source = src,
+    if (showIndividualRestoreScreen) {
+        val allPoints = remember(deviceBackupsForApp, cloudBackupsForApp) {
+            (deviceBackupsForApp + cloudBackupsForApp).sortedByDescending { it.timestamp }
+        }
+        BackHandler {
+            showIndividualRestoreScreen = false
+            selectedIndividualPoint = null
+        }
+        AppIndividualRestoreScreen(
+            app = app,
+            points = allPoints,
+            initialPoint = selectedIndividualPoint ?: allPoints.firstOrNull(),
             viewModel = viewModel,
-            onBack = { selectedBackupToRestore = null },
+            onBack = {
+                showIndividualRestoreScreen = false
+                selectedIndividualPoint = null
+            },
             onFinished = {
-                selectedBackupToRestore = null
+                showIndividualRestoreScreen = false
+                selectedIndividualPoint = null
                 viewModel.triggerAppBackupDetection(forceRefreshDrive = true)
             }
         )
@@ -764,9 +776,8 @@ fun AppDetailScreen(
                     Button(
                         onClick = {
                             if (latestPoint != null) {
-                                val rec = viewModel.createBackupRecordFromPoint(latestPoint)
-                                val src = if (latestPoint.isLocal) RestoreSource.LOCAL else RestoreSource.DRIVE
-                                selectedBackupToRestore = Pair(rec, src)
+                                selectedIndividualPoint = latestPoint
+                                showIndividualRestoreScreen = true
                             } else {
                                 Toast.makeText(context, "Nenhum ponto de backup disponível para restaurar.", Toast.LENGTH_SHORT).show()
                             }
@@ -1015,15 +1026,17 @@ fun AppDetailScreen(
                                         fontWeight = FontWeight.SemiBold,
                                         color = TextPrimary
                                     )
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
+                                    FlowRow(
+                                        verticalArrangement = Arrangement.Center,
                                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                                         modifier = Modifier.padding(top = 2.dp)
                                     ) {
                                         Text(
                                             text = formatStorageSize(record.appSizeBytes),
                                             fontSize = 11.5.sp,
-                                            color = TextSecondary
+                                            color = TextSecondary,
+                                            maxLines = 1,
+                                            softWrap = false
                                         )
                                         val contentTag = when {
                                             record.hasApk && record.hasData -> "APK + Dados"
@@ -1037,7 +1050,14 @@ fun AppDetailScreen(
                                                 .background(primaryAccent.copy(alpha = 0.15f))
                                                 .padding(horizontal = 4.dp, vertical = 1.dp)
                                         ) {
-                                            Text(contentTag, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = primaryAccent)
+                                            Text(
+                                                text = contentTag,
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = primaryAccent,
+                                                maxLines = 1,
+                                                softWrap = false
+                                            )
                                         }
                                         if (record.isFullPackage) {
                                             Box(
@@ -1046,7 +1066,14 @@ fun AppDetailScreen(
                                                     .background(AccentSunsetOrange.copy(alpha = 0.15f))
                                                     .padding(horizontal = 4.dp, vertical = 1.dp)
                                             ) {
-                                                Text("Pacote Completo", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = AccentSunsetOrange)
+                                                Text(
+                                                    text = "Pacote Completo",
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = AccentSunsetOrange,
+                                                    maxLines = 1,
+                                                    softWrap = false
+                                                )
                                             }
                                         }
                                     }
@@ -1063,8 +1090,8 @@ fun AppDetailScreen(
                                 // Botão direto Restaurar no item
                                 FilledTonalButton(
                                     onClick = {
-                                        val rec = viewModel.createBackupRecordFromPoint(record)
-                                        selectedBackupToRestore = Pair(rec, RestoreSource.LOCAL)
+                                        selectedIndividualPoint = record
+                                        showIndividualRestoreScreen = true
                                     },
                                     shape = RoundedCornerShape(50),
                                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
@@ -1097,8 +1124,8 @@ fun AppDetailScreen(
                                             leadingIcon = { Icon(Icons.Default.Restore, contentDescription = null, tint = StatusSuccess) },
                                             onClick = {
                                                 showItemMenu = false
-                                                val rec = viewModel.createBackupRecordFromPoint(record)
-                                                selectedBackupToRestore = Pair(rec, RestoreSource.LOCAL)
+                                                selectedIndividualPoint = record
+                                                showIndividualRestoreScreen = true
                                             }
                                         )
 
@@ -1214,15 +1241,17 @@ fun AppDetailScreen(
                                         fontWeight = FontWeight.SemiBold,
                                         color = TextPrimary
                                     )
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
+                                    FlowRow(
+                                        verticalArrangement = Arrangement.Center,
                                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                                         modifier = Modifier.padding(top = 2.dp)
                                     ) {
                                         Text(
                                             text = formatStorageSize(record.appSizeBytes),
                                             fontSize = 11.5.sp,
-                                            color = TextSecondary
+                                            color = TextSecondary,
+                                            maxLines = 1,
+                                            softWrap = false
                                         )
                                         val contentTag = when {
                                             record.hasApk && record.hasData -> "APK + Dados"
@@ -1236,7 +1265,14 @@ fun AppDetailScreen(
                                                 .background(AccentElectricCyan.copy(alpha = 0.15f))
                                                 .padding(horizontal = 4.dp, vertical = 1.dp)
                                         ) {
-                                            Text(contentTag, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = AccentElectricCyan)
+                                            Text(
+                                                text = contentTag,
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = AccentElectricCyan,
+                                                maxLines = 1,
+                                                softWrap = false
+                                            )
                                         }
                                         if (record.isFullPackage) {
                                             Box(
@@ -1245,7 +1281,14 @@ fun AppDetailScreen(
                                                     .background(AccentSunsetOrange.copy(alpha = 0.15f))
                                                     .padding(horizontal = 4.dp, vertical = 1.dp)
                                             ) {
-                                                Text("Pacote Completo", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = AccentSunsetOrange)
+                                                Text(
+                                                    text = "Pacote Completo",
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = AccentSunsetOrange,
+                                                    maxLines = 1,
+                                                    softWrap = false
+                                                )
                                             }
                                         }
                                     }
@@ -1262,8 +1305,8 @@ fun AppDetailScreen(
                                 // Botão direto Restaurar no item da nuvem
                                 FilledTonalButton(
                                     onClick = {
-                                        val rec = viewModel.createBackupRecordFromPoint(record)
-                                        selectedBackupToRestore = Pair(rec, RestoreSource.DRIVE)
+                                        selectedIndividualPoint = record
+                                        showIndividualRestoreScreen = true
                                     },
                                     shape = RoundedCornerShape(50),
                                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
@@ -1296,8 +1339,8 @@ fun AppDetailScreen(
                                             leadingIcon = { Icon(Icons.Default.Restore, contentDescription = null, tint = StatusSuccess) },
                                             onClick = {
                                                 showCloudItemMenu = false
-                                                val rec = viewModel.createBackupRecordFromPoint(record)
-                                                selectedBackupToRestore = Pair(rec, RestoreSource.DRIVE)
+                                                selectedIndividualPoint = record
+                                                showIndividualRestoreScreen = true
                                             }
                                         )
 

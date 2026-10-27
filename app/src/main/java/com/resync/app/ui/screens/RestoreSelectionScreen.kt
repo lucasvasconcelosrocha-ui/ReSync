@@ -84,6 +84,8 @@ fun RestoreSelectionScreen(
     backup: BackupRecord,
     source: RestoreSource,
     viewModel: MainViewModel,
+    initialCategoryId: String? = null,
+    exclusiveCategoryMode: Boolean = false,
     onBack: () -> Unit,
     onFinished: () -> Unit,
     onNavigateToActive: () -> Unit = {}
@@ -114,7 +116,9 @@ fun RestoreSelectionScreen(
     var showLogDialog by remember { mutableStateOf(false) }
 
     BackHandler(enabled = true) {
-        if (activeCategoryDetail != null) {
+        if (exclusiveCategoryMode) {
+            onBack()
+        } else if (activeCategoryDetail != null) {
             activeCategoryDetail = null
             detailSearchQuery = ""
         } else {
@@ -344,10 +348,34 @@ fun RestoreSelectionScreen(
     // Initialize auto-selection
     LaunchedEffect(categoryGroups) {
         if (!hasInitializedSelection && categoryGroups.isNotEmpty()) {
-            categoryGroups.filter { it.isEnabled }.forEach { group ->
-                selectedCategoryIds[group.id] = true
-                group.itemIds.forEach { itemId ->
-                    selectedItemIds[itemId] = true
+            if (exclusiveCategoryMode && !initialCategoryId.isNullOrBlank()) {
+                val target = categoryGroups.firstOrNull {
+                    it.id.equals(initialCategoryId, ignoreCase = true) ||
+                    (initialCategoryId.equals("PASTAS", ignoreCase = true) && it.id == "FOLDERS") ||
+                    (initialCategoryId.equals("CHAMADAS", ignoreCase = true) && it.id == "CALL_LOG") ||
+                    (initialCategoryId.equals("MENSAGENS", ignoreCase = true) && it.id == "SMS") ||
+                    (initialCategoryId.equals("APLICATIVOS", ignoreCase = true) && it.id == "APPS") ||
+                    (initialCategoryId.equals("CONTATOS", ignoreCase = true) && it.id == "CONTACTS") ||
+                    (initialCategoryId.equals("WI-FI", ignoreCase = true) && it.id == "WIFI") ||
+                    (initialCategoryId.equals("BLUETOOTH", ignoreCase = true) && it.id == "BLUETOOTH") ||
+                    (initialCategoryId.equals("DNS", ignoreCase = true) && it.id == "DNS")
+                }
+                if (target != null) {
+                    selectedCategoryIds[target.id] = true
+                    target.itemIds.forEach { itemId -> selectedItemIds[itemId] = true }
+                    activeCategoryDetail = target
+                } else {
+                    categoryGroups.filter { it.isEnabled }.forEach { group ->
+                        selectedCategoryIds[group.id] = true
+                        group.itemIds.forEach { itemId -> selectedItemIds[itemId] = true }
+                    }
+                }
+            } else {
+                categoryGroups.filter { it.isEnabled }.forEach { group ->
+                    selectedCategoryIds[group.id] = true
+                    group.itemIds.forEach { itemId ->
+                        selectedItemIds[itemId] = true
+                    }
                 }
             }
             hasInitializedSelection = true
@@ -404,7 +432,9 @@ fun RestoreSelectionScreen(
                     },
                     navigationIcon = {
                         IconButton(onClick = {
-                            if (activeCategoryDetail != null) {
+                            if (exclusiveCategoryMode) {
+                                onBack()
+                            } else if (activeCategoryDetail != null) {
                                 activeCategoryDetail = null
                                 detailSearchQuery = ""
                             } else {
@@ -672,7 +702,9 @@ fun RestoreSelectionScreen(
                     ) {
                         OutlinedButton(
                             onClick = {
-                                if (activeCategoryDetail != null) {
+                                if (exclusiveCategoryMode) {
+                                    onBack()
+                                } else if (activeCategoryDetail != null) {
                                     activeCategoryDetail = null
                                     detailSearchQuery = ""
                                 } else {
@@ -735,7 +767,30 @@ fun RestoreSelectionScreen(
                             Icon(Icons.Default.Restore, contentDescription = null, tint = if (totalSelectedUnits > 0) Color.White else TextMuted, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (totalSelectedUnits > 0) "RESTAURAR ($totalSelectedUnits)" else "RESTAURAR",
+                                text = when {
+                                    exclusiveCategoryMode && activeCategoryDetail != null -> {
+                                        val curGroup = activeCategoryDetail!!
+                                        val countSelected = when (curGroup.id) {
+                                            "APPS" -> {
+                                                val appItems = inspectedManifest?.items?.filter { it.id in curGroup.itemIds } ?: emptyList()
+                                                val pkgs = appItems.mapNotNull { it.metadata["packageName"] ?: it.archiveEntryPath.removePrefix("apps/").substringBefore("/").takeIf { s -> s.isNotBlank() } }.distinct()
+                                                pkgs.count { pkg ->
+                                                    appItems.filter { (it.metadata["packageName"] ?: it.archiveEntryPath.removePrefix("apps/").substringBefore("/")) == pkg }
+                                                        .any { selectedItemIds[it.id] == true }
+                                                }
+                                            }
+                                            "CALL_LOG" -> selectedCallKeys.values.count { it }
+                                            "SMS" -> selectedSmsKeys.values.count { it }
+                                            "CONTACTS" -> selectedContactKeys.values.count { it }
+                                            "WIFI" -> selectedWifiKeys.values.count { it }
+                                            "BLUETOOTH" -> selectedBtKeys.values.count { it }
+                                            else -> curGroup.itemIds.count { selectedItemIds[it] == true }
+                                        }
+                                        if (countSelected > 0) "RESTAURAR ($countSelected)" else "RESTAURAR"
+                                    }
+                                    totalSelectedUnits > 0 -> "RESTAURAR ($totalSelectedUnits)"
+                                    else -> "RESTAURAR"
+                                },
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White,
                                 fontSize = 13.sp,

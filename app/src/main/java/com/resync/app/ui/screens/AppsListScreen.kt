@@ -34,12 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
 import com.resync.app.R
-import com.resync.app.data.model.AppBackupStatus
-import com.resync.app.data.model.AppInfo
-import com.resync.app.data.model.AppSelectionOptions
-import com.resync.app.data.model.BackupRecord
-import com.resync.app.data.model.RestoreSource
-import com.resync.app.data.model.SyncStatus
+import com.resync.app.data.model.*
 import com.resync.app.engine.CapabilityManager
 import com.resync.app.engine.IconCacheManager
 import com.resync.app.ui.theme.*
@@ -82,6 +77,8 @@ fun AppsListScreen(
     var pendingCustomBackupLaunch by remember { mutableStateOf<((Boolean) -> Unit)?>(null) }
     var backupToRestore by remember { mutableStateOf<BackupRecord?>(null) }
     var selectedBackupForRestoreScreen by remember { mutableStateOf<BackupRecord?>(null) }
+    var appForIndividualRestore by remember { mutableStateOf<AppInfo?>(null) }
+    var individualRestorePoint by remember { mutableStateOf<AppBackupPoint?>(null) }
     var backupToDelete by remember { mutableStateOf<BackupRecord?>(null) }
 
     val playStoreUpdatesResult by viewModel.playStoreUpdatesState.collectAsState()
@@ -149,6 +146,31 @@ fun AppsListScreen(
 
     val totalSelectedSize = remember(selectedPackages, apps) {
         apps.filter { selectedPackages.contains(it.packageName) }.sumOf { it.sizeBytes }
+    }
+
+    if (appForIndividualRestore != null) {
+        val app = appForIndividualRestore!!
+        val appPoints = viewModel.getBackupPointsForApp(app.packageName)
+        val initialPt = individualRestorePoint ?: appPoints.maxByOrNull { it.timestamp }
+        BackHandler {
+            appForIndividualRestore = null
+            individualRestorePoint = null
+        }
+        AppIndividualRestoreScreen(
+            app = app,
+            points = appPoints,
+            initialPoint = initialPt,
+            viewModel = viewModel,
+            onBack = {
+                appForIndividualRestore = null
+                individualRestorePoint = null
+            },
+            onFinished = {
+                appForIndividualRestore = null
+                individualRestorePoint = null
+            }
+        )
+        return
     }
 
     if (selectedBackupForRestoreScreen != null) {
@@ -682,7 +704,22 @@ fun AppsListScreen(
                                     selectedPackages.add(app.packageName)
                                 }
                             },
-                            onRestoreBackup = { selectedBackupForRestoreScreen = it },
+                            onRestoreBackup = { b ->
+                                val pt = AppBackupPoint(
+                                    backupId = b.id,
+                                    backupTitle = b.title,
+                                    timestamp = b.timestamp,
+                                    isLocal = !b.filePath.isNullOrBlank(),
+                                    isDrive = !b.driveFileId.isNullOrBlank(),
+                                    filePath = b.filePath,
+                                    driveFileId = b.driveFileId,
+                                    containerSizeBytes = b.sizeBytes,
+                                    appSizeBytes = b.sizeBytes,
+                                    isFullPackage = b.includedAppsCount > 1
+                                )
+                                appForIndividualRestore = app
+                                individualRestorePoint = pt
+                            },
                             onDeleteBackup = { backupToDelete = it },
                             onUploadBackupToDrive = {
                                 viewModel.uploadBackupsToDrive(listOf(it), DriveConstants.ROOT_FOLDER_NAME, selectedDriveAccountEmail)
@@ -690,13 +727,26 @@ fun AppsListScreen(
                             },
                             onRestoreAppClick = {
                                 val points = viewModel.getBackupPointsForApp(app.packageName)
-                                val latest = points.maxByOrNull { it.timestamp }
-                                if (latest != null) {
-                                    selectedBackupForRestoreScreen = viewModel.createBackupRecordFromPoint(latest)
+                                if (points.isNotEmpty()) {
+                                    appForIndividualRestore = app
+                                    individualRestorePoint = points.maxByOrNull { it.timestamp }
                                 } else {
                                     val record = appBackups.maxByOrNull { it.timestamp }
                                     if (record != null) {
-                                        selectedBackupForRestoreScreen = record
+                                        val pt = AppBackupPoint(
+                                            backupId = record.id,
+                                            backupTitle = record.title,
+                                            timestamp = record.timestamp,
+                                            isLocal = !record.filePath.isNullOrBlank(),
+                                            isDrive = !record.driveFileId.isNullOrBlank(),
+                                            filePath = record.filePath,
+                                            driveFileId = record.driveFileId,
+                                            containerSizeBytes = record.sizeBytes,
+                                            appSizeBytes = record.sizeBytes,
+                                            isFullPackage = record.includedAppsCount > 1
+                                        )
+                                        appForIndividualRestore = app
+                                        individualRestorePoint = pt
                                     } else {
                                         Toast.makeText(context, "Nenhum backup encontrado para este app", Toast.LENGTH_SHORT).show()
                                     }
@@ -756,7 +806,22 @@ fun AppsListScreen(
                                     selectedPackages.add(app.packageName)
                                 }
                             },
-                            onRestoreBackup = { selectedBackupForRestoreScreen = it },
+                            onRestoreBackup = { b ->
+                                val pt = AppBackupPoint(
+                                    backupId = b.id,
+                                    backupTitle = b.title,
+                                    timestamp = b.timestamp,
+                                    isLocal = !b.filePath.isNullOrBlank(),
+                                    isDrive = !b.driveFileId.isNullOrBlank(),
+                                    filePath = b.filePath,
+                                    driveFileId = b.driveFileId,
+                                    containerSizeBytes = b.sizeBytes,
+                                    appSizeBytes = b.sizeBytes,
+                                    isFullPackage = b.includedAppsCount > 1
+                                )
+                                appForIndividualRestore = app
+                                individualRestorePoint = pt
+                            },
                             onDeleteBackup = { backupToDelete = it },
                             onUploadBackupToDrive = {
                                 viewModel.uploadBackupsToDrive(listOf(it), DriveConstants.ROOT_FOLDER_NAME, selectedDriveAccountEmail)
@@ -764,13 +829,26 @@ fun AppsListScreen(
                             },
                             onRestoreAppClick = {
                                 val points = viewModel.getBackupPointsForApp(app.packageName)
-                                val latest = points.maxByOrNull { it.timestamp }
-                                if (latest != null) {
-                                    selectedBackupForRestoreScreen = viewModel.createBackupRecordFromPoint(latest)
+                                if (points.isNotEmpty()) {
+                                    appForIndividualRestore = app
+                                    individualRestorePoint = points.maxByOrNull { it.timestamp }
                                 } else {
                                     val record = appBackups.maxByOrNull { it.timestamp }
                                     if (record != null) {
-                                        selectedBackupForRestoreScreen = record
+                                        val pt = AppBackupPoint(
+                                            backupId = record.id,
+                                            backupTitle = record.title,
+                                            timestamp = record.timestamp,
+                                            isLocal = !record.filePath.isNullOrBlank(),
+                                            isDrive = !record.driveFileId.isNullOrBlank(),
+                                            filePath = record.filePath,
+                                            driveFileId = record.driveFileId,
+                                            containerSizeBytes = record.sizeBytes,
+                                            appSizeBytes = record.sizeBytes,
+                                            isFullPackage = record.includedAppsCount > 1
+                                        )
+                                        appForIndividualRestore = app
+                                        individualRestorePoint = pt
                                     } else {
                                         Toast.makeText(context, "Nenhum backup encontrado para este app", Toast.LENGTH_SHORT).show()
                                     }
@@ -830,7 +908,22 @@ fun AppsListScreen(
                                 selectedPackages.add(app.packageName)
                             }
                         },
-                        onRestoreBackup = { selectedBackupForRestoreScreen = it },
+                        onRestoreBackup = { b ->
+                            val pt = AppBackupPoint(
+                                backupId = b.id,
+                                backupTitle = b.title,
+                                timestamp = b.timestamp,
+                                isLocal = !b.filePath.isNullOrBlank(),
+                                isDrive = !b.driveFileId.isNullOrBlank(),
+                                filePath = b.filePath,
+                                driveFileId = b.driveFileId,
+                                containerSizeBytes = b.sizeBytes,
+                                appSizeBytes = b.sizeBytes,
+                                isFullPackage = b.includedAppsCount > 1
+                            )
+                            appForIndividualRestore = app
+                            individualRestorePoint = pt
+                        },
                         onDeleteBackup = { backupToDelete = it },
                         onUploadBackupToDrive = {
                             viewModel.uploadBackupsToDrive(listOf(it), DriveConstants.ROOT_FOLDER_NAME, selectedDriveAccountEmail)
@@ -838,13 +931,26 @@ fun AppsListScreen(
                         },
                         onRestoreAppClick = {
                             val points = viewModel.getBackupPointsForApp(app.packageName)
-                            val latest = points.maxByOrNull { it.timestamp }
-                            if (latest != null) {
-                                selectedBackupForRestoreScreen = viewModel.createBackupRecordFromPoint(latest)
+                            if (points.isNotEmpty()) {
+                                appForIndividualRestore = app
+                                individualRestorePoint = points.maxByOrNull { it.timestamp }
                             } else {
                                 val record = appBackups.maxByOrNull { it.timestamp }
                                 if (record != null) {
-                                    selectedBackupForRestoreScreen = record
+                                    val pt = AppBackupPoint(
+                                        backupId = record.id,
+                                        backupTitle = record.title,
+                                        timestamp = record.timestamp,
+                                        isLocal = !record.filePath.isNullOrBlank(),
+                                        isDrive = !record.driveFileId.isNullOrBlank(),
+                                        filePath = record.filePath,
+                                        driveFileId = record.driveFileId,
+                                        containerSizeBytes = record.sizeBytes,
+                                        appSizeBytes = record.sizeBytes,
+                                        isFullPackage = record.includedAppsCount > 1
+                                    )
+                                    appForIndividualRestore = app
+                                    individualRestorePoint = pt
                                 } else {
                                     Toast.makeText(context, "Nenhum backup encontrado para este app", Toast.LENGTH_SHORT).show()
                                 }

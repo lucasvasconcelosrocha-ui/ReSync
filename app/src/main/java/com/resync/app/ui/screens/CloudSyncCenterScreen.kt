@@ -168,6 +168,8 @@ fun CloudSyncCenterScreen(
     var labelToRename by remember { mutableStateOf("") }
     var labelToDelete by remember { mutableStateOf("") }
     var selectedCategoryModal by remember { mutableStateOf<String?>(null) }
+    var selectiveRestoreBackup by remember { mutableStateOf<BackupRecord?>(null) }
+    var selectiveRestoreCategory by remember { mutableStateOf<String?>(null) }
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -231,6 +233,61 @@ fun CloudSyncCenterScreen(
             accountToRemove = null
             selectedTab = 0
             viewModel.clearDriveAuthError()
+        }
+    }
+
+    if (selectiveRestoreBackup != null && selectiveRestoreCategory != null) {
+        val b = selectiveRestoreBackup!!
+        val cat = selectiveRestoreCategory!!
+        BackHandler {
+            selectiveRestoreBackup = null
+            selectiveRestoreCategory = null
+        }
+        RestoreSelectionScreen(
+            backup = b,
+            source = if (!b.driveFileId.isNullOrBlank()) RestoreSource.DRIVE else RestoreSource.LOCAL,
+            viewModel = viewModel,
+            initialCategoryId = cat,
+            exclusiveCategoryMode = true,
+            onBack = {
+                selectiveRestoreBackup = null
+                selectiveRestoreCategory = null
+            },
+            onFinished = {
+                selectiveRestoreBackup = null
+                selectiveRestoreCategory = null
+            }
+        )
+        return
+    }
+
+    val onOpenCategoryRestore: (String) -> Unit = { catName ->
+        val matching = labelBackups.filter { file ->
+            val s = CloudBackupCategoryHelper.inspectRemoteFile(file)
+            s.containsCategory(catName)
+        }
+        if (matching.isEmpty()) {
+            Toast.makeText(context, "Nenhum backup de $catName encontrado nesta etiqueta.", Toast.LENGTH_SHORT).show()
+        } else if (matching.size == 1) {
+            val file = matching.first()
+            val rec = BackupRecord(
+                id = file.id,
+                title = file.name,
+                filePath = "",
+                sizeBytes = file.sizeBytes,
+                checksumSha256 = file.md5Checksum ?: "",
+                isEncrypted = file.name.endsWith(".svb") || file.name.endsWith(".resync"),
+                timestamp = file.modifiedTime ?: file.createdTime ?: System.currentTimeMillis(),
+                itemCount = 1,
+                status = BackupStatus.COMPLETED,
+                destination = "Google Drive",
+                syncStatus = SyncStatus.UPLOADED,
+                driveFileId = file.id
+            )
+            selectiveRestoreBackup = rec
+            selectiveRestoreCategory = catName
+        } else {
+            selectedCategoryModal = catName
         }
     }
 
@@ -1086,27 +1143,48 @@ fun CloudSyncCenterScreen(
                                         Icon(Icons.Default.Smartphone, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(22.dp))
                                         Spacer(modifier = Modifier.width(10.dp))
                                         Column(modifier = Modifier.weight(1f)) {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Text("Etiqueta em exibição", fontSize = 10.5.sp, color = TextMuted)
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                if (effectiveViewLabel == customDeviceLabel) {
-                                                    Surface(
-                                                        shape = RoundedCornerShape(4.dp),
-                                                        color = primaryAccent.copy(alpha = 0.15f)
-                                                    ) {
-                                                        Text("Ativa neste dispositivo", fontSize = 9.sp, color = primaryAccent, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
-                                                    }
-                                                } else {
-                                                    Surface(
-                                                        shape = RoundedCornerShape(4.dp),
-                                                        color = StatusWarning.copy(alpha = 0.15f)
-                                                    ) {
-                                                        Text("Visualizando outro aparelho", fontSize = 9.sp, color = StatusWarning, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
-                                                    }
+                                            Text("Etiqueta em exibição", fontSize = 10.5.sp, color = TextMuted)
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Text(
+                                                text = effectiveViewLabel,
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = TextPrimary,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            if (effectiveViewLabel == customDeviceLabel) {
+                                                Surface(
+                                                    shape = RoundedCornerShape(4.dp),
+                                                    color = primaryAccent.copy(alpha = 0.15f)
+                                                ) {
+                                                    Text(
+                                                        text = "Ativa neste dispositivo",
+                                                        fontSize = 9.sp,
+                                                        color = primaryAccent,
+                                                        fontWeight = FontWeight.Bold,
+                                                        maxLines = 1,
+                                                        softWrap = false,
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                            } else {
+                                                Surface(
+                                                    shape = RoundedCornerShape(4.dp),
+                                                    color = StatusWarning.copy(alpha = 0.15f)
+                                                ) {
+                                                    Text(
+                                                        text = "Visualizando outro aparelho",
+                                                        fontSize = 9.sp,
+                                                        color = StatusWarning,
+                                                        fontWeight = FontWeight.Bold,
+                                                        maxLines = 1,
+                                                        softWrap = false,
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    )
                                                 }
                                             }
-                                            Spacer(modifier = Modifier.height(2.dp))
-                                            Text(effectiveViewLabel, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
                                         }
                                         Icon(Icons.Default.SwapHoriz, contentDescription = "Alternar", tint = primaryAccent, modifier = Modifier.size(20.dp))
                                     }
@@ -1147,7 +1225,7 @@ fun CloudSyncCenterScreen(
                                                 .weight(1f)
                                                 .clip(RoundedCornerShape(10.dp))
                                                 .border(0.5.dp, if (remoteAppsCount > 0) primaryAccent.copy(alpha = 0.4f) else DarkCardBorder, RoundedCornerShape(10.dp))
-                                                .clickable { selectedCategoryModal = "Aplicativos" },
+                                                .clickable { onOpenCategoryRestore("Aplicativos") },
                                             colors = CardDefaults.cardColors(containerColor = DarkBg)
                                         ) {
                                             Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1160,7 +1238,7 @@ fun CloudSyncCenterScreen(
                                                 .weight(1f)
                                                 .clip(RoundedCornerShape(10.dp))
                                                 .border(0.5.dp, if (remoteSmsCount > 0) AccentElectricCyan.copy(alpha = 0.4f) else DarkCardBorder, RoundedCornerShape(10.dp))
-                                                .clickable { selectedCategoryModal = "Mensagens" },
+                                                .clickable { onOpenCategoryRestore("Mensagens") },
                                             colors = CardDefaults.cardColors(containerColor = DarkBg)
                                         ) {
                                             Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1173,7 +1251,7 @@ fun CloudSyncCenterScreen(
                                                 .weight(1f)
                                                 .clip(RoundedCornerShape(10.dp))
                                                 .border(0.5.dp, if (remoteCallsCount > 0) AccentEmeraldGreen.copy(alpha = 0.4f) else DarkCardBorder, RoundedCornerShape(10.dp))
-                                                .clickable { selectedCategoryModal = "Chamadas" },
+                                                .clickable { onOpenCategoryRestore("Chamadas") },
                                             colors = CardDefaults.cardColors(containerColor = DarkBg)
                                         ) {
                                             Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1186,7 +1264,7 @@ fun CloudSyncCenterScreen(
                                                 .weight(1f)
                                                 .clip(RoundedCornerShape(10.dp))
                                                 .border(0.5.dp, if (remoteFoldersCount > 0) AccentNeonPurple.copy(alpha = 0.4f) else DarkCardBorder, RoundedCornerShape(10.dp))
-                                                .clickable { selectedCategoryModal = "Pastas" },
+                                                .clickable { onOpenCategoryRestore("Pastas") },
                                             colors = CardDefaults.cardColors(containerColor = DarkBg)
                                         ) {
                                             Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1206,7 +1284,7 @@ fun CloudSyncCenterScreen(
                                                 .weight(1f)
                                                 .clip(RoundedCornerShape(10.dp))
                                                 .border(0.5.dp, if (remoteBluetoothCount > 0) AccentNeonBlue.copy(alpha = 0.4f) else DarkCardBorder, RoundedCornerShape(10.dp))
-                                                .clickable { selectedCategoryModal = "Bluetooth" },
+                                                .clickable { onOpenCategoryRestore("Bluetooth") },
                                             colors = CardDefaults.cardColors(containerColor = DarkBg)
                                         ) {
                                             Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1219,7 +1297,7 @@ fun CloudSyncCenterScreen(
                                                 .weight(1f)
                                                 .clip(RoundedCornerShape(10.dp))
                                                 .border(0.5.dp, if (remoteDnsCount > 0) AccentCyberPurple.copy(alpha = 0.4f) else DarkCardBorder, RoundedCornerShape(10.dp))
-                                                .clickable { selectedCategoryModal = "DNS" },
+                                                .clickable { onOpenCategoryRestore("DNS") },
                                             colors = CardDefaults.cardColors(containerColor = DarkBg)
                                         ) {
                                             Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1232,7 +1310,7 @@ fun CloudSyncCenterScreen(
                                                 .weight(1f)
                                                 .clip(RoundedCornerShape(10.dp))
                                                 .border(0.5.dp, if (remoteWifiCount > 0) StatusWarning.copy(alpha = 0.4f) else DarkCardBorder, RoundedCornerShape(10.dp))
-                                                .clickable { selectedCategoryModal = "Wi-Fi" },
+                                                .clickable { onOpenCategoryRestore("Wi-Fi") },
                                             colors = CardDefaults.cardColors(containerColor = DarkBg)
                                         ) {
                                             Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1245,7 +1323,7 @@ fun CloudSyncCenterScreen(
                                                 .weight(1f)
                                                 .clip(RoundedCornerShape(10.dp))
                                                 .border(0.5.dp, if (remoteContactsCount > 0) AccentSunsetOrange.copy(alpha = 0.4f) else DarkCardBorder, RoundedCornerShape(10.dp))
-                                                .clickable { selectedCategoryModal = "Contatos" },
+                                                .clickable { onOpenCategoryRestore("Contatos") },
                                             colors = CardDefaults.cardColors(containerColor = DarkBg)
                                         ) {
                                             Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -2369,10 +2447,23 @@ fun CloudSyncCenterScreen(
                                             )
                                             Button(
                                                 onClick = {
-                                                    val unifiedEntry = viewModel.createUnifiedEntryFromDriveFile(file)
-                                                    Toast.makeText(context, "Iniciando restauração de $catName...", Toast.LENGTH_SHORT).show()
-                                                    viewModel.restoreCategoryBackup(unifiedEntry, catName)
+                                                    val rec = BackupRecord(
+                                                        id = file.id,
+                                                        title = file.name,
+                                                        filePath = "",
+                                                        sizeBytes = file.sizeBytes,
+                                                        checksumSha256 = file.md5Checksum ?: "",
+                                                        isEncrypted = file.name.endsWith(".svb") || file.name.endsWith(".resync"),
+                                                        timestamp = file.modifiedTime ?: file.createdTime ?: System.currentTimeMillis(),
+                                                        itemCount = 1,
+                                                        status = BackupStatus.COMPLETED,
+                                                        destination = "Google Drive",
+                                                        syncStatus = SyncStatus.UPLOADED,
+                                                        driveFileId = file.id
+                                                    )
                                                     selectedCategoryModal = null
+                                                    selectiveRestoreBackup = rec
+                                                    selectiveRestoreCategory = catName
                                                 },
                                                 colors = ButtonDefaults.buttonColors(containerColor = primaryAccent),
                                                 shape = RoundedCornerShape(6.dp),
