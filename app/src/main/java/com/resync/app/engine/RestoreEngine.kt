@@ -135,7 +135,9 @@ class RestoreEngine(private val context: Context) {
         manifest: BackupManifest,
         selectedItemIds: Set<String>,
         password: String? = null,
-        selectedCallKeys: Set<String>? = null
+        selectedCallKeys: Set<String>? = null,
+        selectedSmsKeys: Set<String>? = null,
+        selectedContactKeys: Set<String>? = null
     ): Flow<RestoreProgress> = channelFlow {
         send(RestoreProgress("Iniciando", "Lendo cabeçalho do container...", 0.05f))
         dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "Iniciando restauração seletiva de: ${containerFile.name}")
@@ -457,7 +459,7 @@ class RestoreEngine(private val context: Context) {
                     BackupItemType.CONTACTS -> {
                         val contactsFile = File(tempRestoreDir, item.archiveEntryPath)
                         if (contactsFile.exists() && contactsFile.length() > 0L) {
-                            itemOutcome = restoreContacts(contactsFile.readBytes())
+                            itemOutcome = restoreContacts(contactsFile.readBytes(), selectedContactKeys)
                         } else {
                             val err = "Arquivo de contatos não encontrado na extração: ${item.archiveEntryPath}"
                             dbHelper.insertLog(LogLevel.ERROR, "RestoreEngine", err)
@@ -496,7 +498,7 @@ class RestoreEngine(private val context: Context) {
                         }
                     }
                     BackupItemType.SMS -> {
-                        itemOutcome = restoreSmsItem(tempRestoreDir, item)
+                        itemOutcome = restoreSmsItem(tempRestoreDir, item, selectedSmsKeys)
                     }
                     BackupItemType.BLUETOOTH -> {
                         itemOutcome = restoreBluetooth(tempRestoreDir, item)
@@ -1208,7 +1210,7 @@ class RestoreEngine(private val context: Context) {
         }
     }
 
-    private suspend fun restoreContacts(fileBytes: ByteArray): ItemRestoreOutcome {
+    private suspend fun restoreContacts(fileBytes: ByteArray, selectedContactKeys: Set<String>? = null): ItemRestoreOutcome {
         return try {
             DeviceCategoryInspector.ensurePermission(
                 context,
@@ -1216,15 +1218,26 @@ class RestoreEngine(private val context: Context) {
                 android.Manifest.permission.WRITE_CONTACTS
             )
             val contentStr = String(fileBytes, Charsets.UTF_8)
-            val contactsToRestore: List<ContactRecord> = if (contentStr.contains("BEGIN:VCARD", ignoreCase = true)) {
+            val rawContacts: List<ContactRecord> = if (contentStr.contains("BEGIN:VCARD", ignoreCase = true)) {
                 parseVcardContacts(contentStr)
             } else {
                 gson.fromJson(contentStr, Array<ContactRecord>::class.java).toList()
             }
 
+            val contactsToRestore = if (selectedContactKeys != null && selectedContactKeys.isNotEmpty()) {
+                rawContacts.filter {
+                    val key1 = "${it.displayName}_${it.phoneNumbers.firstOrNull() ?: ""}"
+                    val key2 = it.id
+                    val key3 = it.displayName
+                    selectedContactKeys.contains(key1) || selectedContactKeys.contains(key2) || selectedContactKeys.contains(key3)
+                }
+            } else {
+                rawContacts
+            }
+
             if (contactsToRestore.isEmpty()) {
-                dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "Nenhum contato encontrado no arquivo.")
-                return ItemRestoreOutcome(true, verified = true, detailCount = "0 de 0", statusText = "Sem contatos no backup")
+                dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "Nenhum contato selecionado/encontrado no arquivo.")
+                return ItemRestoreOutcome(true, verified = true, detailCount = "0 de 0", statusText = "Sem contatos a restaurar")
             }
 
             val countBefore = getContactsCount()
@@ -1350,7 +1363,8 @@ class RestoreEngine(private val context: Context) {
         }
     }
 
-    private fun parseVcardContacts(vcardText: String): List<ContactRecord> {
+    companion object {
+        fun parseVcardContacts(vcardText: String): List<ContactRecord> {
         val result = mutableListOf<ContactRecord>()
         val lines = vcardText.lines()
         var inVcard = false
@@ -1404,6 +1418,7 @@ class RestoreEngine(private val context: Context) {
         }
         return result
     }
+}
 
     private suspend fun restoreWifiConfig(tempDir: File, item: ManifestItem): ItemRestoreOutcome {
         val hasRoot = Shell.isAppGrantedRoot() == true
@@ -1621,7 +1636,7 @@ class RestoreEngine(private val context: Context) {
         }
     }
 
-    private suspend fun restoreSmsItem(tempDir: File, item: ManifestItem): ItemRestoreOutcome {
+    private suspend fun restoreSmsItem(tempDir: File, item: ManifestItem, selectedSmsKeys: Set<String>? = null): ItemRestoreOutcome {
         val extractedFile = File(tempDir, item.archiveEntryPath)
         if (!extractedFile.exists() || extractedFile.length() == 0L) {
             val err = "Arquivo de SMS não encontrado na extração: ${item.archiveEntryPath}"
@@ -1689,10 +1704,20 @@ class RestoreEngine(private val context: Context) {
                     "android.permission.WRITE_SMS"
                 )
 
-                val smsList = gson.fromJson(extractedFile.readText(Charsets.UTF_8), Array<SmsRecord>::class.java)
-                if (smsList.isEmpty()) {
+                val allSmsList = gson.fromJson(extractedFile.readText(Charsets.UTF_8), Array<SmsRecord>::class.java).toList()
+                if (allSmsList.isEmpty()) {
                     dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "Nenhuma mensagem SMS no arquivo de backup.")
                     return ItemRestoreOutcome(true, verified = true, detailCount = "0 de 0", statusText = "Histórico de SMS vazio")
+                }
+
+                val smsList = if (selectedSmsKeys != null && selectedSmsKeys.isNotEmpty()) {
+                    allSmsList.filter { selectedSmsKeys.contains("${it.date}_${it.address}") }
+                } else {
+                    allSmsList
+                }
+
+                if (smsList.isEmpty()) {
+                    return ItemRestoreOutcome(true, verified = true, detailCount = "0 de ${allSmsList.size}", statusText = "Nenhuma mensagem SMS selecionada")
                 }
 
                 val countBefore = getSmsCount()

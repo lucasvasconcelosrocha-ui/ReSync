@@ -1,6 +1,7 @@
 package com.resync.app.ui.screens
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -34,6 +35,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.resync.app.data.model.*
 import com.resync.app.engine.ArchiveEngine
+import com.resync.app.engine.RestoreEngine
 import com.resync.app.engine.RestoreExecutionState
 import com.resync.app.engine.RestoreRepository
 import com.resync.app.engine.StorageRepository
@@ -69,8 +71,11 @@ data class RestoreCategoryGroup(
 data class AppRestorePackageGroup(
     val packageName: String,
     val appName: String,
+    val versionName: String,
     val sizeBytes: Long,
-    val itemIds: List<String>
+    val apkItemIds: List<String>,
+    val dataItemIds: List<String>,
+    val allItemIds: List<String>
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -98,11 +103,24 @@ fun RestoreSelectionScreen(
     val selectedCategoryIds = remember { mutableStateMapOf<String, Boolean>() }
     val selectedItemIds = remember { mutableStateMapOf<String, Boolean>() }
     val selectedCallKeys = remember { mutableStateMapOf<String, Boolean>() }
+    val selectedSmsKeys = remember { mutableStateMapOf<String, Boolean>() }
+    val selectedContactKeys = remember { mutableStateMapOf<String, Boolean>() }
+    val selectedWifiKeys = remember { mutableStateMapOf<String, Boolean>() }
+    val selectedBtKeys = remember { mutableStateMapOf<String, Boolean>() }
     var hasInitializedSelection by remember { mutableStateOf(false) }
 
     var activeCategoryDetail by remember { mutableStateOf<RestoreCategoryGroup?>(null) }
     var detailSearchQuery by remember { mutableStateOf("") }
     var showLogDialog by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = true) {
+        if (activeCategoryDetail != null) {
+            activeCategoryDetail = null
+            detailSearchQuery = ""
+        } else {
+            onBack()
+        }
+    }
 
     // Start inspecting manifest (lightweight index download for Drive, local manifest read for Local)
     LaunchedEffect(backup.id, source) {
@@ -411,18 +429,44 @@ fun RestoreSelectionScreen(
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         if (activeCategoryDetail != null) {
-                            Text(
-                                text = "${activeCategoryDetail!!.title} • Escolha os itens específicos",
-                                fontSize = 12.sp,
-                                color = primaryAccent,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                            val curGroup = activeCategoryDetail!!
+                            val countSelected = when (curGroup.id) {
+                                "APPS" -> {
+                                    val appItems = inspectedManifest?.items?.filter { it.id in curGroup.itemIds } ?: emptyList()
+                                    val pkgs = appItems.mapNotNull { it.metadata["packageName"] ?: it.archiveEntryPath.removePrefix("apps/").substringBefore("/").takeIf { s -> s.isNotBlank() } }.distinct()
+                                    pkgs.count { pkg ->
+                                        appItems.filter { (it.metadata["packageName"] ?: it.archiveEntryPath.removePrefix("apps/").substringBefore("/")) == pkg }
+                                            .any { selectedItemIds[it.id] == true }
+                                    }
+                                }
+                                "CALL_LOG" -> selectedCallKeys.values.count { it }
+                                "SMS" -> selectedSmsKeys.values.count { it }
+                                "CONTACTS" -> selectedContactKeys.values.count { it }
+                                "WIFI" -> selectedWifiKeys.values.count { it }
+                                "BLUETOOTH" -> selectedBtKeys.values.count { it }
+                                else -> curGroup.itemIds.count { selectedItemIds[it] == true }
+                            }
+                            val totalInCat = when (curGroup.id) {
+                                "APPS" -> curGroup.itemCount
+                                "CALL_LOG" -> selectedCallKeys.size.takeIf { it > 0 } ?: curGroup.itemCount
+                                "SMS" -> selectedSmsKeys.size.takeIf { it > 0 } ?: curGroup.itemCount
+                                "CONTACTS" -> selectedContactKeys.size.takeIf { it > 0 } ?: curGroup.itemCount
+                                "WIFI" -> selectedWifiKeys.size.takeIf { it > 0 } ?: curGroup.itemCount
+                                "BLUETOOTH" -> selectedBtKeys.size.takeIf { it > 0 } ?: curGroup.itemCount
+                                else -> curGroup.itemIds.size
+                            }
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
+                                Text(
+                                    text = "$countSelected de $totalInCat selecionados",
+                                    fontSize = 12.sp,
+                                    color = primaryAccent,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
                                 Text(
                                     text = "• ${source.tag}",
                                     fontSize = 11.sp,
@@ -473,8 +517,12 @@ fun RestoreSelectionScreen(
                                     .height(40.dp)
                                     .clickable {
                                         if (activeCategoryDetail != null) {
-                                            if (activeCategoryDetail!!.id == "CALL_LOG") {
-                                                selectedCallKeys.keys.forEach { selectedCallKeys[it] = true }
+                                            when (activeCategoryDetail!!.id) {
+                                                "CALL_LOG" -> selectedCallKeys.keys.forEach { selectedCallKeys[it] = true }
+                                                "SMS" -> selectedSmsKeys.keys.forEach { selectedSmsKeys[it] = true }
+                                                "CONTACTS" -> selectedContactKeys.keys.forEach { selectedContactKeys[it] = true }
+                                                "WIFI" -> selectedWifiKeys.keys.forEach { selectedWifiKeys[it] = true }
+                                                "BLUETOOTH" -> selectedBtKeys.keys.forEach { selectedBtKeys[it] = true }
                                             }
                                             activeCategoryDetail!!.itemIds.forEach { itemId ->
                                                 selectedItemIds[itemId] = true
@@ -504,8 +552,12 @@ fun RestoreSelectionScreen(
                                     .height(40.dp)
                                     .clickable {
                                         if (activeCategoryDetail != null) {
-                                            if (activeCategoryDetail!!.id == "CALL_LOG") {
-                                                selectedCallKeys.keys.forEach { selectedCallKeys[it] = false }
+                                            when (activeCategoryDetail!!.id) {
+                                                "CALL_LOG" -> selectedCallKeys.keys.forEach { selectedCallKeys[it] = false }
+                                                "SMS" -> selectedSmsKeys.keys.forEach { selectedSmsKeys[it] = false }
+                                                "CONTACTS" -> selectedContactKeys.keys.forEach { selectedContactKeys[it] = false }
+                                                "WIFI" -> selectedWifiKeys.keys.forEach { selectedWifiKeys[it] = false }
+                                                "BLUETOOTH" -> selectedBtKeys.keys.forEach { selectedBtKeys[it] = false }
                                             }
                                             activeCategoryDetail!!.itemIds.forEach { itemId ->
                                                 selectedItemIds[itemId] = false
@@ -651,11 +703,19 @@ fun RestoreSelectionScreen(
                                     val chosenCallKeys = if (selectedCallKeys.isNotEmpty()) {
                                         selectedCallKeys.filter { it.value }.keys
                                     } else null
+                                    val chosenSmsKeys = if (selectedSmsKeys.isNotEmpty()) {
+                                        selectedSmsKeys.filter { it.value }.keys
+                                    } else null
+                                    val chosenContactKeys = if (selectedContactKeys.isNotEmpty()) {
+                                        selectedContactKeys.filter { it.value }.keys
+                                    } else null
                                     viewModel.launchRestore(
                                         record = backup,
                                         selectedItemIds = allTargetItemIds,
                                         downloadedCacheFile = cacheFile,
-                                        selectedCallKeys = chosenCallKeys
+                                        selectedCallKeys = chosenCallKeys,
+                                        selectedSmsKeys = chosenSmsKeys,
+                                        selectedContactKeys = chosenContactKeys
                                     )
                                 }
                             },
@@ -1224,8 +1284,22 @@ fun RestoreSelectionScreen(
                                             }
                                             map.map { (pkg, items) ->
                                                 val appName = items.firstNotNullOfOrNull { it.metadata["appName"] } ?: pkg
+                                                val metaItem = items.find { it.archiveEntryPath.endsWith("metadata.json") }
+                                                val versionName = metaItem?.metadata?.get("versionName")
+                                                    ?: items.firstNotNullOfOrNull { it.metadata["versionName"] ?: it.metadata["version"] }
+                                                    ?: "1.0"
                                                 val size = items.sumOf { it.sizeBytes }
-                                                AppRestorePackageGroup(pkg, appName, size, items.map { it.id })
+                                                val apkItems = items.filter { it.type == BackupItemType.APP_APK || it.type == BackupItemType.APP_SPLIT_APKS || it.archiveEntryPath.endsWith(".apk") }
+                                                val dataItems = items.filter { it.type == BackupItemType.APP_DATA || it.archiveEntryPath.endsWith(".tar") || it.archiveEntryPath.endsWith(".tar.gz") }
+                                                AppRestorePackageGroup(
+                                                    packageName = pkg,
+                                                    appName = appName,
+                                                    versionName = versionName,
+                                                    sizeBytes = size,
+                                                    apkItemIds = apkItems.map { it.id },
+                                                    dataItemIds = dataItems.map { it.id },
+                                                    allItemIds = items.map { it.id }
+                                                )
                                             }
                                         }
 
@@ -1239,74 +1313,302 @@ fun RestoreSelectionScreen(
 
                                         LazyColumn(
                                             modifier = Modifier.fillMaxSize(),
-                                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp),
                                             contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp)
                                         ) {
                                             items(filteredApps, key = { it.packageName }) { appGroup ->
-                                                val isChecked = appGroup.itemIds.any { selectedItemIds[it] == true }
+                                                val hasApk = appGroup.apkItemIds.isNotEmpty()
+                                                val hasData = appGroup.dataItemIds.isNotEmpty()
+                                                val isApkSelected = hasApk && appGroup.apkItemIds.any { selectedItemIds[it] == true }
+                                                val isDataSelected = hasData && appGroup.dataItemIds.any { selectedItemIds[it] == true }
+                                                val isChecked = isApkSelected || isDataSelected
+                                                val isAmbos = isApkSelected && isDataSelected
+                                                val isSoApk = isApkSelected && !isDataSelected
+                                                val isSoDados = !isApkSelected && isDataSelected
                                                 val sizeStr = StorageRepository.formatFileSize(appGroup.sizeBytes)
 
                                                 Card(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
-                                                        .clip(RoundedCornerShape(10.dp))
-                                                        .border(1.dp, if (isChecked) primaryAccent.copy(alpha = 0.5f) else DarkCardBorder, RoundedCornerShape(10.dp))
-                                                        .clickable {
-                                                            val target = !isChecked
-                                                            appGroup.itemIds.forEach { selectedItemIds[it] = target }
-                                                        },
+                                                        .clip(RoundedCornerShape(12.dp))
+                                                        .border(1.dp, if (isChecked) primaryAccent.copy(alpha = 0.5f) else DarkCardBorder, RoundedCornerShape(12.dp)),
                                                     colors = CardDefaults.cardColors(
                                                         containerColor = if (isChecked) primaryAccent.copy(alpha = 0.08f) else DarkSurfaceVariant
                                                     )
                                                 ) {
-                                                    Row(
+                                                    Column(modifier = Modifier.padding(12.dp)) {
+                                                        Row(
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Checkbox(
+                                                                checked = isChecked,
+                                                                onCheckedChange = { target ->
+                                                                    appGroup.allItemIds.forEach { selectedItemIds[it] = target }
+                                                                },
+                                                                colors = CheckboxDefaults.colors(
+                                                                    checkedColor = primaryAccent,
+                                                                    uncheckedColor = TextMuted
+                                                                )
+                                                            )
+
+                                                            Spacer(modifier = Modifier.width(6.dp))
+
+                                                            RealAppIcon(
+                                                                packageName = appGroup.packageName,
+                                                                size = 40.dp,
+                                                                shapeRadius = 10.dp
+                                                            )
+
+                                                            Spacer(modifier = Modifier.width(10.dp))
+
+                                                            Column(modifier = Modifier.weight(1f)) {
+                                                                Row(
+                                                                    modifier = Modifier.fillMaxWidth(),
+                                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                                    verticalAlignment = Alignment.CenterVertically
+                                                                ) {
+                                                                    Text(
+                                                                        text = appGroup.appName,
+                                                                        fontWeight = FontWeight.Bold,
+                                                                        color = TextPrimary,
+                                                                        fontSize = 13.sp,
+                                                                        maxLines = 1,
+                                                                        overflow = TextOverflow.Ellipsis,
+                                                                        modifier = Modifier.weight(1f, fill = false)
+                                                                    )
+                                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                                    Text(
+                                                                        text = sizeStr,
+                                                                        fontSize = 11.sp,
+                                                                        color = TextMuted
+                                                                    )
+                                                                }
+                                                                Text(
+                                                                    text = "${appGroup.packageName} • v${appGroup.versionName}",
+                                                                    fontSize = 11.sp,
+                                                                    color = TextSecondary,
+                                                                    maxLines = 1,
+                                                                    overflow = TextOverflow.Ellipsis
+                                                                )
+                                                            }
+                                                        }
+
+                                                        // Granular Selectors: Ambos, Só APK, Só Dados
+                                                        Spacer(modifier = Modifier.height(8.dp))
+                                                        Row(
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .padding(start = 44.dp),
+                                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            if (hasApk && hasData) {
+                                                                Surface(
+                                                                    shape = RoundedCornerShape(6.dp),
+                                                                    color = if (isAmbos) primaryAccent.copy(alpha = 0.25f) else DarkSurface,
+                                                                    border = BorderStroke(1.dp, if (isAmbos) primaryAccent else DarkCardBorder),
+                                                                    modifier = Modifier.clickable {
+                                                                        appGroup.apkItemIds.forEach { selectedItemIds[it] = true }
+                                                                        appGroup.dataItemIds.forEach { selectedItemIds[it] = true }
+                                                                    }
+                                                                ) {
+                                                                    Text(
+                                                                        "Ambos",
+                                                                        fontSize = 10.5.sp,
+                                                                        fontWeight = if (isAmbos) FontWeight.Bold else FontWeight.Normal,
+                                                                        color = if (isAmbos) primaryAccent else TextSecondary,
+                                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                                                    )
+                                                                }
+                                                            }
+
+                                                            if (hasApk) {
+                                                                Surface(
+                                                                    shape = RoundedCornerShape(6.dp),
+                                                                    color = if (isSoApk) primaryAccent.copy(alpha = 0.25f) else DarkSurface,
+                                                                    border = BorderStroke(1.dp, if (isSoApk) primaryAccent else DarkCardBorder),
+                                                                    modifier = Modifier.clickable {
+                                                                        appGroup.apkItemIds.forEach { selectedItemIds[it] = true }
+                                                                        appGroup.dataItemIds.forEach { selectedItemIds[it] = false }
+                                                                    }
+                                                                ) {
+                                                                    Text(
+                                                                        "Só APK",
+                                                                        fontSize = 10.5.sp,
+                                                                        fontWeight = if (isSoApk) FontWeight.Bold else FontWeight.Normal,
+                                                                        color = if (isSoApk) primaryAccent else TextSecondary,
+                                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                                                    )
+                                                                }
+                                                            }
+
+                                                            if (hasData) {
+                                                                Surface(
+                                                                    shape = RoundedCornerShape(6.dp),
+                                                                    color = if (isSoDados) primaryAccent.copy(alpha = 0.25f) else DarkSurface,
+                                                                    border = BorderStroke(1.dp, if (isSoDados) primaryAccent else DarkCardBorder),
+                                                                    modifier = Modifier.clickable {
+                                                                        appGroup.apkItemIds.forEach { selectedItemIds[it] = false }
+                                                                        appGroup.dataItemIds.forEach { selectedItemIds[it] = true }
+                                                                    }
+                                                                ) {
+                                                                    Text(
+                                                                        "Só Dados",
+                                                                        fontSize = 10.5.sp,
+                                                                        fontWeight = if (isSoDados) FontWeight.Bold else FontWeight.Normal,
+                                                                        color = if (isSoDados) primaryAccent else TextSecondary,
+                                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                                                    )
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } else if (curGroup.id == "SMS") {
+                                        // Histórico detalhado de SMS
+                                        val containerFile = (manifestInspectState as? ManifestInspectState.Ready)?.fileToRestore ?: File(backup.filePath)
+                                        val smsRecords = remember(containerFile, groupValidItems) {
+                                            val smsItem = groupValidItems.firstOrNull { it.type == BackupItemType.SMS && (it.archiveEntryPath.endsWith("sms_backup.json") || it.archiveEntryPath.endsWith(".json")) }
+                                                ?: groupValidItems.firstOrNull { it.type == BackupItemType.SMS }
+                                            if (containerFile.exists() && smsItem != null) {
+                                                runCatching {
+                                                    val bytes = ArchiveEngine.readEntryBytes(containerFile, smsItem.archiveEntryPath)
+                                                    if (bytes != null) {
+                                                        com.google.gson.Gson().fromJson(String(bytes, Charsets.UTF_8), Array<SmsRecord>::class.java).toList()
+                                                    } else emptyList()
+                                                }.getOrDefault(emptyList())
+                                            } else emptyList()
+                                        }
+
+                                        LaunchedEffect(smsRecords) {
+                                            if (smsRecords.isNotEmpty() && selectedSmsKeys.isEmpty()) {
+                                                smsRecords.forEach { sms ->
+                                                    selectedSmsKeys["${sms.date}_${sms.address}"] = true
+                                                }
+                                            }
+                                        }
+
+                                        val filteredSms = remember(smsRecords, detailSearchQuery) {
+                                            if (detailSearchQuery.isBlank()) smsRecords
+                                            else smsRecords.filter {
+                                                it.address.contains(detailSearchQuery.trim(), ignoreCase = true) ||
+                                                it.body.contains(detailSearchQuery.trim(), ignoreCase = true)
+                                            }
+                                        }
+
+                                        if (filteredSms.isEmpty()) {
+                                            Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                                                Text(
+                                                    text = if (smsRecords.isEmpty()) "Nenhuma mensagem SMS encontrada no container." else "Nenhuma mensagem encontrada para a busca.",
+                                                    color = TextMuted,
+                                                    fontSize = 13.sp
+                                                )
+                                            }
+                                        } else {
+                                            LazyColumn(
+                                                modifier = Modifier.fillMaxSize(),
+                                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                                                contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp)
+                                            ) {
+                                                items(filteredSms, key = { "${it.date}_${it.address}" }) { sms ->
+                                                    val smsKey = "${sms.date}_${sms.address}"
+                                                    val isChecked = selectedSmsKeys[smsKey] != false
+                                                    val isReceived = sms.type == 1
+                                                    val typeLabel = if (isReceived) "Recebida" else "Enviada"
+                                                    val typeColor = if (isReceived) AccentNeonBlue else AccentEmeraldGreen
+                                                    val dateStr = remember(sms.date) {
+                                                        SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(sms.date))
+                                                    }
+
+                                                    Card(
                                                         modifier = Modifier
                                                             .fillMaxWidth()
-                                                            .padding(10.dp),
-                                                        verticalAlignment = Alignment.CenterVertically
-                                                    ) {
-                                                        Checkbox(
-                                                            checked = isChecked,
-                                                            onCheckedChange = { target ->
-                                                                appGroup.itemIds.forEach { selectedItemIds[it] = target }
+                                                            .clip(RoundedCornerShape(10.dp))
+                                                            .border(1.dp, if (isChecked) primaryAccent.copy(alpha = 0.5f) else DarkCardBorder, RoundedCornerShape(10.dp))
+                                                            .clickable {
+                                                                val next = !isChecked
+                                                                selectedSmsKeys[smsKey] = next
+                                                                val hasAny = selectedSmsKeys.values.any { it }
+                                                                curGroup.itemIds.forEach { selectedItemIds[it] = hasAny }
+                                                                selectedCategoryIds[curGroup.id] = hasAny
                                                             },
-                                                            colors = CheckboxDefaults.colors(
-                                                                checkedColor = primaryAccent,
-                                                                uncheckedColor = TextMuted
-                                                            )
+                                                        colors = CardDefaults.cardColors(
+                                                            containerColor = if (isChecked) primaryAccent.copy(alpha = 0.08f) else DarkSurfaceVariant
                                                         )
-
-                                                        Spacer(modifier = Modifier.width(6.dp))
-
-                                                        RealAppIcon(
-                                                            packageName = appGroup.packageName,
-                                                            size = 38.dp,
-                                                            shapeRadius = 8.dp
-                                                        )
-
-                                                        Spacer(modifier = Modifier.width(10.dp))
-
-                                                        Column(modifier = Modifier.weight(1f)) {
-                                                            Text(
-                                                                text = appGroup.appName,
-                                                                fontWeight = FontWeight.Bold,
-                                                                color = TextPrimary,
-                                                                fontSize = 13.sp,
-                                                                maxLines = 1,
-                                                                overflow = TextOverflow.Ellipsis
+                                                    ) {
+                                                        Row(
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .padding(10.dp),
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Checkbox(
+                                                                checked = isChecked,
+                                                                onCheckedChange = { next ->
+                                                                    selectedSmsKeys[smsKey] = next
+                                                                    val hasAny = selectedSmsKeys.values.any { it }
+                                                                    curGroup.itemIds.forEach { selectedItemIds[it] = hasAny }
+                                                                    selectedCategoryIds[curGroup.id] = hasAny
+                                                                },
+                                                                colors = CheckboxDefaults.colors(
+                                                                    checkedColor = primaryAccent,
+                                                                    uncheckedColor = TextMuted
+                                                                )
                                                             )
-                                                            Text(
-                                                                text = appGroup.packageName,
-                                                                fontSize = 11.sp,
-                                                                color = TextSecondary,
-                                                                maxLines = 1,
-                                                                overflow = TextOverflow.Ellipsis
-                                                            )
-                                                            Text(
-                                                                text = sizeStr,
-                                                                fontSize = 10.sp,
-                                                                color = TextMuted
-                                                            )
+
+                                                            Spacer(modifier = Modifier.width(6.dp))
+
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .size(36.dp)
+                                                                    .clip(RoundedCornerShape(8.dp))
+                                                                    .background(typeColor.copy(alpha = 0.15f)),
+                                                                contentAlignment = Alignment.Center
+                                                            ) {
+                                                                Icon(Icons.Default.Chat, contentDescription = null, tint = typeColor, modifier = Modifier.size(18.dp))
+                                                            }
+
+                                                            Spacer(modifier = Modifier.width(10.dp))
+
+                                                            Column(modifier = Modifier.weight(1f)) {
+                                                                Row(
+                                                                    modifier = Modifier.fillMaxWidth(),
+                                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                                    verticalAlignment = Alignment.CenterVertically
+                                                                ) {
+                                                                    Text(
+                                                                        text = sms.address,
+                                                                        fontWeight = FontWeight.Bold,
+                                                                        color = TextPrimary,
+                                                                        fontSize = 13.sp,
+                                                                        maxLines = 1,
+                                                                        overflow = TextOverflow.Ellipsis
+                                                                    )
+                                                                    Text(
+                                                                        text = dateStr,
+                                                                        fontSize = 10.sp,
+                                                                        color = TextMuted
+                                                                    )
+                                                                }
+                                                                Spacer(modifier = Modifier.height(2.dp))
+                                                                Text(
+                                                                    text = sms.body,
+                                                                    fontSize = 11.5.sp,
+                                                                    color = TextSecondary,
+                                                                    maxLines = 2,
+                                                                    overflow = TextOverflow.Ellipsis
+                                                                )
+                                                                Spacer(modifier = Modifier.height(2.dp))
+                                                                Text(
+                                                                    text = typeLabel,
+                                                                    fontSize = 9.5.sp,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = typeColor
+                                                                )
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -1464,8 +1766,526 @@ fun RestoreSelectionScreen(
                                                 }
                                             }
                                         }
+                                    } else if (curGroup.id == "CONTACTS") {
+                                        // Catálogo de Contatos
+                                        val containerFile = (manifestInspectState as? ManifestInspectState.Ready)?.fileToRestore ?: File(backup.filePath)
+                                        val contactRecords = remember(containerFile, groupValidItems) {
+                                            val contactItem = groupValidItems.firstOrNull { it.type == BackupItemType.CONTACTS || it.archiveEntryPath.contains("contact") }
+                                            if (containerFile.exists() && contactItem != null) {
+                                                runCatching {
+                                                    val bytes = ArchiveEngine.readEntryBytes(containerFile, contactItem.archiveEntryPath)
+                                                    if (bytes != null) {
+                                                        val str = String(bytes, Charsets.UTF_8)
+                                                        if (str.contains("BEGIN:VCARD", ignoreCase = true)) {
+                                                            RestoreEngine.parseVcardContacts(str)
+                                                        } else {
+                                                            com.google.gson.Gson().fromJson(str, Array<ContactRecord>::class.java).toList()
+                                                        }
+                                                    } else emptyList()
+                                                }.getOrDefault(emptyList())
+                                            } else emptyList()
+                                        }
+
+                                        LaunchedEffect(contactRecords) {
+                                            if (contactRecords.isNotEmpty() && selectedContactKeys.isEmpty()) {
+                                                contactRecords.forEach { c ->
+                                                    val key = c.id.ifBlank { "${c.displayName}_${c.phoneNumbers.firstOrNull() ?: ""}" }
+                                                    selectedContactKeys[key] = true
+                                                }
+                                            }
+                                        }
+
+                                        val filteredContacts = remember(contactRecords, detailSearchQuery) {
+                                            if (detailSearchQuery.isBlank()) contactRecords
+                                            else contactRecords.filter {
+                                                it.displayName.contains(detailSearchQuery.trim(), ignoreCase = true) ||
+                                                it.phoneNumbers.any { p -> p.contains(detailSearchQuery.trim()) } ||
+                                                it.emails.any { e -> e.contains(detailSearchQuery.trim(), ignoreCase = true) }
+                                            }
+                                        }
+
+                                        if (filteredContacts.isEmpty()) {
+                                            Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                                                Text(
+                                                    text = if (contactRecords.isEmpty()) "Nenhum contato encontrado no container." else "Nenhum contato encontrado para a busca.",
+                                                    color = TextMuted,
+                                                    fontSize = 13.sp
+                                                )
+                                            }
+                                        } else {
+                                            LazyColumn(
+                                                modifier = Modifier.fillMaxSize(),
+                                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                                                contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp)
+                                            ) {
+                                                items(filteredContacts, key = { it.id.ifBlank { "${it.displayName}_${it.phoneNumbers.firstOrNull() ?: ""}" } }) { contact ->
+                                                    val contactKey = contact.id.ifBlank { "${contact.displayName}_${contact.phoneNumbers.firstOrNull() ?: ""}" }
+                                                    val isChecked = selectedContactKeys[contactKey] != false
+                                                    val initial = contact.displayName.firstOrNull()?.uppercaseChar()?.toString() ?: "?"
+
+                                                    Card(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .clip(RoundedCornerShape(10.dp))
+                                                            .border(1.dp, if (isChecked) primaryAccent.copy(alpha = 0.5f) else DarkCardBorder, RoundedCornerShape(10.dp))
+                                                            .clickable {
+                                                                val next = !isChecked
+                                                                selectedContactKeys[contactKey] = next
+                                                                val hasAny = selectedContactKeys.values.any { it }
+                                                                curGroup.itemIds.forEach { selectedItemIds[it] = hasAny }
+                                                                selectedCategoryIds[curGroup.id] = hasAny
+                                                            },
+                                                        colors = CardDefaults.cardColors(
+                                                            containerColor = if (isChecked) primaryAccent.copy(alpha = 0.08f) else DarkSurfaceVariant
+                                                        )
+                                                    ) {
+                                                        Row(
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .padding(10.dp),
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Checkbox(
+                                                                checked = isChecked,
+                                                                onCheckedChange = { next ->
+                                                                    selectedContactKeys[contactKey] = next
+                                                                    val hasAny = selectedContactKeys.values.any { it }
+                                                                    curGroup.itemIds.forEach { selectedItemIds[it] = hasAny }
+                                                                    selectedCategoryIds[curGroup.id] = hasAny
+                                                                },
+                                                                colors = CheckboxDefaults.colors(
+                                                                    checkedColor = primaryAccent,
+                                                                    uncheckedColor = TextMuted
+                                                                )
+                                                            )
+
+                                                            Spacer(modifier = Modifier.width(6.dp))
+
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .size(36.dp)
+                                                                    .clip(CircleShape)
+                                                                    .background(AccentEmeraldGreen.copy(alpha = 0.15f)),
+                                                                contentAlignment = Alignment.Center
+                                                            ) {
+                                                                Text(initial, fontWeight = FontWeight.Bold, color = AccentEmeraldGreen, fontSize = 14.sp)
+                                                            }
+
+                                                            Spacer(modifier = Modifier.width(10.dp))
+
+                                                            Column(modifier = Modifier.weight(1f)) {
+                                                                Text(
+                                                                    text = contact.displayName,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = TextPrimary,
+                                                                    fontSize = 13.sp,
+                                                                    maxLines = 1,
+                                                                    overflow = TextOverflow.Ellipsis
+                                                                )
+                                                                if (contact.phoneNumbers.isNotEmpty()) {
+                                                                    Text(
+                                                                        text = contact.phoneNumbers.joinToString(", "),
+                                                                        fontSize = 11.sp,
+                                                                        color = TextSecondary,
+                                                                        maxLines = 1,
+                                                                        overflow = TextOverflow.Ellipsis
+                                                                    )
+                                                                }
+                                                                if (contact.emails.isNotEmpty()) {
+                                                                    Text(
+                                                                        text = contact.emails.joinToString(", "),
+                                                                        fontSize = 10.sp,
+                                                                        color = TextMuted,
+                                                                        maxLines = 1,
+                                                                        overflow = TextOverflow.Ellipsis
+                                                                    )
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } else if (curGroup.id == "WIFI") {
+                                        // Redes Wi-Fi salvas
+                                        val containerFile = (manifestInspectState as? ManifestInspectState.Ready)?.fileToRestore ?: File(backup.filePath)
+                                        val wifiNetworks = remember(containerFile, groupValidItems) {
+                                            val wifiItem = groupValidItems.firstOrNull { it.type == BackupItemType.WIFI_CONFIG || it.archiveEntryPath.contains("wifi") }
+                                            if (containerFile.exists() && wifiItem != null) {
+                                                runCatching {
+                                                    val bytes = ArchiveEngine.readEntryBytes(containerFile, wifiItem.archiveEntryPath)
+                                                    if (bytes != null) {
+                                                        val content = String(bytes, Charsets.UTF_8)
+                                                        val list = mutableListOf<SavedWifiNetwork>()
+                                                        val networkRegex = Regex("<Network>(.*?)</Network>", RegexOption.DOT_MATCHES_ALL)
+                                                        val ssidRegex = Regex("<string name=\"SSID\">&quot;(.*?)&quot;</string>")
+                                                        val pskRegex = Regex("<string name=\"PreSharedKey\">&quot;(.*?)&quot;</string>")
+                                                        val configKeyRegex = Regex("<string name=\"ConfigKey\">&quot;(.*?)&quot;</string>")
+
+                                                        val matches = networkRegex.findAll(content)
+                                                        for (match in matches) {
+                                                            val block = match.groupValues[1]
+                                                            val ssid = ssidRegex.find(block)?.groupValues?.get(1) ?: continue
+                                                            val psk = pskRegex.find(block)?.groupValues?.get(1)
+                                                            val configKey = configKeyRegex.find(block)?.groupValues?.get(1) ?: ""
+                                                            val secType = when {
+                                                                configKey.contains("WPA_PSK") || configKey.contains("WPA2") -> "WPA2-PSK"
+                                                                configKey.contains("SAE") || configKey.contains("WPA3") -> "WPA3-SAE"
+                                                                configKey.contains("NONE") || psk == null -> "Rede Aberta"
+                                                                else -> "WPA/WPA2"
+                                                            }
+                                                            list.add(
+                                                                SavedWifiNetwork(
+                                                                    ssid = ssid.replace("&quot;", "\""),
+                                                                    password = psk?.replace("&quot;", "\""),
+                                                                    securityType = secType,
+                                                                    lastConnected = "Salva no backup"
+                                                                )
+                                                            )
+                                                        }
+                                                        if (list.isEmpty()) {
+                                                            Regex("""SSID[=:"]+([^"\r\n]+)""").findAll(content).forEach { m ->
+                                                                val s = m.groupValues[1].trim()
+                                                                if (s.isNotBlank() && list.none { it.ssid == s }) {
+                                                                    list.add(SavedWifiNetwork(s, null, "Wi-Fi Seguro", "Salva no backup"))
+                                                                }
+                                                            }
+                                                        }
+                                                        list
+                                                    } else emptyList()
+                                                }.getOrDefault(emptyList())
+                                            } else emptyList()
+                                        }
+
+                                        LaunchedEffect(wifiNetworks) {
+                                            if (wifiNetworks.isNotEmpty() && selectedWifiKeys.isEmpty()) {
+                                                wifiNetworks.forEach { net ->
+                                                    selectedWifiKeys[net.ssid] = true
+                                                }
+                                            }
+                                        }
+
+                                        val filteredWifi = remember(wifiNetworks, detailSearchQuery) {
+                                            if (detailSearchQuery.isBlank()) wifiNetworks
+                                            else wifiNetworks.filter {
+                                                it.ssid.contains(detailSearchQuery.trim(), ignoreCase = true) ||
+                                                it.securityType.contains(detailSearchQuery.trim(), ignoreCase = true)
+                                            }
+                                        }
+
+                                        if (filteredWifi.isEmpty()) {
+                                            Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                                                Text(
+                                                    text = if (wifiNetworks.isEmpty()) "Nenhuma rede Wi-Fi encontrada no container." else "Nenhuma rede Wi-Fi encontrada para a busca.",
+                                                    color = TextMuted,
+                                                    fontSize = 13.sp
+                                                )
+                                            }
+                                        } else {
+                                            LazyColumn(
+                                                modifier = Modifier.fillMaxSize(),
+                                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                                                contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp)
+                                            ) {
+                                                items(filteredWifi, key = { it.ssid }) { net ->
+                                                    val isChecked = selectedWifiKeys[net.ssid] != false
+
+                                                    Card(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .clip(RoundedCornerShape(10.dp))
+                                                            .border(1.dp, if (isChecked) primaryAccent.copy(alpha = 0.5f) else DarkCardBorder, RoundedCornerShape(10.dp))
+                                                            .clickable {
+                                                                val next = !isChecked
+                                                                selectedWifiKeys[net.ssid] = next
+                                                                val hasAny = selectedWifiKeys.values.any { it }
+                                                                curGroup.itemIds.forEach { selectedItemIds[it] = hasAny }
+                                                                selectedCategoryIds[curGroup.id] = hasAny
+                                                            },
+                                                        colors = CardDefaults.cardColors(
+                                                            containerColor = if (isChecked) primaryAccent.copy(alpha = 0.08f) else DarkSurfaceVariant
+                                                        )
+                                                    ) {
+                                                        Row(
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .padding(10.dp),
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Checkbox(
+                                                                checked = isChecked,
+                                                                onCheckedChange = { next ->
+                                                                    selectedWifiKeys[net.ssid] = next
+                                                                    val hasAny = selectedWifiKeys.values.any { it }
+                                                                    curGroup.itemIds.forEach { selectedItemIds[it] = hasAny }
+                                                                    selectedCategoryIds[curGroup.id] = hasAny
+                                                                },
+                                                                colors = CheckboxDefaults.colors(
+                                                                    checkedColor = primaryAccent,
+                                                                    uncheckedColor = TextMuted
+                                                                )
+                                                            )
+
+                                                            Spacer(modifier = Modifier.width(6.dp))
+
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .size(36.dp)
+                                                                    .clip(RoundedCornerShape(8.dp))
+                                                                    .background(AccentElectricCyan.copy(alpha = 0.15f)),
+                                                                contentAlignment = Alignment.Center
+                                                            ) {
+                                                                Icon(Icons.Default.Wifi, contentDescription = null, tint = AccentElectricCyan, modifier = Modifier.size(18.dp))
+                                                            }
+
+                                                            Spacer(modifier = Modifier.width(10.dp))
+
+                                                            Column(modifier = Modifier.weight(1f)) {
+                                                                Text(
+                                                                    text = net.ssid,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = TextPrimary,
+                                                                    fontSize = 13.sp,
+                                                                    maxLines = 1,
+                                                                    overflow = TextOverflow.Ellipsis
+                                                                )
+                                                                Text(
+                                                                    text = "${net.securityType} • ${if (!net.password.isNullOrBlank()) "Senha salva" else "Rede aberta"}",
+                                                                    fontSize = 11.sp,
+                                                                    color = TextSecondary,
+                                                                    maxLines = 1,
+                                                                    overflow = TextOverflow.Ellipsis
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } else if (curGroup.id == "BLUETOOTH") {
+                                        // Dispositivos Bluetooth pareados
+                                        val containerFile = (manifestInspectState as? ManifestInspectState.Ready)?.fileToRestore ?: File(backup.filePath)
+                                        val btDevices = remember(containerFile, groupValidItems) {
+                                            val btItem = groupValidItems.firstOrNull { it.type == BackupItemType.BLUETOOTH && it.archiveEntryPath.endsWith(".json") }
+                                                ?: groupValidItems.firstOrNull { it.type == BackupItemType.BLUETOOTH }
+                                            if (containerFile.exists() && btItem != null) {
+                                                runCatching {
+                                                    val bytes = ArchiveEngine.readEntryBytes(containerFile, btItem.archiveEntryPath)
+                                                    if (bytes != null) {
+                                                        val str = String(bytes, Charsets.UTF_8)
+                                                        val data = com.google.gson.Gson().fromJson(str, BluetoothBackupData::class.java)
+                                                        data.bondedDevices.ifEmpty { data.connectedDevices }
+                                                    } else emptyList()
+                                                }.getOrDefault(emptyList())
+                                            } else emptyList()
+                                        }
+
+                                        LaunchedEffect(btDevices) {
+                                            if (btDevices.isNotEmpty() && selectedBtKeys.isEmpty()) {
+                                                btDevices.forEach { dev ->
+                                                    selectedBtKeys[dev.address] = true
+                                                }
+                                            }
+                                        }
+
+                                        val filteredBt = remember(btDevices, detailSearchQuery) {
+                                            if (detailSearchQuery.isBlank()) btDevices
+                                            else btDevices.filter {
+                                                it.name.contains(detailSearchQuery.trim(), ignoreCase = true) ||
+                                                it.address.contains(detailSearchQuery.trim(), ignoreCase = true)
+                                            }
+                                        }
+
+                                        if (filteredBt.isEmpty()) {
+                                            Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                                                Text(
+                                                    text = if (btDevices.isEmpty()) "Nenhum dispositivo Bluetooth encontrado no container." else "Nenhum dispositivo encontrado para a busca.",
+                                                    color = TextMuted,
+                                                    fontSize = 13.sp
+                                                )
+                                            }
+                                        } else {
+                                            LazyColumn(
+                                                modifier = Modifier.fillMaxSize(),
+                                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                                                contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp)
+                                            ) {
+                                                items(filteredBt, key = { it.address }) { dev ->
+                                                    val isChecked = selectedBtKeys[dev.address] != false
+
+                                                    Card(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .clip(RoundedCornerShape(10.dp))
+                                                            .border(1.dp, if (isChecked) primaryAccent.copy(alpha = 0.5f) else DarkCardBorder, RoundedCornerShape(10.dp))
+                                                            .clickable {
+                                                                val next = !isChecked
+                                                                selectedBtKeys[dev.address] = next
+                                                                val hasAny = selectedBtKeys.values.any { it }
+                                                                curGroup.itemIds.forEach { selectedItemIds[it] = hasAny }
+                                                                selectedCategoryIds[curGroup.id] = hasAny
+                                                            },
+                                                        colors = CardDefaults.cardColors(
+                                                            containerColor = if (isChecked) primaryAccent.copy(alpha = 0.08f) else DarkSurfaceVariant
+                                                        )
+                                                    ) {
+                                                        Row(
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .padding(10.dp),
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Checkbox(
+                                                                checked = isChecked,
+                                                                onCheckedChange = { next ->
+                                                                    selectedBtKeys[dev.address] = next
+                                                                    val hasAny = selectedBtKeys.values.any { it }
+                                                                    curGroup.itemIds.forEach { selectedItemIds[it] = hasAny }
+                                                                    selectedCategoryIds[curGroup.id] = hasAny
+                                                                },
+                                                                colors = CheckboxDefaults.colors(
+                                                                    checkedColor = primaryAccent,
+                                                                    uncheckedColor = TextMuted
+                                                                )
+                                                            )
+
+                                                            Spacer(modifier = Modifier.width(6.dp))
+
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .size(36.dp)
+                                                                    .clip(RoundedCornerShape(8.dp))
+                                                                    .background(AccentSunsetOrange.copy(alpha = 0.15f)),
+                                                                contentAlignment = Alignment.Center
+                                                            ) {
+                                                                Icon(Icons.Default.Bluetooth, contentDescription = null, tint = AccentSunsetOrange, modifier = Modifier.size(18.dp))
+                                                            }
+
+                                                            Spacer(modifier = Modifier.width(10.dp))
+
+                                                            Column(modifier = Modifier.weight(1f)) {
+                                                                Text(
+                                                                    text = dev.name.ifBlank { "Dispositivo Bluetooth" },
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = TextPrimary,
+                                                                    fontSize = 13.sp,
+                                                                    maxLines = 1,
+                                                                    overflow = TextOverflow.Ellipsis
+                                                                )
+                                                                Text(
+                                                                    text = "${dev.address} • ${dev.deviceClass.ifBlank { "Pareado" }}",
+                                                                    fontSize = 11.sp,
+                                                                    color = TextSecondary,
+                                                                    maxLines = 1,
+                                                                    overflow = TextOverflow.Ellipsis
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } else if (curGroup.id == "DNS") {
+                                        // Configuração de DNS Privado
+                                        val containerFile = (manifestInspectState as? ManifestInspectState.Ready)?.fileToRestore ?: File(backup.filePath)
+                                        val dnsConfig = remember(containerFile, groupValidItems) {
+                                            val dnsItem = groupValidItems.firstOrNull { it.type == BackupItemType.DNS_CONFIG || it.archiveEntryPath.contains("dns") }
+                                            if (containerFile.exists() && dnsItem != null) {
+                                                runCatching {
+                                                    val bytes = ArchiveEngine.readEntryBytes(containerFile, dnsItem.archiveEntryPath)
+                                                    if (bytes != null) {
+                                                        com.google.gson.Gson().fromJson(String(bytes, Charsets.UTF_8), DnsConfig::class.java)
+                                                    } else null
+                                                }.getOrNull()
+                                            } else null
+                                        }
+
+                                        val isDnsSelected = curGroup.itemIds.any { selectedItemIds[it] == true }
+
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(top = 8.dp),
+                                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            Card(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clip(RoundedCornerShape(12.dp))
+                                                    .border(1.dp, if (isDnsSelected) primaryAccent.copy(alpha = 0.5f) else DarkCardBorder, RoundedCornerShape(12.dp)),
+                                                colors = CardDefaults.cardColors(containerColor = DarkSurfaceVariant)
+                                            ) {
+                                                Column(modifier = Modifier.padding(16.dp)) {
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.SpaceBetween
+                                                    ) {
+                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .size(40.dp)
+                                                                    .clip(RoundedCornerShape(10.dp))
+                                                                    .background(primaryAccent.copy(alpha = 0.15f)),
+                                                                contentAlignment = Alignment.Center
+                                                            ) {
+                                                                Icon(Icons.Default.Dns, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(22.dp))
+                                                            }
+                                                            Spacer(modifier = Modifier.width(12.dp))
+                                                            Column {
+                                                                Text("Configuração de DNS Privado", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 14.sp)
+                                                                Text(
+                                                                    text = "Modo: ${dnsConfig?.mode ?: "Automático"}",
+                                                                    fontSize = 12.sp,
+                                                                    color = TextSecondary
+                                                                )
+                                                            }
+                                                        }
+
+                                                        Switch(
+                                                            checked = isDnsSelected,
+                                                            onCheckedChange = { next ->
+                                                                curGroup.itemIds.forEach { selectedItemIds[it] = next }
+                                                                selectedCategoryIds[curGroup.id] = next
+                                                            },
+                                                            colors = SwitchDefaults.colors(
+                                                                checkedThumbColor = primaryAccent,
+                                                                checkedTrackColor = primaryAccent.copy(alpha = 0.3f)
+                                                            )
+                                                        )
+                                                    }
+
+                                                    if (!dnsConfig?.hostname.isNullOrBlank()) {
+                                                        Spacer(modifier = Modifier.height(12.dp))
+                                                        Surface(
+                                                            shape = RoundedCornerShape(8.dp),
+                                                            color = DarkSurface,
+                                                            border = BorderStroke(1.dp, DarkCardBorder),
+                                                            modifier = Modifier.fillMaxWidth()
+                                                        ) {
+                                                            Row(
+                                                                modifier = Modifier.padding(10.dp),
+                                                                verticalAlignment = Alignment.CenterVertically,
+                                                                horizontalArrangement = Arrangement.SpaceBetween
+                                                            ) {
+                                                                Column {
+                                                                    Text("Servidor de DNS:", fontSize = 10.sp, color = TextMuted)
+                                                                    Text(dnsConfig!!.hostname!!, fontWeight = FontWeight.Bold, color = primaryAccent, fontSize = 13.sp)
+                                                                }
+                                                                IconButton(onClick = {
+                                                                    clipboardManager.setText(AnnotatedString(dnsConfig.hostname!!))
+                                                                    Toast.makeText(context, "Hostname copiado!", Toast.LENGTH_SHORT).show()
+                                                                }) {
+                                                                    Icon(Icons.Default.ContentCopy, contentDescription = "Copiar", tint = primaryAccent, modifier = Modifier.size(18.dp))
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
                                     } else {
-                                        // Outras categorias (Arquivos, Pastas, SMS, Chamadas, etc.)
+                                        // Outras categorias (Arquivos, Pastas, Papéis de parede)
                                         val filteredItems = remember(groupValidItems, detailSearchQuery) {
                                             if (detailSearchQuery.isBlank()) groupValidItems
                                             else groupValidItems.filter {
@@ -1474,75 +2294,85 @@ fun RestoreSelectionScreen(
                                             }
                                         }
 
-                                        LazyColumn(
-                                            modifier = Modifier.fillMaxSize(),
-                                            verticalArrangement = Arrangement.spacedBy(6.dp),
-                                            contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp)
-                                        ) {
-                                            items(filteredItems, key = { it.id }) { item ->
-                                                val isChecked = selectedItemIds[item.id] == true
-                                                val sizeStr = StorageRepository.formatFileSize(item.sizeBytes)
+                                        if (filteredItems.isEmpty()) {
+                                            Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                                                Text(
+                                                    text = "Nenhum item encontrado nesta categoria.",
+                                                    color = TextMuted,
+                                                    fontSize = 13.sp
+                                                )
+                                            }
+                                        } else {
+                                            LazyColumn(
+                                                modifier = Modifier.fillMaxSize(),
+                                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                                                contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp)
+                                            ) {
+                                                items(filteredItems, key = { it.id }) { item ->
+                                                    val isChecked = selectedItemIds[item.id] == true
+                                                    val sizeStr = StorageRepository.formatFileSize(item.sizeBytes)
 
-                                                Card(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .clip(RoundedCornerShape(10.dp))
-                                                        .border(1.dp, if (isChecked) primaryAccent.copy(alpha = 0.5f) else DarkCardBorder, RoundedCornerShape(10.dp))
-                                                        .clickable { selectedItemIds[item.id] = !isChecked },
-                                                    colors = CardDefaults.cardColors(
-                                                        containerColor = if (isChecked) primaryAccent.copy(alpha = 0.08f) else DarkSurfaceVariant
-                                                    )
-                                                ) {
-                                                    Row(
+                                                    Card(
                                                         modifier = Modifier
                                                             .fillMaxWidth()
-                                                            .padding(10.dp),
-                                                        verticalAlignment = Alignment.CenterVertically
-                                                    ) {
-                                                        Checkbox(
-                                                            checked = isChecked,
-                                                            onCheckedChange = { selectedItemIds[item.id] = it },
-                                                            colors = CheckboxDefaults.colors(
-                                                                checkedColor = primaryAccent,
-                                                                uncheckedColor = TextMuted
-                                                            )
+                                                            .clip(RoundedCornerShape(10.dp))
+                                                            .border(1.dp, if (isChecked) primaryAccent.copy(alpha = 0.5f) else DarkCardBorder, RoundedCornerShape(10.dp))
+                                                            .clickable { selectedItemIds[item.id] = !isChecked },
+                                                        colors = CardDefaults.cardColors(
+                                                            containerColor = if (isChecked) primaryAccent.copy(alpha = 0.08f) else DarkSurfaceVariant
                                                         )
-
-                                                        Spacer(modifier = Modifier.width(6.dp))
-
-                                                        Box(
+                                                    ) {
+                                                        Row(
                                                             modifier = Modifier
-                                                                .size(36.dp)
-                                                                .clip(RoundedCornerShape(8.dp))
-                                                                .background(curGroup.accentColor.copy(alpha = 0.15f)),
-                                                            contentAlignment = Alignment.Center
+                                                                .fillMaxWidth()
+                                                                .padding(10.dp),
+                                                            verticalAlignment = Alignment.CenterVertically
                                                         ) {
-                                                            Icon(curGroup.icon, contentDescription = null, tint = curGroup.accentColor, modifier = Modifier.size(20.dp))
-                                                        }
+                                                            Checkbox(
+                                                                checked = isChecked,
+                                                                onCheckedChange = { selectedItemIds[item.id] = it },
+                                                                colors = CheckboxDefaults.colors(
+                                                                    checkedColor = primaryAccent,
+                                                                    uncheckedColor = TextMuted
+                                                                )
+                                                            )
 
-                                                        Spacer(modifier = Modifier.width(10.dp))
+                                                            Spacer(modifier = Modifier.width(6.dp))
 
-                                                        Column(modifier = Modifier.weight(1f)) {
-                                                            Text(
-                                                                text = item.name,
-                                                                fontWeight = FontWeight.Bold,
-                                                                color = TextPrimary,
-                                                                fontSize = 13.sp,
-                                                                maxLines = 1,
-                                                                overflow = TextOverflow.Ellipsis
-                                                            )
-                                                            Text(
-                                                                text = item.archiveEntryPath,
-                                                                fontSize = 10.sp,
-                                                                color = TextSecondary,
-                                                                maxLines = 1,
-                                                                overflow = TextOverflow.Ellipsis
-                                                            )
-                                                            Text(
-                                                                text = sizeStr,
-                                                                fontSize = 10.sp,
-                                                                color = TextMuted
-                                                            )
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .size(36.dp)
+                                                                    .clip(RoundedCornerShape(8.dp))
+                                                                    .background(curGroup.accentColor.copy(alpha = 0.15f)),
+                                                                contentAlignment = Alignment.Center
+                                                            ) {
+                                                                Icon(curGroup.icon, contentDescription = null, tint = curGroup.accentColor, modifier = Modifier.size(20.dp))
+                                                            }
+
+                                                            Spacer(modifier = Modifier.width(10.dp))
+
+                                                            Column(modifier = Modifier.weight(1f)) {
+                                                                Text(
+                                                                    text = item.name,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = TextPrimary,
+                                                                    fontSize = 13.sp,
+                                                                    maxLines = 1,
+                                                                    overflow = TextOverflow.Ellipsis
+                                                                )
+                                                                Text(
+                                                                    text = item.archiveEntryPath,
+                                                                    fontSize = 10.sp,
+                                                                    color = TextSecondary,
+                                                                    maxLines = 1,
+                                                                    overflow = TextOverflow.Ellipsis
+                                                                )
+                                                                Text(
+                                                                    text = sizeStr,
+                                                                    fontSize = 10.sp,
+                                                                    color = TextMuted
+                                                                )
+                                                            }
                                                         }
                                                     }
                                                 }

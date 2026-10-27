@@ -109,227 +109,195 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     )
     val themeAccent: StateFlow<ThemeAccent> = _themeAccent.asStateFlow()
 
-    // Shared Cache Bytes for Storage Cache & Storage Details single source of truth
-    private val _totalAppCacheBytes = MutableStateFlow<Long>(0L)
-    val totalAppCacheBytes: StateFlow<Long> = _totalAppCacheBytes.asStateFlow()
-
-    private val _appCacheList = MutableStateFlow<List<AppCacheItem>>(emptyList())
-    val appCacheList: StateFlow<List<AppCacheItem>> = _appCacheList.asStateFlow()
-
-    private val _isCacheScanning = MutableStateFlow(false)
-    val isCacheScanning: StateFlow<Boolean> = _isCacheScanning.asStateFlow()
-
-    private val _cacheAnalyzedCount = MutableStateFlow(0)
-    val cacheAnalyzedCount: StateFlow<Int> = _cacheAnalyzedCount.asStateFlow()
-
-    private val _cacheTotalAppsCount = MutableStateFlow(0)
-    val cacheTotalAppsCount: StateFlow<Int> = _cacheTotalAppsCount.asStateFlow()
-
-    private val _isClearingCache = MutableStateFlow(false)
-    val isClearingCache: StateFlow<Boolean> = _isClearingCache.asStateFlow()
-
-    private val _lastCacheFreedMessage = MutableStateFlow<String?>(null)
-    val lastCacheFreedMessage: StateFlow<String?> = _lastCacheFreedMessage.asStateFlow()
+    // Shared Cache Bytes & List for Storage Cache, Storage Details and Dashboard broom (Fonte Única de Verdade)
+    val totalAppCacheBytes: StateFlow<Long> = AppCacheRepository.totalAppCacheBytes
+    val appCacheList: StateFlow<List<AppCacheItem>> = AppCacheRepository.appCacheList
+    val isCacheScanning: StateFlow<Boolean> = AppCacheRepository.isCacheScanning
+    val cacheAnalyzedCount: StateFlow<Int> = AppCacheRepository.cacheAnalyzedCount
+    val cacheTotalAppsCount: StateFlow<Int> = AppCacheRepository.cacheTotalAppsCount
+    val isClearingCache: StateFlow<Boolean> = AppCacheRepository.isClearingCache
+    val lastCacheFreedMessage: StateFlow<String?> = AppCacheRepository.lastCacheFreedMessage
 
     fun dismissLastCacheFreedMessage() {
-        _lastCacheFreedMessage.value = null
-    }
-
-    fun updateTotalCacheBytes(bytes: Long) {
-        _totalAppCacheBytes.value = bytes
+        AppCacheRepository.dismissLastCacheFreedMessage()
     }
 
     /**
-     * Scans installed applications cache using StorageStatsManager in parallel chunks (< 500ms).
+     * Scans installed applications cache using real root directory measurement in batch.
      */
     fun scanAppCache(force: Boolean = false) {
-        if (_isCacheScanning.value) return
-        if (!force && _appCacheList.value.isNotEmpty()) return
-
-        viewModelScope.launch(Dispatchers.IO) {
-            _isCacheScanning.value = true
-            val apps: List<AppInfo> = if (installedApps.value.isNotEmpty()) {
-                installedApps.value
-            } else {
-                withContext(Dispatchers.Main) { refreshInstalledApps(force = false) }
-                installedApps.value
-            }
-
-            _cacheTotalAppsCount.value = apps.size
-            _cacheAnalyzedCount.value = 0
-
-            val storageStatsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.getSystemService(Context.STORAGE_STATS_SERVICE) as? StorageStatsManager
-            } else null
-
-            val tempItems = ConcurrentLinkedQueue<AppCacheItem>()
-            var processed = 0
-
-            // Processa em lotes paralelos de 30 apps em Dispatchers.IO para leitura instantânea (< 500ms)
-            coroutineScope {
-                apps.chunked(30).forEach { chunk ->
-                    chunk.map { app ->
-                        async(Dispatchers.IO) {
-                            var cBytes = 0L
-                            if (storageStatsManager != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                try {
-                                    val stats = storageStatsManager.queryStatsForPackage(
-                                        StorageManager.UUID_DEFAULT,
-                                        app.packageName,
-                                        Process.myUserHandle()
-                                    )
-                                    cBytes = stats.cacheBytes
-                                } catch (_: Exception) {}
-                            }
-                            if (cBytes > 0L) {
-                                tempItems.add(AppCacheItem(app, cBytes))
-                            }
-                        }
-                    }.awaitAll()
-
-                    processed += chunk.size
-                    _cacheAnalyzedCount.value = processed
-                }
-            }
-
-            val sorted = tempItems.toList().sortedByDescending { it.cacheBytes }
-            _appCacheList.value = sorted
-            _totalAppCacheBytes.value = sorted.sumOf { it.cacheBytes }
-            _isCacheScanning.value = false
+        val apps = if (installedApps.value.isNotEmpty()) installedApps.value else {
+            refreshInstalledApps(force = false)
+            installedApps.value
         }
+        AppCacheRepository.scanAppCache(context, apps, force)
     }
 
     /**
-     * Clears single application cache via root (or intent fallback) and updates StateFlow immediately.
+     * Clears single application cache via root and updates StateFlow immediately.
      */
     fun clearSingleAppCache(item: AppCacheItem) {
-        val pkg = item.app.packageName
-        val initialBytes = item.cacheBytes
-
-        // 1. Atualização imediata no State (remove da lista na hora e subtrai do total)
-        _appCacheList.value = _appCacheList.value.filter { it.app.packageName != pkg }
-        _totalAppCacheBytes.value = _appCacheList.value.sumOf { it.cacheBytes }
-
-        viewModelScope.launch(Dispatchers.IO) {
-            val isRoot = runCatching { Shell.isAppGrantedRoot() == true || Shell.getShell().isRoot }.getOrDefault(false)
-            if (isRoot) {
-                Shell.cmd(
-                    "rm -rf /data/data/$pkg/cache/*",
-                    "rm -rf /data/data/$pkg/code_cache/*",
-                    "rm -rf /data/user_de/0/$pkg/cache/*",
-                    "rm -rf /data/user_de/0/$pkg/code_cache/*",
-                    "rm -rf /sdcard/Android/data/$pkg/cache/*"
-                ).exec()
-            }
-
-            // Consulta rápida para validar resíduo real
-            var residualBytes = 0L
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val storageStatsManager = context.getSystemService(Context.STORAGE_STATS_SERVICE) as? StorageStatsManager
-                if (storageStatsManager != null) {
-                    try {
-                        val stats = storageStatsManager.queryStatsForPackage(
-                            StorageManager.UUID_DEFAULT,
-                            pkg,
-                            Process.myUserHandle()
-                        )
-                        residualBytes = stats.cacheBytes
-                    } catch (_: Exception) {}
-                }
-            }
-
-            val freed = (initialBytes - residualBytes).coerceAtLeast(0L)
-            if (freed > 0L) {
-                _lastCacheFreedMessage.value = "${FormatUtils.formatBytes(freed)} liberados de ${item.app.appName}!"
-            }
-
-            if (residualBytes > 0L) {
-                val current = _appCacheList.value.filter { it.app.packageName != pkg }.toMutableList()
-                current.add(AppCacheItem(item.app, residualBytes))
-                _appCacheList.value = current.sortedByDescending { it.cacheBytes }
-                _totalAppCacheBytes.value = _appCacheList.value.sumOf { it.cacheBytes }
-            }
-        }
+        AppCacheRepository.clearSingleAppCache(item)
     }
 
     /**
      * Clears all apps cache via root in batched commands and updates StateFlow immediately.
      */
     fun clearAllAppCache() {
-        _isClearingCache.value = true
-        val itemsToClean = _appCacheList.value.toList()
-        val totalBefore = _totalAppCacheBytes.value
-
-        // 1. Atualização imediata no State (zera tudo instantaneamente)
-        _appCacheList.value = emptyList()
-        _totalAppCacheBytes.value = 0L
-
-        viewModelScope.launch(Dispatchers.IO) {
-            val isRoot = runCatching { Shell.isAppGrantedRoot() == true || Shell.getShell().isRoot }.getOrDefault(false)
-
-            if (isRoot) {
-                // pm trim-caches limpa caches do sistema em lote
-                Shell.cmd("pm trim-caches 999999999999").exec()
-
-                // Limpeza REAL em lote agrupando comandos por pacote (25 apps por comando)
-                itemsToClean.chunked(25).forEach { batch ->
-                    val cmdBuilder = StringBuilder()
-                    batch.forEach { item ->
-                        val p = item.app.packageName
-                        cmdBuilder.append("rm -rf /data/data/$p/cache/* /data/data/$p/code_cache/* /data/user_de/0/$p/cache/* /data/user_de/0/$p/code_cache/* /sdcard/Android/data/$p/cache/*; ")
-                    }
-                    Shell.cmd(cmdBuilder.toString()).exec()
-                }
-            }
-
-            // Verificação residual rápida via StorageStatsManager
-            val storageStatsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.getSystemService(Context.STORAGE_STATS_SERVICE) as? StorageStatsManager
-            } else null
-
-            val remainingItems = mutableListOf<AppCacheItem>()
-            if (storageStatsManager != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                itemsToClean.forEach { item ->
-                    try {
-                        val stats = storageStatsManager.queryStatsForPackage(
-                            StorageManager.UUID_DEFAULT,
-                            item.app.packageName,
-                            Process.myUserHandle()
-                        )
-                        if (stats.cacheBytes > 0L) {
-                            remainingItems.add(AppCacheItem(item.app, stats.cacheBytes))
-                        }
-                    } catch (_: Exception) {}
-                }
-            }
-
-            val totalAfter = remainingItems.sumOf { it.cacheBytes }
-            val freed = (totalBefore - totalAfter).coerceAtLeast(0L)
-
-            _appCacheList.value = remainingItems.sortedByDescending { it.cacheBytes }
-            _totalAppCacheBytes.value = totalAfter
-            _isClearingCache.value = false
-
-            if (freed > 0L) {
-                _lastCacheFreedMessage.value = "${FormatUtils.formatBytes(freed)} liberados com sucesso!"
-            } else {
-                _lastCacheFreedMessage.value = "Nenhum cache adicional pôde ser liberado."
-            }
-        }
+        AppCacheRepository.clearAllAppCache()
     }
 
-    // Custom Device Label
+    // Custom Device Label & Multi-Label Manager
+    private fun loadSavedLabels(): List<String> {
+        val defaultId = com.resync.app.util.FormatUtils.getDeviceIdentifier(context)
+        val currentCustom = prefs.getString("custom_device_label", null) ?: defaultId
+        val savedSet = prefs.getStringSet("saved_device_labels_set", null) ?: setOf(defaultId)
+        return (savedSet + defaultId + currentCustom).filter { it.isNotBlank() }.distinct().sorted()
+    }
+
+    private val _savedDeviceLabels = MutableStateFlow(loadSavedLabels())
+    val savedDeviceLabels: StateFlow<List<String>> = _savedDeviceLabels.asStateFlow()
+
     private val _customDeviceLabel = MutableStateFlow(
         prefs.getString("custom_device_label", null) ?: com.resync.app.util.FormatUtils.getDeviceIdentifier(context)
     )
     val customDeviceLabel: StateFlow<String> = _customDeviceLabel.asStateFlow()
+
+    private val _selectedViewLabel = MutableStateFlow(
+        prefs.getString("selected_view_label", null) ?: _customDeviceLabel.value
+    )
+    val selectedViewLabel: StateFlow<String> = _selectedViewLabel.asStateFlow()
+
+    fun setSelectedViewLabel(label: String) {
+        val trimmed = label.trim()
+        if (trimmed.isNotBlank()) {
+            _selectedViewLabel.value = trimmed
+            prefs.edit().putString("selected_view_label", trimmed).apply()
+        }
+    }
 
     fun setCustomDeviceLabel(label: String) {
         val trimmed = label.trim()
         if (trimmed.isNotBlank()) {
             prefs.edit().putString("custom_device_label", trimmed).apply()
             _customDeviceLabel.value = trimmed
+            _selectedViewLabel.value = trimmed
+            prefs.edit().putString("selected_view_label", trimmed).apply()
+            val updated = (_savedDeviceLabels.value + trimmed).distinct().sorted()
+            _savedDeviceLabels.value = updated
+            prefs.edit().putStringSet("saved_device_labels_set", updated.toSet()).apply()
         }
+    }
+
+    fun createDeviceLabel(newLabel: String, setAsActiveForNewBackups: Boolean) {
+        val trimmed = newLabel.trim()
+        if (trimmed.isNotBlank()) {
+            val updated = (_savedDeviceLabels.value + trimmed).distinct().sorted()
+            _savedDeviceLabels.value = updated
+            prefs.edit().putStringSet("saved_device_labels_set", updated.toSet()).apply()
+            _selectedViewLabel.value = trimmed
+            prefs.edit().putString("selected_view_label", trimmed).apply()
+            if (setAsActiveForNewBackups) {
+                _customDeviceLabel.value = trimmed
+                prefs.edit().putString("custom_device_label", trimmed).apply()
+            }
+        }
+    }
+
+    fun renameDeviceLabel(oldLabel: String, newLabel: String, onFinished: (Int) -> Unit = {}) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val oldTrimmed = oldLabel.trim()
+            val newTrimmed = newLabel.trim()
+            if (newTrimmed.isBlank() || oldTrimmed == newTrimmed) return@launch
+
+            val updatedSet = _savedDeviceLabels.value.map { if (it.equals(oldTrimmed, ignoreCase = true)) newTrimmed else it }.distinct().sorted()
+            _savedDeviceLabels.value = updatedSet
+            prefs.edit().putStringSet("saved_device_labels_set", updatedSet.toSet()).apply()
+
+            if (_customDeviceLabel.value.equals(oldTrimmed, ignoreCase = true)) {
+                _customDeviceLabel.value = newTrimmed
+                prefs.edit().putString("custom_device_label", newTrimmed).apply()
+            }
+            if (_selectedViewLabel.value.equals(oldTrimmed, ignoreCase = true)) {
+                _selectedViewLabel.value = newTrimmed
+                prefs.edit().putString("selected_view_label", newTrimmed).apply()
+            }
+
+            val activeEmail = _activeAccountEmail.value
+            val currentRemote = _remoteDriveBackups.value
+            val targets = currentRemote.filter { file ->
+                val prop = file.appProperties["deviceLabel"]?.trim()
+                prop?.equals(oldTrimmed, ignoreCase = true) == true ||
+                        (prop.isNullOrBlank() && file.name.contains(oldTrimmed, ignoreCase = true))
+            }
+
+            val updatedRemote = currentRemote.map { file ->
+                if (targets.any { it.id == file.id }) {
+                    val newProps = file.appProperties.toMutableMap().apply { put("deviceLabel", newTrimmed) }
+                    file.copy(appProperties = newProps)
+                } else file
+            }
+            _remoteDriveBackups.value = updatedRemote
+            _remoteBackupsState.value = RemoteBackupsState.Loaded(updatedRemote)
+
+            var updatedCount = 0
+            for (file in targets) {
+                val patchRes = gdriveProvider.cloudBackupRepository.updateRemoteBackupProperties(
+                    fileId = file.id,
+                    properties = mapOf("deviceLabel" to newTrimmed),
+                    accountEmail = activeEmail
+                )
+                if (patchRes.isSuccess) updatedCount++
+            }
+
+            refreshActiveAccountData(activeEmail, isManual = true)
+            withContext(Dispatchers.Main) {
+                onFinished(updatedCount)
+            }
+        }
+    }
+
+    fun deleteDeviceLabel(label: String, onFinished: (Int) -> Unit = {}) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val trimmed = label.trim()
+            deleteRemoteBackupsForLabel(trimmed) { deletedCount ->
+                val remaining = _savedDeviceLabels.value.filterNot { it.equals(trimmed, ignoreCase = true) }
+                val defaultLabel = com.resync.app.util.FormatUtils.getDeviceIdentifier(context)
+                val fallback = remaining.firstOrNull() ?: defaultLabel
+                val finalLabels = (remaining + fallback).distinct().sorted()
+                _savedDeviceLabels.value = finalLabels
+                prefs.edit().putStringSet("saved_device_labels_set", finalLabels.toSet()).apply()
+
+                if (_selectedViewLabel.value.equals(trimmed, ignoreCase = true)) {
+                    _selectedViewLabel.value = fallback
+                    prefs.edit().putString("selected_view_label", fallback).apply()
+                }
+                if (_customDeviceLabel.value.equals(trimmed, ignoreCase = true)) {
+                    _customDeviceLabel.value = fallback
+                    prefs.edit().putString("custom_device_label", fallback).apply()
+                }
+                onFinished(deletedCount)
+            }
+        }
+    }
+
+    fun createUnifiedEntryFromDriveFile(rem: com.resync.app.cloud.gdrive.DriveFileMetadata): UnifiedBackupEntry {
+        val remoteTitle = rem.appProperties["title"] ?: rem.name.removeSuffix(".resync").removeSuffix(".svb").removeSuffix(".zip")
+        val r = BackupRecord(
+            id = rem.id,
+            title = remoteTitle,
+            filePath = "",
+            sizeBytes = rem.sizeBytes,
+            checksumSha256 = rem.md5Checksum ?: "",
+            isEncrypted = rem.appProperties["isEncrypted"]?.toBooleanStrictOrNull() ?: false,
+            timestamp = rem.modifiedTime,
+            itemCount = rem.appProperties["count_apps"]?.toIntOrNull() ?: 0,
+            status = BackupStatus.COMPLETED,
+            destination = "Google Drive",
+            syncStatus = SyncStatus.SYNCED,
+            driveFileId = rem.id
+        )
+        return UnifiedBackupEntry(record = r, hasLocal = false, hasDrive = true, remoteFileId = rem.id)
     }
 
     // Military Grade AES-256-GCM Security & Encryption
@@ -377,6 +345,32 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _appBackupStatusMap = MutableStateFlow<Map<String, AppBackupStatus>>(emptyMap())
     val appBackupStatusMap: StateFlow<Map<String, AppBackupStatus>> = _appBackupStatusMap.asStateFlow()
 
+    private val _appBackupPointsMap = MutableStateFlow<Map<String, List<AppBackupPoint>>>(emptyMap())
+    val appBackupPointsMap: StateFlow<Map<String, List<AppBackupPoint>>> = _appBackupPointsMap.asStateFlow()
+
+    fun getBackupPointsForApp(packageName: String): List<AppBackupPoint> {
+        return _appBackupPointsMap.value[packageName]
+            ?: appBackupDetector.getBackupPointsForApp(packageName)
+    }
+
+    fun createBackupRecordFromPoint(point: AppBackupPoint): BackupRecord {
+        return BackupRecord(
+            id = point.backupId,
+            title = point.backupTitle,
+            filePath = point.filePath,
+            sizeBytes = if (point.containerSizeBytes > 0L) point.containerSizeBytes else point.appSizeBytes,
+            checksumSha256 = "",
+            isEncrypted = false,
+            timestamp = point.timestamp,
+            itemCount = point.itemIds.size.coerceAtLeast(1),
+            status = BackupStatus.COMPLETED,
+            includedAppsCount = 1,
+            destination = if (point.isLocal && point.isDrive) "Local + Nuvem" else if (point.isLocal) "Local" else "Drive",
+            syncStatus = if (point.isDrive) SyncStatus.SYNCED else SyncStatus.LOCAL_ONLY,
+            driveFileId = point.driveFileId
+        )
+    }
+
     fun triggerAppBackupDetection(forceRefreshDrive: Boolean = false) {
         viewModelScope.launch {
             val pkgs = installedApps.value.map { it.packageName }
@@ -393,6 +387,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 forceRefreshDrive = forceRefreshDrive
             )
             _appBackupStatusMap.value = result
+            _appBackupPointsMap.value = appBackupDetector.getAllBackupPoints()
         }
     }
 
@@ -1758,7 +1753,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         selectedItemIds: Set<String>,
         password: String? = null,
         downloadedCacheFile: File? = null,
-        selectedCallKeys: Set<String>? = null
+        selectedCallKeys: Set<String>? = null,
+        selectedSmsKeys: Set<String>? = null,
+        selectedContactKeys: Set<String>? = null
     ) {
         val file = downloadedCacheFile?.takeIf { it.exists() } ?: File(record.filePath)
         val isLocal = file.exists()
@@ -1779,7 +1776,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             accountEmail = email,
             selectedItemTypes = selectedItemIds,
             encryptionPassword = password,
-            selectedCallKeys = selectedCallKeys
+            selectedCallKeys = selectedCallKeys,
+            selectedSmsKeys = selectedSmsKeys,
+            selectedContactKeys = selectedContactKeys
         )
     }
 
@@ -2360,11 +2359,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     Pair(
                         app,
                         com.resync.app.data.model.AppSelectionOptions(
-                            includeBaseApk = mode == "APK" || mode == "BOTH",
-                            includeSplits = mode == "APK" || mode == "BOTH",
-                            includeData = mode == "DATA" || mode == "BOTH",
-                            includeInternalData = mode == "DATA" || mode == "BOTH",
-                            includeExternalData = mode == "DATA" || mode == "BOTH"
+                            includeBaseApk = schedule.includeBaseApk && (mode == "APK" || mode == "BOTH"),
+                            includeSplits = schedule.includeAppSplits && (mode == "APK" || mode == "BOTH"),
+                            includeData = schedule.includeAppData && (mode == "DATA" || mode == "BOTH"),
+                            includeInternalData = schedule.includeAppData && (mode == "DATA" || mode == "BOTH"),
+                            includeExternalData = schedule.includeExternalData && (mode == "DATA" || mode == "BOTH"),
+                            includeObb = schedule.includeObb,
+                            includePermissions = schedule.includeAppPermissions
                         )
                     )
                 }

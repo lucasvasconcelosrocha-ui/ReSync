@@ -110,13 +110,20 @@ fun DashboardScreen(
     onNavigateToCategory: (String) -> Unit = {},
     onNavigateToStorageDetails: () -> Unit = {},
     onNavigateToScheduledBackups: () -> Unit = {},
-    onNavigateToFolders: () -> Unit = {}
+    onNavigateToFolders: () -> Unit = {},
+    onNavigateToStorageCache: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
     val currentAccent by viewModel.themeAccent.collectAsStateWithLifecycle()
     val primaryAccent = getAccentColor(currentAccent)
+
+    val totalAppCacheBytes by viewModel.totalAppCacheBytes.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) {
+        viewModel.scanAppCache(force = false)
+    }
 
     val multiAccounts by viewModel.multiCloudAccounts.collectAsStateWithLifecycle()
     val activeAccountEmail by viewModel.activeAccountEmail.collectAsStateWithLifecycle()
@@ -239,21 +246,57 @@ fun DashboardScreen(
                     )
                 }
 
-                // Direita: Ícone de Terminal / Logs
-                IconButton(
-                    onClick = onNavigateToLogs,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(DarkSurfaceVariant)
-                        .border(1.dp, DarkCardBorder, RoundedCornerShape(12.dp))
+                // Direita: Vassoura (Limpeza de Cache) e Terminal / Logs
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Terminal,
-                        contentDescription = "Logs",
-                        tint = primaryAccent,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    IconButton(
+                        onClick = onNavigateToStorageCache,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (totalAppCacheBytes > 0L) StatusWarning.copy(alpha = 0.15f) else DarkSurfaceVariant)
+                            .border(
+                                1.dp,
+                                if (totalAppCacheBytes > 0L) StatusWarning.copy(alpha = 0.6f) else DarkCardBorder,
+                                RoundedCornerShape(12.dp)
+                            )
+                    ) {
+                        BadgedBox(
+                            badge = {
+                                if (totalAppCacheBytes > 0L) {
+                                    Badge(
+                                        containerColor = StatusWarning,
+                                        modifier = Modifier.size(8.dp)
+                                    )
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CleaningServices,
+                                contentDescription = "Limpeza de Cache",
+                                tint = if (totalAppCacheBytes > 0L) StatusWarning else primaryAccent,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
+                    IconButton(
+                        onClick = onNavigateToLogs,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(DarkSurfaceVariant)
+                            .border(1.dp, DarkCardBorder, RoundedCornerShape(12.dp))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Terminal,
+                            contentDescription = "Logs",
+                            tint = primaryAccent,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
 

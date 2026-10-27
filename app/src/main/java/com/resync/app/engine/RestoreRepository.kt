@@ -144,6 +144,8 @@ object RestoreRepository {
     }
 
     private var lastSelectedCallKeys: Set<String>? = null
+    private var lastSelectedSmsKeys: Set<String>? = null
+    private var lastSelectedContactKeys: Set<String>? = null
 
     fun startRestore(
         localFile: File?,
@@ -151,7 +153,9 @@ object RestoreRepository {
         accountEmail: String?,
         selectedItemTypes: Set<String>,
         encryptionPassword: String? = null,
-        selectedCallKeys: Set<String>? = null
+        selectedCallKeys: Set<String>? = null,
+        selectedSmsKeys: Set<String>? = null,
+        selectedContactKeys: Set<String>? = null
     ) {
         val context = appContext ?: return
         lastLocalFile = localFile
@@ -160,6 +164,8 @@ object RestoreRepository {
         lastSelectedTypes = selectedItemTypes
         lastPassword = encryptionPassword
         lastSelectedCallKeys = selectedCallKeys
+        lastSelectedSmsKeys = selectedSmsKeys
+        lastSelectedContactKeys = selectedContactKeys
 
         activeRestoreJob?.cancel()
         restoreStartTime = System.currentTimeMillis()
@@ -269,7 +275,9 @@ object RestoreRepository {
                     manifest = manifest,
                     selectedItemIds = targetItemIds,
                     password = encryptionPassword,
-                    selectedCallKeys = selectedCallKeys ?: lastSelectedCallKeys
+                    selectedCallKeys = selectedCallKeys ?: lastSelectedCallKeys,
+                    selectedSmsKeys = selectedSmsKeys ?: lastSelectedSmsKeys,
+                    selectedContactKeys = selectedContactKeys ?: lastSelectedContactKeys
                 ).collect { progress ->
                     _restoreProgress.value = progress
                     if (progress.currentItemName.isNotBlank() && progress.stage != "Pausado") {

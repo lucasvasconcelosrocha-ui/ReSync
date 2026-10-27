@@ -389,9 +389,15 @@ object ArchiveEngine {
     }
 
     /**
-     * Lê diretamente os bytes de uma entrada específica de um container ZIP.
+     * Lê diretamente os bytes de uma entrada específica de um container ZIP,
+     * realizando descriptografia automática caso a entrada esteja criptografada.
      */
-    fun readEntryBytes(containerFile: File, entryPath: String): ByteArray? {
+    fun readEntryBytes(
+        containerFile: File,
+        entryPath: String,
+        password: String? = null,
+        accountEmail: String? = null
+    ): ByteArray? {
         return try {
             val files = resolveArchiveFiles(containerFile)
             val firstFile = files.firstOrNull() ?: return null
@@ -399,11 +405,22 @@ object ArchiveEngine {
             val magic = ByteArray(4)
             FileInputStream(firstFile).use { it.read(magic) }
             if (magic.contentEquals(SVB_MAGIC)) return null
-            MultiPartSeekableByteChannel(files).use { channel ->
+            val raw = MultiPartSeekableByteChannel(files).use { channel ->
                 ZipFile.builder().setSeekableByteChannel(channel).get().use { zipFile ->
                     val entry = zipFile.getEntry(entryPath) ?: return@use null
                     zipFile.getInputStream(entry).use { it.readBytes() }
                 }
+            } ?: return null
+
+            if (raw.size >= 4 && (
+                (raw[0] == SecurityManager.RESY_MAGIC[0] && raw[1] == SecurityManager.RESY_MAGIC[1] && raw[2] == SecurityManager.RESY_MAGIC[2] && raw[3] == SecurityManager.RESY_MAGIC[3]) ||
+                (raw[0] == SecurityManager.SVBE_MAGIC[0] && raw[1] == SecurityManager.SVBE_MAGIC[1] && raw[2] == SecurityManager.SVBE_MAGIC[2] && raw[3] == SecurityManager.SVBE_MAGIC[3])
+            )) {
+                val baos = java.io.ByteArrayOutputStream()
+                SecurityManager.decryptStreamChunked(java.io.ByteArrayInputStream(raw), baos, password, accountEmail)
+                baos.toByteArray()
+            } else {
+                raw
             }
         } catch (_: Exception) {
             null
