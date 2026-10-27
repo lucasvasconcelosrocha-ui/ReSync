@@ -87,6 +87,13 @@ object RestoreRepository {
     private val _isRestorePaused = MutableStateFlow(false)
     val isRestorePaused: StateFlow<Boolean> = _isRestorePaused.asStateFlow()
 
+    fun isRestoreActive(): Boolean {
+        val state = _executionState.value
+        return state != RestoreExecutionState.IDLE && state != RestoreExecutionState.COMPLETED && state != RestoreExecutionState.ERROR && state != RestoreExecutionState.CANCELLED
+    }
+
+    fun isRestoreRunning(): Boolean = isRestoreActive()
+
     // Hold last used parameters to allow retry
     private var lastLocalFile: File? = null
     private var lastRemoteDriveFileId: String? = null

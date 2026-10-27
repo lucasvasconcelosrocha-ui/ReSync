@@ -222,9 +222,39 @@ object CloudBackupCategoryHelper {
 
     /**
      * Inspects a remote file retrieved from Google Drive.
-     * Uses `appProperties` if present; falls back to full package or filename analysis.
+     * Uses local companion index if mirrored locally, then `appProperties` if present;
+     * falls back to full package or filename analysis.
      */
-    fun inspectRemoteFile(file: DriveFileMetadata): CategorySummary {
+    fun inspectRemoteFile(file: DriveFileMetadata, context: Context? = null): CategorySummary {
+        // 0. If local mirror with companion index exists on device, extract actual detailed count
+        if (context != null) {
+            try {
+                val mirror = com.resync.app.data.model.BackupPaths.findLocalMirrorFile(
+                    backupId = file.id,
+                    title = file.name,
+                    context = context,
+                    expectedSizeBytes = file.sizeBytes,
+                    driveFileId = file.id
+                )
+                if (mirror != null && mirror.exists()) {
+                    val sidecar = File(mirror.parentFile, "${mirror.nameWithoutExtension}.index.json")
+                    if (sidecar.exists() && sidecar.length() > 0L) {
+                        val bytes = sidecar.readBytes()
+                        val isGzip = bytes.size >= 2 && bytes[0] == 0x1F.toByte() && bytes[1] == 0x8B.toByte()
+                        val jsonStr = if (isGzip) {
+                            java.util.zip.GZIPInputStream(java.io.ByteArrayInputStream(bytes)).bufferedReader(Charsets.UTF_8).use { it.readText() }
+                        } else {
+                            String(bytes, Charsets.UTF_8)
+                        }
+                        val manifest = gson.fromJson(jsonStr, BackupManifest::class.java)
+                        if (manifest?.items != null && manifest.items.isNotEmpty()) {
+                            return fromManifest(manifest)
+                        }
+                    }
+                }
+            } catch (_: Throwable) {}
+        }
+
         val props = file.appProperties
         val hasPropApps = props["has_apps"]?.toBooleanStrictOrNull()
         val hasPropSms = props["has_sms"]?.toBooleanStrictOrNull()

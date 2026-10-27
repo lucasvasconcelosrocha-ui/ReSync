@@ -23,6 +23,18 @@ class ReSyncApplication : Application() {
         // Garante canais unificados resync_ops_v3 e limpa canais legados
         com.resync.app.util.HyperFocusNotificationHelper.ensureNotificationChannels(this)
 
+        // Cancelar imediatamente quaisquer notificações órfãs deixadas por execuções anteriores se nenhuma operação estiver ativa
+        if (!com.resync.app.engine.BackupRepository.isBackupActive() && !com.resync.app.engine.RestoreRepository.isRestoreActive()) {
+            try {
+                val nm = getSystemService(android.app.NotificationManager::class.java)
+                nm?.cancel(com.resync.app.service.BackupForegroundService.NOTIFICATION_ID)
+                nm?.cancel(com.resync.app.service.RestoreForegroundService.NOTIFICATION_ID)
+                nm?.cancel(com.resync.app.cloud.gdrive.CloudNotificationManager.NOTIFICATION_ID)
+                nm?.cancel(com.resync.app.worker.FileUploadWorker.NOTIFICATION_ID)
+                nm?.cancel(4001) // ScheduledBackupWorker.NOTIFICATION_ID
+            } catch (_: Throwable) {}
+        }
+
         // Inicializa o repositório singleton de backup para restaurar estado se aplicável
         com.resync.app.engine.BackupRepository.initialize(this)
 

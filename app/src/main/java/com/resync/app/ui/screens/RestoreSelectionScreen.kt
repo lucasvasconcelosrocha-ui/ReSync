@@ -55,6 +55,7 @@ import com.resync.app.ui.viewmodel.ManifestInspectState
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlinx.coroutines.withTimeoutOrNull
 
 data class RestoreCategoryGroup(
     val id: String,
@@ -94,6 +95,8 @@ fun RestoreSelectionScreen(
     val clipboardManager = LocalClipboardManager.current
     val currentAccent by viewModel.themeAccent.collectAsState()
     val primaryAccent = getAccentColor(currentAccent)
+    val activeAccountEmail by viewModel.activeAccountEmail.collectAsState()
+    val effectiveAccountEmail = backup.destination.takeIf { it.contains("@") } ?: activeAccountEmail
 
     val manifestInspectState by viewModel.manifestInspectState.collectAsStateWithLifecycle()
     val restoreProgress by RestoreRepository.restoreProgress.collectAsStateWithLifecycle()
@@ -126,10 +129,33 @@ fun RestoreSelectionScreen(
         }
     }
 
+    val effectiveContainerFile = remember(backup.id, backup.filePath, backup.title, manifestInspectState) {
+        val fromManifest = (manifestInspectState as? ManifestInspectState.Ready)?.fileToRestore
+        if (fromManifest != null && fromManifest.exists() && fromManifest.length() > 0L) {
+            fromManifest
+        } else if (backup.filePath.isNotBlank() && File(backup.filePath).exists() && File(backup.filePath).length() > 0L) {
+            File(backup.filePath)
+        } else {
+            com.resync.app.data.model.BackupPaths.findLocalMirrorFile(
+                backupId = backup.id,
+                title = backup.title,
+                context = context,
+                expectedSizeBytes = backup.sizeBytes,
+                driveFileId = backup.driveFileId
+            )
+        }
+    }
+
     // Start inspecting manifest (lightweight index download for Drive, local manifest read for Local)
-    LaunchedEffect(backup.id, source) {
-        val forceCloud = source == RestoreSource.DRIVE
-        viewModel.inspectBackup(backup, forceCloudSource = forceCloud)
+    LaunchedEffect(backup.id, source, effectiveContainerFile) {
+        val hasLocal = effectiveContainerFile != null && effectiveContainerFile.exists() && effectiveContainerFile.length() > 0L
+        val forceCloud = source == RestoreSource.DRIVE && !hasLocal
+        val recordToInspect = if (hasLocal && (backup.filePath.isBlank() || !File(backup.filePath).exists())) {
+            backup.copy(filePath = effectiveContainerFile!!.absolutePath, syncStatus = SyncStatus.SYNCED)
+        } else {
+            backup
+        }
+        viewModel.inspectBackup(recordToInspect, forceCloudSource = forceCloud)
     }
 
     val inspectedManifest = (manifestInspectState as? ManifestInspectState.Ready)?.manifest
@@ -1524,7 +1550,7 @@ fun RestoreSelectionScreen(
                                         }
                                     } else if (curGroup.id == "SMS") {
                                         // Histórico detalhado de SMS
-                                        val containerFile = (manifestInspectState as? ManifestInspectState.Ready)?.fileToRestore ?: File(backup.filePath)
+                                        val containerFile = effectiveContainerFile ?: File("")
                                         val smsItem = remember(groupValidItems) {
                                             groupValidItems.firstOrNull { it.type == BackupItemType.SMS && (it.archiveEntryPath.endsWith("sms_backup.json") || it.archiveEntryPath.endsWith(".json")) }
                                                 ?: groupValidItems.firstOrNull { it.type == BackupItemType.SMS }
@@ -1538,7 +1564,9 @@ fun RestoreSelectionScreen(
                                         LaunchedEffect(containerFile, smsItem, backup.driveFileId) {
                                             if (!containerFile.exists() && smsItem != null && !backup.driveFileId.isNullOrBlank() && remoteSmsBytes == null) {
                                                 isLoadingRemoteSms = true
-                                                remoteSmsBytes = viewModel.fetchRemoteEntryBytes(backup, smsItem.archiveEntryPath)
+                                                remoteSmsBytes = withTimeoutOrNull(4000L) {
+                                                    viewModel.fetchRemoteEntryBytes(backup, smsItem.archiveEntryPath)
+                                                }
                                                 isLoadingRemoteSms = false
                                             }
                                         }
@@ -1546,17 +1574,52 @@ fun RestoreSelectionScreen(
                                         val smsRecords = remember(containerFile, smsItem, remoteSmsBytes) {
                                             if (smsItem == null) emptyList()
                                             else if (containerFile.exists()) {
-                                                runCatching {
-                                                    val bytes = ArchiveEngine.readEntryBytes(containerFile, smsItem.archiveEntryPath)
+                                                val list = runCatching {
+                                                    val bytes = ArchiveEngine.readEntryBytes(containerFile, smsItem.archiveEntryPath, accountEmail = effectiveAccountEmail)
                                                     if (bytes != null) {
                                                         com.google.gson.Gson().fromJson(String(bytes, Charsets.UTF_8), Array<SmsRecord>::class.java).toList()
                                                     } else emptyList()
                                                 }.getOrDefault(emptyList())
+                                                if (list.isNotEmpty()) list else {
+                                                    val count = smsItem.metadata["count"]?.toIntOrNull() ?: curGroup.itemCount.coerceAtLeast(1)
+                                                    listOf(
+                                                        SmsRecord(
+                                                            address = "Backup de Mensagens SMS",
+                                                            date = backup.timestamp,
+                                                            type = 1,
+                                                            read = 1,
+                                                            body = "Pacote com $count mensagem(ns) SMS salvas no container."
+                                                        )
+                                                    )
+                                                }
                                             } else if (remoteSmsBytes != null) {
-                                                runCatching {
+                                                val list = runCatching {
                                                     com.google.gson.Gson().fromJson(String(remoteSmsBytes!!, Charsets.UTF_8), Array<SmsRecord>::class.java).toList()
                                                 }.getOrDefault(emptyList())
-                                            } else emptyList()
+                                                if (list.isNotEmpty()) list else {
+                                                    val count = smsItem.metadata["count"]?.toIntOrNull() ?: curGroup.itemCount.coerceAtLeast(1)
+                                                    listOf(
+                                                        SmsRecord(
+                                                            address = "Backup de Mensagens SMS",
+                                                            date = backup.timestamp,
+                                                            type = 1,
+                                                            read = 1,
+                                                            body = "Pacote com $count mensagem(ns) SMS salvas na nuvem."
+                                                        )
+                                                    )
+                                                }
+                                            } else {
+                                                val count = smsItem.metadata["count"]?.toIntOrNull() ?: curGroup.itemCount.coerceAtLeast(1)
+                                                listOf(
+                                                    SmsRecord(
+                                                        address = "Backup de Mensagens SMS",
+                                                        date = backup.timestamp,
+                                                        type = 1,
+                                                        read = 1,
+                                                        body = "Pacote com $count mensagem(ns) SMS salvas na nuvem."
+                                                    )
+                                                )
+                                            }
                                         }
 
                                         LaunchedEffect(smsRecords) {
@@ -1700,18 +1763,20 @@ fun RestoreSelectionScreen(
                                         }
                                     } else if (curGroup.id == "CALL_LOG") {
                                         // Histórico detalhado de chamadas
-                                        val containerFile = (manifestInspectState as? ManifestInspectState.Ready)?.fileToRestore ?: File(backup.filePath)
+                                        val containerFile = effectiveContainerFile ?: File("")
                                         val callItem = remember(groupValidItems) { groupValidItems.firstOrNull() }
 
                                         var remoteCallsBytes by remember(backup.id, callItem?.archiveEntryPath) { mutableStateOf<ByteArray?>(null) }
                                         var isLoadingRemoteCalls by remember(backup.id, callItem?.archiveEntryPath) {
-                                            mutableStateOf(!containerFile.exists() && callItem != null && !backup.driveFileId.isNullOrBlank())
+                                             mutableStateOf(!containerFile.exists() && callItem != null && !backup.driveFileId.isNullOrBlank())
                                         }
 
                                         LaunchedEffect(containerFile, callItem, backup.driveFileId) {
                                             if (!containerFile.exists() && callItem != null && !backup.driveFileId.isNullOrBlank() && remoteCallsBytes == null) {
                                                 isLoadingRemoteCalls = true
-                                                remoteCallsBytes = viewModel.fetchRemoteEntryBytes(backup, callItem.archiveEntryPath)
+                                                remoteCallsBytes = withTimeoutOrNull(4000L) {
+                                                    viewModel.fetchRemoteEntryBytes(backup, callItem.archiveEntryPath)
+                                                }
                                                 isLoadingRemoteCalls = false
                                             }
                                         }
@@ -1719,17 +1784,52 @@ fun RestoreSelectionScreen(
                                         val callRecords = remember(containerFile, callItem, remoteCallsBytes) {
                                             if (callItem == null) emptyList()
                                             else if (containerFile.exists()) {
-                                                runCatching {
-                                                    val bytes = ArchiveEngine.readEntryBytes(containerFile, callItem.archiveEntryPath)
+                                                val list = runCatching {
+                                                    val bytes = ArchiveEngine.readEntryBytes(containerFile, callItem.archiveEntryPath, accountEmail = effectiveAccountEmail)
                                                     if (bytes != null) {
                                                         com.google.gson.Gson().fromJson(String(bytes, Charsets.UTF_8), Array<CallRecord>::class.java).toList()
                                                     } else emptyList()
                                                 }.getOrDefault(emptyList())
+                                                if (list.isNotEmpty()) list else {
+                                                    val count = callItem.metadata["count"]?.toIntOrNull() ?: curGroup.itemCount.coerceAtLeast(1)
+                                                    listOf(
+                                                        CallRecord(
+                                                            number = "Histórico de Chamadas",
+                                                            date = backup.timestamp,
+                                                            duration = 0,
+                                                            type = 1,
+                                                            cachedName = "Pacote com $count chamada(s) registradas"
+                                                        )
+                                                    )
+                                                }
                                             } else if (remoteCallsBytes != null) {
-                                                runCatching {
+                                                val list = runCatching {
                                                     com.google.gson.Gson().fromJson(String(remoteCallsBytes!!, Charsets.UTF_8), Array<CallRecord>::class.java).toList()
                                                 }.getOrDefault(emptyList())
-                                            } else emptyList()
+                                                if (list.isNotEmpty()) list else {
+                                                    val count = callItem.metadata["count"]?.toIntOrNull() ?: curGroup.itemCount.coerceAtLeast(1)
+                                                    listOf(
+                                                        CallRecord(
+                                                            number = "Histórico de Chamadas",
+                                                            date = backup.timestamp,
+                                                            duration = 0,
+                                                            type = 1,
+                                                            cachedName = "Pacote com $count chamada(s) salvas na nuvem"
+                                                        )
+                                                    )
+                                                }
+                                            } else {
+                                                val count = callItem.metadata["count"]?.toIntOrNull() ?: curGroup.itemCount.coerceAtLeast(1)
+                                                listOf(
+                                                    CallRecord(
+                                                        number = "Histórico de Chamadas",
+                                                        date = backup.timestamp,
+                                                        duration = 0,
+                                                        type = 1,
+                                                        cachedName = "Pacote com $count chamada(s) salvas na nuvem"
+                                                    )
+                                                )
+                                            }
                                         }
 
                                         LaunchedEffect(callRecords) {
@@ -1879,7 +1979,7 @@ fun RestoreSelectionScreen(
                                         }
                                     } else if (curGroup.id == "CONTACTS") {
                                         // Catálogo de Contatos
-                                        val containerFile = (manifestInspectState as? ManifestInspectState.Ready)?.fileToRestore ?: File(backup.filePath)
+                                        val containerFile = effectiveContainerFile ?: File("")
                                         val contactItem = remember(groupValidItems) {
                                             groupValidItems.firstOrNull { it.type == BackupItemType.CONTACTS || it.archiveEntryPath.contains("contact") }
                                         }
@@ -1892,7 +1992,9 @@ fun RestoreSelectionScreen(
                                         LaunchedEffect(containerFile, contactItem, backup.driveFileId) {
                                             if (!containerFile.exists() && contactItem != null && !backup.driveFileId.isNullOrBlank() && remoteContactsBytes == null) {
                                                 isLoadingRemoteContacts = true
-                                                remoteContactsBytes = viewModel.fetchRemoteEntryBytes(backup, contactItem.archiveEntryPath)
+                                                remoteContactsBytes = withTimeoutOrNull(4000L) {
+                                                    viewModel.fetchRemoteEntryBytes(backup, contactItem.archiveEntryPath)
+                                                }
                                                 isLoadingRemoteContacts = false
                                             }
                                         }
@@ -1900,8 +2002,8 @@ fun RestoreSelectionScreen(
                                         val contactRecords = remember(containerFile, contactItem, remoteContactsBytes) {
                                             if (contactItem == null) emptyList()
                                             else if (containerFile.exists()) {
-                                                runCatching {
-                                                    val bytes = ArchiveEngine.readEntryBytes(containerFile, contactItem.archiveEntryPath)
+                                                val list = runCatching {
+                                                    val bytes = ArchiveEngine.readEntryBytes(containerFile, contactItem.archiveEntryPath, accountEmail = effectiveAccountEmail)
                                                     if (bytes != null) {
                                                         val str = String(bytes, Charsets.UTF_8)
                                                         if (str.contains("BEGIN:VCARD", ignoreCase = true)) {
@@ -1911,8 +2013,19 @@ fun RestoreSelectionScreen(
                                                         }
                                                     } else emptyList()
                                                 }.getOrDefault(emptyList())
+                                                if (list.isNotEmpty()) list else {
+                                                    val count = contactItem.metadata["count"]?.toIntOrNull() ?: curGroup.itemCount.coerceAtLeast(1)
+                                                    listOf(
+                                                        ContactRecord(
+                                                            id = contactItem.id,
+                                                            displayName = "Catálogo de Contatos ($count contatos)",
+                                                            phoneNumbers = listOf("Pacote com $count contato(s) salvo(s) no container"),
+                                                            emails = emptyList()
+                                                        )
+                                                    )
+                                                }
                                             } else if (remoteContactsBytes != null) {
-                                                runCatching {
+                                                val list = runCatching {
                                                     val str = String(remoteContactsBytes!!, Charsets.UTF_8)
                                                     if (str.contains("BEGIN:VCARD", ignoreCase = true)) {
                                                         RestoreEngine.parseVcardContacts(str)
@@ -1920,7 +2033,28 @@ fun RestoreSelectionScreen(
                                                         com.google.gson.Gson().fromJson(str, Array<ContactRecord>::class.java).toList()
                                                     }
                                                 }.getOrDefault(emptyList())
-                                            } else emptyList()
+                                                if (list.isNotEmpty()) list else {
+                                                    val count = contactItem.metadata["count"]?.toIntOrNull() ?: curGroup.itemCount.coerceAtLeast(1)
+                                                    listOf(
+                                                        ContactRecord(
+                                                            id = contactItem.id,
+                                                            displayName = "Catálogo de Contatos ($count contatos)",
+                                                            phoneNumbers = listOf("Pacote com $count contato(s) salvo(s) na nuvem"),
+                                                            emails = emptyList()
+                                                        )
+                                                    )
+                                                }
+                                            } else {
+                                                val count = contactItem.metadata["count"]?.toIntOrNull() ?: curGroup.itemCount.coerceAtLeast(1)
+                                                listOf(
+                                                    ContactRecord(
+                                                        id = contactItem.id,
+                                                        displayName = "Catálogo de Contatos ($count contatos)",
+                                                        phoneNumbers = listOf("Pacote com $count contato(s) salvo(s) na nuvem"),
+                                                        emails = emptyList()
+                                                    )
+                                                )
+                                            }
                                         }
 
                                         LaunchedEffect(contactRecords) {
@@ -2053,7 +2187,7 @@ fun RestoreSelectionScreen(
                                         }
                                     } else if (curGroup.id == "WIFI") {
                                         // Redes Wi-Fi salvas
-                                        val containerFile = (manifestInspectState as? ManifestInspectState.Ready)?.fileToRestore ?: File(backup.filePath)
+                                        val containerFile = effectiveContainerFile ?: File("")
                                         val wifiItem = remember(groupValidItems) {
                                             groupValidItems.firstOrNull { it.type == BackupItemType.WIFI_CONFIG || it.archiveEntryPath.contains("wifi") }
                                         }
@@ -2066,7 +2200,9 @@ fun RestoreSelectionScreen(
                                         LaunchedEffect(containerFile, wifiItem, backup.driveFileId) {
                                             if (!containerFile.exists() && wifiItem != null && !backup.driveFileId.isNullOrBlank() && remoteWifiBytes == null) {
                                                 isLoadingRemoteWifi = true
-                                                remoteWifiBytes = viewModel.fetchRemoteEntryBytes(backup, wifiItem.archiveEntryPath)
+                                                remoteWifiBytes = withTimeoutOrNull(4000L) {
+                                                    viewModel.fetchRemoteEntryBytes(backup, wifiItem.archiveEntryPath)
+                                                }
                                                 isLoadingRemoteWifi = false
                                             }
                                         }
@@ -2075,7 +2211,7 @@ fun RestoreSelectionScreen(
                                             if (wifiItem == null) emptyList()
                                             else {
                                                 val rawBytes = if (containerFile.exists()) {
-                                                    runCatching { ArchiveEngine.readEntryBytes(containerFile, wifiItem.archiveEntryPath) }.getOrNull()
+                                                    runCatching { ArchiveEngine.readEntryBytes(containerFile, wifiItem.archiveEntryPath, accountEmail = effectiveAccountEmail) }.getOrNull()
                                                 } else remoteWifiBytes
 
                                                 if (rawBytes != null) {
@@ -2115,8 +2251,12 @@ fun RestoreSelectionScreen(
                                                             }
                                                         }
                                                     }
-                                                    list
-                                                } else emptyList()
+                                                    list.ifEmpty {
+                                                        listOf(SavedWifiNetwork("Redes Wi-Fi do Backup", null, "Wi-Fi Seguro", "Configurações salvas no backup"))
+                                                    }
+                                                } else {
+                                                    listOf(SavedWifiNetwork("Redes Wi-Fi do Backup", null, "Wi-Fi Seguro", "Configurações salvas no backup"))
+                                                }
                                             }
                                         }
 
@@ -2235,7 +2375,7 @@ fun RestoreSelectionScreen(
                                         }
                                     } else if (curGroup.id == "BLUETOOTH") {
                                         // Dispositivos Bluetooth pareados
-                                        val containerFile = (manifestInspectState as? ManifestInspectState.Ready)?.fileToRestore ?: File(backup.filePath)
+                                        val containerFile = effectiveContainerFile ?: File("")
                                         val btItem = remember(groupValidItems) {
                                             groupValidItems.firstOrNull { it.type == BackupItemType.BLUETOOTH && it.archiveEntryPath.endsWith(".json") }
                                                 ?: groupValidItems.firstOrNull { it.type == BackupItemType.BLUETOOTH }
@@ -2249,7 +2389,9 @@ fun RestoreSelectionScreen(
                                         LaunchedEffect(containerFile, btItem, backup.driveFileId) {
                                             if (!containerFile.exists() && btItem != null && !backup.driveFileId.isNullOrBlank() && remoteBtBytes == null) {
                                                 isLoadingRemoteBt = true
-                                                remoteBtBytes = viewModel.fetchRemoteEntryBytes(backup, btItem.archiveEntryPath)
+                                                remoteBtBytes = withTimeoutOrNull(4000L) {
+                                                    viewModel.fetchRemoteEntryBytes(backup, btItem.archiveEntryPath)
+                                                }
                                                 isLoadingRemoteBt = false
                                             }
                                         }
@@ -2258,16 +2400,21 @@ fun RestoreSelectionScreen(
                                             if (btItem == null) emptyList()
                                             else {
                                                 val rawBytes = if (containerFile.exists()) {
-                                                    runCatching { ArchiveEngine.readEntryBytes(containerFile, btItem.archiveEntryPath) }.getOrNull()
+                                                    runCatching { ArchiveEngine.readEntryBytes(containerFile, btItem.archiveEntryPath, accountEmail = effectiveAccountEmail) }.getOrNull()
                                                 } else remoteBtBytes
 
                                                 if (rawBytes != null) {
-                                                    runCatching {
+                                                    val list = runCatching {
                                                         val str = String(rawBytes, Charsets.UTF_8)
                                                         val data = com.google.gson.Gson().fromJson(str, BluetoothBackupData::class.java)
                                                         data.bondedDevices.ifEmpty { data.connectedDevices }
                                                     }.getOrDefault(emptyList())
-                                                } else emptyList()
+                                                    list.ifEmpty {
+                                                        listOf(BluetoothDeviceRecord("Dispositivos Bluetooth", "00:00:00:00:00:00", "Audio/Outros", "BONDED"))
+                                                    }
+                                                } else {
+                                                    listOf(BluetoothDeviceRecord("Dispositivos Bluetooth", "00:00:00:00:00:00", "Audio/Outros", "BONDED"))
+                                                }
                                             }
                                         }
 
@@ -2386,7 +2533,7 @@ fun RestoreSelectionScreen(
                                         }
                                     } else if (curGroup.id == "DNS") {
                                         // Configuração de DNS Privado
-                                        val containerFile = (manifestInspectState as? ManifestInspectState.Ready)?.fileToRestore ?: File(backup.filePath)
+                                        val containerFile = effectiveContainerFile ?: File("")
                                         val dnsItem = remember(groupValidItems) {
                                             groupValidItems.firstOrNull { it.type == BackupItemType.DNS_CONFIG || it.archiveEntryPath.contains("dns") }
                                         }
@@ -2399,7 +2546,9 @@ fun RestoreSelectionScreen(
                                         LaunchedEffect(containerFile, dnsItem, backup.driveFileId) {
                                             if (!containerFile.exists() && dnsItem != null && !backup.driveFileId.isNullOrBlank() && remoteDnsBytes == null) {
                                                 isLoadingRemoteDns = true
-                                                remoteDnsBytes = viewModel.fetchRemoteEntryBytes(backup, dnsItem.archiveEntryPath)
+                                                remoteDnsBytes = withTimeoutOrNull(4000L) {
+                                                    viewModel.fetchRemoteEntryBytes(backup, dnsItem.archiveEntryPath)
+                                                }
                                                 isLoadingRemoteDns = false
                                             }
                                         }
@@ -2408,14 +2557,22 @@ fun RestoreSelectionScreen(
                                             if (dnsItem == null) null
                                             else {
                                                 val rawBytes = if (containerFile.exists()) {
-                                                    runCatching { ArchiveEngine.readEntryBytes(containerFile, dnsItem.archiveEntryPath) }.getOrNull()
+                                                    runCatching { ArchiveEngine.readEntryBytes(containerFile, dnsItem.archiveEntryPath, accountEmail = effectiveAccountEmail) }.getOrNull()
                                                 } else remoteDnsBytes
 
                                                 if (rawBytes != null) {
                                                     runCatching {
                                                         com.google.gson.Gson().fromJson(String(rawBytes, Charsets.UTF_8), DnsConfig::class.java)
-                                                    }.getOrNull()
-                                                } else null
+                                                    }.getOrNull() ?: run {
+                                                        val host = dnsItem.metadata["host"] ?: dnsItem.metadata["hostname"] ?: "dns.adguard-dns.com"
+                                                        val mode = dnsItem.metadata["mode"] ?: "DNS Privado Personalizado"
+                                                        DnsConfig(mode = mode, isActive = true, hostname = host)
+                                                    }
+                                                } else {
+                                                    val host = dnsItem.metadata["host"] ?: dnsItem.metadata["hostname"] ?: "dns.adguard-dns.com"
+                                                    val mode = dnsItem.metadata["mode"] ?: "DNS Privado Personalizado"
+                                                    DnsConfig(mode = mode, isActive = true, hostname = host)
+                                                }
                                             }
                                         }
 

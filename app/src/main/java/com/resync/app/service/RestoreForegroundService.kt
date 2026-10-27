@@ -106,6 +106,10 @@ class RestoreForegroundService : Service() {
             } catch (_: Throwable) {}
         }
         releaseLocks()
+        try {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            notificationManager?.cancel(NOTIFICATION_ID)
+        } catch (_: Throwable) {}
         serviceScope.cancel()
     }
 
@@ -130,6 +134,13 @@ class RestoreForegroundService : Service() {
 
         when (action) {
             ACTION_START -> {
+                if (!RestoreRepository.isRestoreActive()) {
+                    android.util.Log.w("RestoreService", "RestoreForegroundService: ACTION_START recebido mas nenhuma restauração está ativa no RestoreRepository. Encerrando serviço.")
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    notificationManager?.cancel(NOTIFICATION_ID)
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
                 val title = intent?.getStringExtra(EXTRA_TITLE) ?: "Restauração de Backup"
                 val notification = buildInitialNotification(title)
                 try {
@@ -145,15 +156,15 @@ class RestoreForegroundService : Service() {
                     android.util.Log.e("ReSyncNotif", "Erro no startForeground da restauração: ${t.message}", t)
                 }
                 acquireLocks()
-                return START_STICKY
+                return START_NOT_STICKY
             }
             ACTION_PAUSE -> {
                 RestoreRepository.pauseRestore()
-                return START_STICKY
+                return START_NOT_STICKY
             }
             ACTION_RESUME -> {
                 RestoreRepository.resumeRestore()
-                return START_STICKY
+                return START_NOT_STICKY
             }
             ACTION_CANCEL -> {
                 serviceScope.launch(Dispatchers.IO) {
@@ -165,17 +176,19 @@ class RestoreForegroundService : Service() {
                 RestoreRepository.cancelRestore()
                 releaseLocks()
                 stopForeground(STOP_FOREGROUND_REMOVE)
+                notificationManager?.cancel(NOTIFICATION_ID)
                 stopSelf()
                 return START_NOT_STICKY
             }
             ACTION_STOP -> {
                 releaseLocks()
                 stopForeground(STOP_FOREGROUND_REMOVE)
+                notificationManager?.cancel(NOTIFICATION_ID)
                 stopSelf()
                 return START_NOT_STICKY
             }
         }
-        return START_STICKY
+        return START_NOT_STICKY
     }
 
     /**

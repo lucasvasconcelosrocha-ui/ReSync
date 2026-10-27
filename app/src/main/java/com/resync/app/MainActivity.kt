@@ -103,11 +103,24 @@ class MainActivity : ComponentActivity() {
         val legacyPrefs = getSharedPreferences("odin_prefs", Context.MODE_PRIVATE)
         val isSetupDone = prefs.getBoolean("setup_completed", false) || legacyPrefs.getBoolean("setup_completed", false)
 
-        // Clean up stale notifications from previous run
-        try {
-            val nm = getSystemService(android.app.NotificationManager::class.java)
-            nm?.cancel(com.resync.app.worker.FileUploadWorker.NOTIFICATION_ID)
-        } catch (_: Throwable) {}
+        // Clean up stale notifications and stuck workers if no operations are active
+        if (!com.resync.app.engine.BackupRepository.isBackupActive() && !com.resync.app.engine.RestoreRepository.isRestoreActive()) {
+            try {
+                val nm = getSystemService(android.app.NotificationManager::class.java)
+                nm?.cancel(com.resync.app.service.BackupForegroundService.NOTIFICATION_ID)
+                nm?.cancel(com.resync.app.service.RestoreForegroundService.NOTIFICATION_ID)
+                nm?.cancel(com.resync.app.cloud.gdrive.CloudNotificationManager.NOTIFICATION_ID)
+                nm?.cancel(com.resync.app.worker.FileUploadWorker.NOTIFICATION_ID)
+                nm?.cancel(4001)
+            } catch (_: Throwable) {}
+
+            try {
+                val scheduleManager = com.resync.app.engine.ScheduleManager.getInstance(this)
+                if (!scheduleManager.globalConfig.value.isMasterEnabled || scheduleManager.schedules.value.none { it.isEnabled }) {
+                    androidx.work.WorkManager.getInstance(this).cancelAllWorkByTag("resync_scheduled_backup_work")
+                }
+            } catch (_: Throwable) {}
+        }
 
         setContent {
             val currentAccent by viewModel.themeAccent.collectAsState()

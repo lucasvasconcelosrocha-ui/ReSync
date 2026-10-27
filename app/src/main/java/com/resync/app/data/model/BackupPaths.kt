@@ -168,4 +168,81 @@ object BackupPaths {
             false
         }
     }
+
+    /**
+     * Locates a matching local backup container file (.resync, .svb, .zip) on the device
+     * based on backup ID, file title, drive file ID, or expected size.
+     * Recursively inspects all known backup directories and nested device/label subfolders.
+     */
+    fun findLocalMirrorFile(
+        backupId: String? = null,
+        title: String? = null,
+        context: Context? = null,
+        expectedSizeBytes: Long = 0L,
+        driveFileId: String? = null
+    ): File? {
+        val allDirs = getAllLocalBackupDirs(context)
+        val candidateFiles = mutableListOf<File>()
+        for (dir in allDirs) {
+            if (!dir.exists()) continue
+            dir.walkTopDown().maxDepth(4).forEach { f ->
+                if (f.isFile && f.length() > 0L && isBackupContainerFile(f)) {
+                    candidateFiles.add(f)
+                }
+            }
+        }
+        if (candidateFiles.isEmpty()) return null
+
+        // 1. Direct match by title or name
+        if (!title.isNullOrBlank()) {
+            val cleanTitle = title.trim()
+            val baseTitle = cleanTitle.removeSuffix(BACKUP_FILE_EXTENSION)
+                .removeSuffix(LEGACY_BACKUP_FILE_EXTENSION)
+                .removeSuffix(ZIP_FILE_EXTENSION)
+
+            // Direct file name match
+            candidateFiles.firstOrNull {
+                it.name.equals(cleanTitle, ignoreCase = true) ||
+                it.nameWithoutExtension.equals(baseTitle, ignoreCase = true)
+            }?.let { return it }
+
+            // Parent directory matches title/label (e.g. 2026-10-26_20-53-52_Xiaomi_24129RT7CC)
+            candidateFiles.firstOrNull {
+                it.parentFile?.name.equals(cleanTitle, ignoreCase = true) ||
+                it.parentFile?.name.equals(baseTitle, ignoreCase = true)
+            }?.let { return it }
+
+            // Numeric/timestamp substring match (e.g. 1793058017154 or 2026-10-26)
+            val timestampPattern = Regex("""\d{10,14}|\d{4}-\d{2}-\d{2}""")
+            val titleTimestamp = timestampPattern.find(cleanTitle)?.value
+            if (!titleTimestamp.isNullOrBlank()) {
+                candidateFiles.firstOrNull {
+                    it.name.contains(titleTimestamp) || (it.parentFile?.name?.contains(titleTimestamp) == true)
+                }?.let { return it }
+            }
+        }
+
+        // 2. Match by backupId
+        if (!backupId.isNullOrBlank()) {
+            candidateFiles.firstOrNull {
+                it.name.contains(backupId, ignoreCase = true) || (it.parentFile?.name?.contains(backupId, ignoreCase = true) == true)
+            }?.let { return it }
+        }
+
+        // 3. Match by size (within 2MB tolerance)
+        if (expectedSizeBytes > 1024 * 1024) {
+            candidateFiles.firstOrNull {
+                Math.abs(it.length() - expectedSizeBytes) < 2 * 1024 * 1024
+            }?.let { return it }
+        }
+
+        // 4. Fallback: Largest container file on device (> 50MB), newest first
+        val largeContainers = candidateFiles.filter { it.length() > 50 * 1024 * 1024 }
+        if (largeContainers.isNotEmpty()) {
+            return largeContainers.maxByOrNull { it.lastModified() }
+        }
+
+        // 5. Absolute fallback: newest container file
+        return candidateFiles.maxByOrNull { it.lastModified() }
+    }
 }

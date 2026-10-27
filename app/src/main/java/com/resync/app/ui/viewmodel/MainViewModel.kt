@@ -1619,23 +1619,45 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (matched != null && File(matched.filePath).exists()) {
                     localFile = File(matched.filePath)
                 } else {
-                    val baseName = record.title.removeSuffix(".resync").removeSuffix(".svb").removeSuffix(".zip")
-                    val found = com.resync.app.data.model.BackupPaths.getAllLocalBackupDirs(context).flatMap { baseDir ->
-                        if (baseDir.exists()) {
-                            baseDir.walkTopDown().maxDepth(3).filter { f ->
-                                f.isFile && f.length() > 0L && (f.name == record.title || f.name == "$baseName.resync" || f.name == "$baseName.svb" || f.name == "$baseName.zip")
-                            }
-                        } else emptySequence()
-                    }.firstOrNull()
+                    val found = com.resync.app.data.model.BackupPaths.findLocalMirrorFile(
+                        backupId = record.id,
+                        title = record.title,
+                        context = context,
+                        expectedSizeBytes = record.sizeBytes,
+                        driveFileId = record.driveFileId
+                    )
                     if (found != null) {
                         localFile = found
                     }
                 }
             }
 
-            val hasValidLocalFile = !forceCloudSource && localFile.exists() && localFile.length() > 0 && !localFile.absolutePath.contains("/staging")
+            // Se encontrarmos o container ou espelho no aparelho, sempre priorizar a leitura local instantânea!
+            val hasValidLocalFile = localFile.exists() && localFile.length() > 0 && !localFile.absolutePath.contains("/staging")
 
-            // 1. Tentar recuperar instantaneamente do cache no Room (Problema 2, item 3)
+            // 1. Tentar ler do arquivo lateral .index.json local em < 20ms se disponível
+            if (hasValidLocalFile) {
+                val sidecar = File(localFile.parentFile, "${localFile.nameWithoutExtension}.index.json")
+                if (sidecar.exists() && sidecar.length() > 0L) {
+                    try {
+                        val sidecarBytes = sidecar.readBytes()
+                        val isGzip = sidecarBytes.size >= 2 && sidecarBytes[0] == 0x1F.toByte() && sidecarBytes[1] == 0x8B.toByte()
+                        val jsonStr = if (isGzip) {
+                            java.util.zip.GZIPInputStream(java.io.ByteArrayInputStream(sidecarBytes)).bufferedReader(Charsets.UTF_8).use { it.readText() }
+                        } else {
+                            String(sidecarBytes, Charsets.UTF_8)
+                        }
+                        val sidecarManifest = com.google.gson.Gson().fromJson(jsonStr, BackupManifest::class.java)
+                        if (sidecarManifest != null && sidecarManifest.items.isNotEmpty()) {
+                            Log.d("RestoreInspection", "[INSPECT] Manifesto lido instantaneamente do arquivo lateral .index.json (${sidecarManifest.items.size} itens).")
+                            _manifestInspectState.value = ManifestInspectState.Ready(sidecarManifest, localFile)
+                            return@launch
+                        }
+                    } catch (_: Throwable) {}
+                }
+            }
+
+            // 2. Tentar recuperar instantaneamente do cache no Room
             val cachedManifest = backupIndexManager.getCachedManifest(record.id, record.driveFileId, record.filePath)
             if (cachedManifest != null) {
                 Log.d("RestoreInspection", "[INSPECT] Manifesto lido instantaneamente do cache Room (${cachedManifest.items.size} itens).")
@@ -2226,7 +2248,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 _googleDriveState.value = GoogleDriveState.SYNCING
                 val accountDesc = if (!targetEmail.isNullOrBlank()) " ($targetEmail)" else ""
-                BackupForegroundService.startService(context, "Enviando ${record.title} para Google Drive$accountDesc...")
+                val opTitle = "Enviando ${record.title} para Google Drive$accountDesc..."
+                BackupRepository.setCloudUploadActive(opTitle)
+                BackupForegroundService.startService(context, opTitle)
                 val result = gdriveProvider.cloudBackupRepository.uploadLocalBackup(record, targetEmail) { progressInfo ->
                     val speedStr = if (progressInfo.speedMBps > 0) " • %.1f MB/s".format(java.util.Locale.US, progressInfo.speedMBps) else ""
                     val etaStr = if (progressInfo.estimatedRemainingSeconds > 0) " • Restam ${progressInfo.estimatedRemainingSeconds}s" else ""

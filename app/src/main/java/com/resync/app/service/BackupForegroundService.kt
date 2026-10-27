@@ -256,6 +256,17 @@ class BackupForegroundService : Service() {
         when (action) {
             ACTION_START, ACTION_START_LEGACY -> {
                 val title = intent.getStringExtra(EXTRA_TITLE) ?: getString(R.string.backup_in_progress)
+                if (!BackupRepository.isBackupActive()) {
+                    android.util.Log.w("BackupOrigin", "BackupForegroundService: ACTION_START recebido mas nenhum backup está ativo no BackupRepository. Encerrando serviço e limpando notificações órfãs.")
+                    isFinishedOrCancelled = true
+                    releaseLocks()
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                    manager.cancel(NOTIFICATION_ID)
+                    manager.cancel(com.resync.app.cloud.gdrive.CloudNotificationManager.NOTIFICATION_ID)
+                    stopSelf()
+                    return START_NOT_STICKY
+                }
                 isFinishedOrCancelled = false
                 acquireLocks()
                 startBackupProcess(title)
@@ -271,6 +282,7 @@ class BackupForegroundService : Service() {
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                 manager.cancel(NOTIFICATION_ID)
+                manager.cancel(com.resync.app.cloud.gdrive.CloudNotificationManager.NOTIFICATION_ID)
                 stopSelf()
             }
         }
@@ -367,10 +379,27 @@ class BackupForegroundService : Service() {
         isFinishedOrCancelled = true
         backupJob?.cancel()
         BackupRepository.cancelBackup(this)
+        serviceScope.launch(Dispatchers.IO) {
+            try {
+                val roomDb = AppRoomDatabase.getInstance(this@BackupForegroundService)
+                val activeList = roomDb.activeOperationDao().getUnfinishedOperations()
+                    .filter { it.type == "BACKUP" }
+                for (op in activeList) {
+                    roomDb.activeOperationDao().insertOrUpdate(
+                        op.copy(
+                            status = "CANCELLED",
+                            stage = "Cancelado pelo usuário",
+                            updatedAt = System.currentTimeMillis()
+                        )
+                    )
+                }
+            } catch (_: Throwable) {}
+        }
         releaseLocks()
         stopForeground(STOP_FOREGROUND_REMOVE)
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.cancel(NOTIFICATION_ID)
+        manager.cancel(com.resync.app.cloud.gdrive.CloudNotificationManager.NOTIFICATION_ID)
         stopSelf()
     }
 
@@ -552,6 +581,12 @@ class BackupForegroundService : Service() {
             } catch (_: Throwable) {}
         }
         releaseLocks()
+        try {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.cancel(NOTIFICATION_ID)
+            manager.cancel(com.resync.app.cloud.gdrive.CloudNotificationManager.NOTIFICATION_ID)
+        } catch (_: Throwable) {}
         serviceScope.cancel()
         super.onDestroy()
     }

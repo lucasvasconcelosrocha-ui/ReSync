@@ -38,20 +38,18 @@ class CloudBootReceiver : BroadcastReceiver() {
                 val pendingList = db.cloudTransferDao().getPendingTransfers()
 
                 if (pendingList.isNotEmpty()) {
-                    AppLogger.i(TAG, "Encontradas ${pendingList.size} transferências na nuvem pendentes de retomada.")
+                    AppLogger.i(TAG, "Encontradas ${pendingList.size} transferências na nuvem interrompidas.")
                     for (transfer in pendingList) {
-                        AppLogger.i(TAG, "Retomando transferência: jobId=${transfer.jobId}, tipo=${transfer.type}, offset=${transfer.serverConfirmedOffset}/${transfer.totalBytes}")
+                        AppLogger.i(TAG, "Marcando transferência interrompida por reinício/atualização: jobId=${transfer.jobId}, tipo=${transfer.type}")
 
                         // Release any stale locks held from previous boot
                         db.cloudTransferDao().releaseExecutorLock(transfer.jobId, transfer.executorLockOwner ?: "")
-
-                        if (transfer.type == "UPLOAD") {
-                            android.util.Log.d("BackupOrigin", "CloudBootReceiver: resuming UPLOAD transfer ${transfer.title}")
-                            BackupForegroundService.startService(context, "Retomando ${transfer.title}...")
-                        } else {
-                            android.util.Log.d("BackupOrigin", "CloudBootReceiver: resuming DOWNLOAD transfer ${transfer.title}")
-                            RestoreForegroundService.startService(context, "Retomando ${transfer.title}...")
-                        }
+                        db.cloudTransferDao().updateState(
+                            jobId = transfer.jobId,
+                            state = "Interrompido",
+                            errorMessage = "Operação interrompida por reinício do sistema ou atualização do aplicativo.",
+                            updatedAt = System.currentTimeMillis()
+                        )
                     }
                 } else {
                     AppLogger.i(TAG, "Nenhuma transferência na nuvem pendente após reinício.")

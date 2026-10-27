@@ -244,9 +244,14 @@ fun CloudSyncCenterScreen(
             selectiveRestoreBackup = null
             selectiveRestoreCategory = null
         }
+        val resolvedLocal = if (File(b.filePath).exists()) File(b.filePath) else com.resync.app.data.model.BackupPaths.findLocalMirrorFile(b.id, b.title, context, b.sizeBytes, b.driveFileId)
+        val effectiveBackup = if (resolvedLocal != null && (b.filePath.isBlank() || !File(b.filePath).exists())) {
+            b.copy(filePath = resolvedLocal.absolutePath, syncStatus = SyncStatus.SYNCED)
+        } else b
+
         RestoreSelectionScreen(
-            backup = b,
-            source = if (File(b.filePath).exists()) RestoreSource.LOCAL else (if (!b.driveFileId.isNullOrBlank()) RestoreSource.DRIVE else RestoreSource.LOCAL),
+            backup = effectiveBackup,
+            source = if (resolvedLocal != null && resolvedLocal.exists()) RestoreSource.LOCAL else (if (!effectiveBackup.driveFileId.isNullOrBlank()) RestoreSource.DRIVE else RestoreSource.LOCAL),
             viewModel = viewModel,
             initialCategoryId = cat,
             exclusiveCategoryMode = true,
@@ -264,14 +269,14 @@ fun CloudSyncCenterScreen(
 
     val onOpenCategoryRestore: (String) -> Unit = { catName ->
         val matching = labelBackups.filter { file ->
-            val s = CloudBackupCategoryHelper.inspectRemoteFile(file)
+            val s = CloudBackupCategoryHelper.inspectRemoteFile(file, context)
             s.containsCategory(catName)
         }
         if (matching.isEmpty()) {
             Toast.makeText(context, "Nenhum backup de $catName encontrado nesta etiqueta.", Toast.LENGTH_SHORT).show()
         } else if (matching.size == 1) {
             val file = matching.first()
-            val localFile = resolveLocalMirrorFile(context, viewModel.backupRecords.value, file.name, file.id)
+            val localFile = resolveLocalMirrorFile(context, viewModel.backupRecords.value, file.name, file.id, file.sizeBytes)
             val rec = BackupRecord(
                 id = file.id,
                 title = file.name,
@@ -518,7 +523,7 @@ fun CloudSyncCenterScreen(
                 horizontalAlignment = Alignment.End,
                 modifier = Modifier
                     .navigationBarsPadding()
-                    .padding(bottom = 16.dp, end = 16.dp)
+                    .padding(bottom = 88.dp, end = 16.dp)
             ) {
                 AnimatedVisibility(
                     visible = isFabExpanded,
@@ -1062,7 +1067,7 @@ fun CloudSyncCenterScreen(
 
                         // Cartão "Etiqueta do backup na nuvem"
                         val categorySummaries = remember(labelBackups) {
-                            labelBackups.map { it to CloudBackupCategoryHelper.inspectRemoteFile(it) }
+                            labelBackups.map { it to CloudBackupCategoryHelper.inspectRemoteFile(it, context) }
                         }
 
                         val remoteAppsCount = remember(categorySummaries) {
@@ -2319,7 +2324,7 @@ fun CloudSyncCenterScreen(
         val catName = selectedCategoryModal!!
         val matchingBackups = remember(labelBackups, catName) {
             labelBackups.filter { file ->
-                val s = CloudBackupCategoryHelper.inspectRemoteFile(file)
+                val s = CloudBackupCategoryHelper.inspectRemoteFile(file, context)
                 s.containsCategory(catName)
             }
         }
@@ -2391,7 +2396,7 @@ fun CloudSyncCenterScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             items(matchingBackups, key = { it.id }) { file ->
-                                val summary = remember(file) { CloudBackupCategoryHelper.inspectRemoteFile(file) }
+                                val summary = remember(file) { CloudBackupCategoryHelper.inspectRemoteFile(file, context) }
                                 val count = when (catName.lowercase()) {
                                     "aplicativos" -> summary.countApps
                                     "mensagens" -> summary.countSms
@@ -2455,7 +2460,7 @@ fun CloudSyncCenterScreen(
                                             )
                                             Button(
                                                 onClick = {
-                                                    val localFile = resolveLocalMirrorFile(context, viewModel.backupRecords.value, file.name, file.id)
+                                                    val localFile = resolveLocalMirrorFile(context, viewModel.backupRecords.value, file.name, file.id, file.sizeBytes)
                                                     val rec = BackupRecord(
                                                         id = file.id,
                                                         title = file.name,
@@ -3040,7 +3045,8 @@ private fun resolveLocalMirrorFile(
     context: Context,
     localRecords: List<BackupRecord>,
     fileName: String,
-    driveFileId: String?
+    driveFileId: String?,
+    fileSizeBytes: Long = 0L
 ): File? {
     // 1. Procurar nos registros do Room do ViewModel
     localRecords.firstOrNull {
@@ -3051,19 +3057,13 @@ private fun resolveLocalMirrorFile(
         if (f.exists() && f.length() > 0L) return f
     }
 
-    // 2. Procurar nos diretórios locais de backup
-    val baseName = fileName.removeSuffix(".resync").removeSuffix(".svb").removeSuffix(".zip")
-    com.resync.app.data.model.BackupPaths.getAllLocalBackupDirs(context).forEach { baseDir ->
-        if (baseDir.exists()) {
-            baseDir.walkTopDown().maxDepth(3).forEach { f ->
-                if (f.isFile && f.length() > 0L) {
-                    if (f.name == fileName || f.name == "$baseName.resync" || f.name == "$baseName.svb" || f.name == "$baseName.zip") {
-                        return f
-                    }
-                }
-            }
-        }
-    }
-    return null
+    // 2. Busca profunda e robusta nos diretórios e subpastas de backup locais
+    return com.resync.app.data.model.BackupPaths.findLocalMirrorFile(
+        backupId = driveFileId,
+        title = fileName,
+        context = context,
+        expectedSizeBytes = fileSizeBytes,
+        driveFileId = driveFileId
+    )
 }
 

@@ -88,6 +88,19 @@ object BackupRepository {
 
     fun isBackupRunning(): Boolean = isBackupActive()
 
+    fun setCloudUploadActive(title: String) {
+        _executionState.value = BackupExecutionState.IN_PROGRESS
+        _isBackupPaused.value = false
+        val initialProg = BackupProgress(
+            stage = "Enviando ao Google Drive",
+            currentItemName = title,
+            progressPercent = 0.0f,
+            isFinished = false
+        )
+        _backupProgress.value = initialProg
+        persistState(initialProg, BackupExecutionState.IN_PROGRESS)
+    }
+
     private var activeBackupJob: Job? = null
     private var currentEngine: BackupEngine? = null
     private var appContext: Context? = null
