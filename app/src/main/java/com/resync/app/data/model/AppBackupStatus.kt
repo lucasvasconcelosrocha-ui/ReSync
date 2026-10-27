@@ -24,7 +24,8 @@ data class AppBackupPoint(
     val hasApk: Boolean = true,
     val hasData: Boolean = false,
     val isFullPackage: Boolean = false,
-    val itemIds: List<String> = emptyList()
+    val itemIds: List<String> = emptyList(),
+    val appName: String? = null
 )
 
 data class AppBackupStatus(

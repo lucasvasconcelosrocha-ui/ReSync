@@ -38,6 +38,7 @@ import com.resync.app.data.model.*
 import com.resync.app.engine.CapabilityManager
 import com.resync.app.engine.IconCacheManager
 import com.resync.app.ui.theme.*
+import com.resync.app.ui.components.RealAppIcon
 import com.resync.app.ui.viewmodel.MainViewModel
 import android.widget.Toast
 import com.resync.app.cloud.gdrive.DriveConstants
@@ -55,6 +56,7 @@ fun AppsListScreen(
 ) {
     val context = LocalContext.current
     val apps by viewModel.installedApps.collectAsState()
+    val uninstalledApps by viewModel.uninstalledAppsWithBackup.collectAsState()
     val isLoadingApps by viewModel.isLoadingInstalledApps.collectAsState()
     val backupRecords by viewModel.backupRecords.collectAsState()
     val multiAccounts by viewModel.multiCloudAccounts.collectAsState()
@@ -66,7 +68,7 @@ fun AppsListScreen(
     val backupStatusMap by viewModel.appBackupStatusMap.collectAsState()
 
     var searchQuery by remember { mutableStateOf("") }
-    var selectedFilter by remember { mutableStateOf("Todos") } // "Todos", "Usuário", "Sistema", "Com backup", "Sem backup", "Desatualizados"
+    var selectedFilter by remember { mutableStateOf("Todos") } // "Todos", "Usuário", "Sistema", "Com backup", "Desinstalados", "Sem backup", "Desatualizados"
     var sortBy by remember { mutableStateOf("Nome A → Z") }
     var showSortMenu by remember { mutableStateOf(false) }
     var isMultiSelectMode by remember { mutableStateOf(false) }
@@ -111,18 +113,24 @@ fun AppsListScreen(
         }
     }
 
+    val allDisplayApps = remember(apps, uninstalledApps) {
+        val installedPkgs = apps.map { it.packageName }.toSet()
+        apps + uninstalledApps.filter { !installedPkgs.contains(it.packageName) }
+    }
+
     // Sort and filter pipeline
-    val processedApps = remember(apps, searchQuery, selectedFilter, sortBy, backupStatusMap) {
-        val filtered = apps.filter { app ->
+    val processedApps = remember(allDisplayApps, searchQuery, selectedFilter, sortBy, backupStatusMap) {
+        val filtered = allDisplayApps.filter { app ->
             val matchesSearch = app.appName.contains(searchQuery, ignoreCase = true) ||
                     app.packageName.contains(searchQuery, ignoreCase = true)
             val status = backupStatusMap[app.packageName]
             val hasBackup = status?.hasBackup ?: app.hasBackup
             val matchesFilter = when (selectedFilter) {
-                "Usuário" -> !app.isSystemApp
-                "Sistema" -> app.isSystemApp
+                "Usuário" -> app.isInstalled && !app.isSystemApp
+                "Sistema" -> app.isInstalled && app.isSystemApp
                 "Com backup" -> hasBackup
-                "Sem backup" -> !hasBackup
+                "Desinstalados" -> !app.isInstalled
+                "Sem backup" -> app.isInstalled && !hasBackup
                 "Desatualizados" -> app.isOutdatedBackup
                 else -> true
             }
@@ -141,11 +149,12 @@ fun AppsListScreen(
         }
     }
 
-    val userApps = remember(processedApps) { processedApps.filter { !it.isSystemApp } }
-    val systemApps = remember(processedApps) { processedApps.filter { it.isSystemApp } }
+    val userApps = remember(processedApps) { processedApps.filter { it.isInstalled && !it.isSystemApp } }
+    val uninstalledDisplayApps = remember(processedApps) { processedApps.filter { !it.isInstalled } }
+    val systemApps = remember(processedApps) { processedApps.filter { it.isInstalled && it.isSystemApp } }
 
-    val totalSelectedSize = remember(selectedPackages, apps) {
-        apps.filter { selectedPackages.contains(it.packageName) }.sumOf { it.sizeBytes }
+    val totalSelectedSize = remember(selectedPackages, allDisplayApps) {
+        allDisplayApps.filter { selectedPackages.contains(it.packageName) }.sumOf { it.sizeBytes }
     }
 
     if (appForIndividualRestore != null) {
@@ -321,7 +330,7 @@ fun AppsListScreen(
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    val filters = listOf("Todos", "Usuário", "Sistema", "Com backup", "Sem backup", "Desatualizados")
+                    val filters = listOf("Todos", "Usuário", "Sistema", "Com backup", "Desinstalados", "Sem backup", "Desatualizados")
                     for (f in filters) {
                         val isSelected = f == selectedFilter
                         Box(
@@ -355,7 +364,7 @@ fun AppsListScreen(
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             TextButton(
                                 onClick = {
-                                    val currentVisiblePackages = processedApps.map { it.packageName }
+                                    val currentVisiblePackages = processedApps.filter { it.isInstalled }.map { it.packageName }
                                     selectedPackages.clear()
                                     selectedPackages.addAll(currentVisiblePackages)
                                 },
@@ -679,6 +688,7 @@ fun AppsListScreen(
                             isSelected = selectedPackages.contains(app.packageName),
                             accentColor = primaryAccent,
                             appBackups = appBackups,
+                            viewModel = viewModel,
                             onToggleSelect = {
                                 if (selectedPackages.contains(app.packageName)) {
                                     selectedPackages.remove(app.packageName)
@@ -756,7 +766,114 @@ fun AppsListScreen(
                     }
                 }
 
-                // Section 2: System Apps
+                // Section 2: Uninstalled Apps with Backup
+                if (uninstalledDisplayApps.isNotEmpty()) {
+                    item {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        SectionHeader(
+                            title = "APLICATIVOS DESINSTALADOS COM BACKUP",
+                            count = uninstalledDisplayApps.size,
+                            accentColor = AccentSunsetOrange
+                        )
+                    }
+                    items(uninstalledDisplayApps, key = { "uninst_${it.packageName}" }) { app ->
+                        val appBackups = remember(backupRecords, app.packageName, app.appName) {
+                            backupRecords.filter {
+                                it.title.contains(app.appName, ignoreCase = true) ||
+                                it.title.contains(app.packageName, ignoreCase = true) ||
+                                it.filePath.contains(app.packageName, ignoreCase = true)
+                            }
+                        }
+                        AppListItemCard(
+                            app = app,
+                            backupStatus = backupStatusMap[app.packageName] ?: AppBackupStatus.none(app.packageName),
+                            isMultiSelectMode = isMultiSelectMode,
+                            isSelected = selectedPackages.contains(app.packageName),
+                            accentColor = primaryAccent,
+                            appBackups = appBackups,
+                            viewModel = viewModel,
+                            onToggleSelect = {},
+                            onClick = {
+                                val points = viewModel.getBackupPointsForApp(app.packageName)
+                                if (points.isNotEmpty()) {
+                                    appForIndividualRestore = app
+                                    individualRestorePoint = points.maxByOrNull { it.timestamp }
+                                } else {
+                                    val record = appBackups.maxByOrNull { it.timestamp }
+                                    if (record != null) {
+                                        val pt = AppBackupPoint(
+                                            backupId = record.id,
+                                            backupTitle = record.title,
+                                            timestamp = record.timestamp,
+                                            isLocal = !record.filePath.isNullOrBlank(),
+                                            isDrive = !record.driveFileId.isNullOrBlank(),
+                                            filePath = record.filePath,
+                                            driveFileId = record.driveFileId,
+                                            containerSizeBytes = record.sizeBytes,
+                                            appSizeBytes = record.sizeBytes,
+                                            isFullPackage = record.includedAppsCount > 1
+                                        )
+                                        appForIndividualRestore = app
+                                        individualRestorePoint = pt
+                                    } else {
+                                        Toast.makeText(context, "Nenhum backup encontrado para este app", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            },
+                            onLongClick = {},
+                            onRestoreBackup = { b ->
+                                val pt = AppBackupPoint(
+                                    backupId = b.id,
+                                    backupTitle = b.title,
+                                    timestamp = b.timestamp,
+                                    isLocal = !b.filePath.isNullOrBlank(),
+                                    isDrive = !b.driveFileId.isNullOrBlank(),
+                                    filePath = b.filePath,
+                                    driveFileId = b.driveFileId,
+                                    containerSizeBytes = b.sizeBytes,
+                                    appSizeBytes = b.sizeBytes,
+                                    isFullPackage = b.includedAppsCount > 1
+                                )
+                                appForIndividualRestore = app
+                                individualRestorePoint = pt
+                            },
+                            onDeleteBackup = { backupToDelete = it },
+                            onUploadBackupToDrive = {
+                                viewModel.uploadBackupsToDrive(listOf(it), DriveConstants.ROOT_FOLDER_NAME, selectedDriveAccountEmail)
+                                Toast.makeText(context, "Enviando backup para o Drive...", Toast.LENGTH_SHORT).show()
+                            },
+                            onRestoreAppClick = {
+                                val points = viewModel.getBackupPointsForApp(app.packageName)
+                                if (points.isNotEmpty()) {
+                                    appForIndividualRestore = app
+                                    individualRestorePoint = points.maxByOrNull { it.timestamp }
+                                } else {
+                                    val record = appBackups.maxByOrNull { it.timestamp }
+                                    if (record != null) {
+                                        val pt = AppBackupPoint(
+                                            backupId = record.id,
+                                            backupTitle = record.title,
+                                            timestamp = record.timestamp,
+                                            isLocal = !record.filePath.isNullOrBlank(),
+                                            isDrive = !record.driveFileId.isNullOrBlank(),
+                                            filePath = record.filePath,
+                                            driveFileId = record.driveFileId,
+                                            containerSizeBytes = record.sizeBytes,
+                                            appSizeBytes = record.sizeBytes,
+                                            isFullPackage = record.includedAppsCount > 1
+                                        )
+                                        appForIndividualRestore = app
+                                        individualRestorePoint = pt
+                                    } else {
+                                        Toast.makeText(context, "Nenhum backup encontrado para este app", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
+
+                // Section 3: System Apps
                 if (systemApps.isNotEmpty()) {
                     item {
                         Spacer(modifier = Modifier.height(10.dp))
@@ -781,6 +898,7 @@ fun AppsListScreen(
                             isSelected = selectedPackages.contains(app.packageName),
                             accentColor = primaryAccent,
                             appBackups = appBackups,
+                            viewModel = viewModel,
                             onToggleSelect = {
                                 if (selectedPackages.contains(app.packageName)) {
                                     selectedPackages.remove(app.packageName)
@@ -883,19 +1001,51 @@ fun AppsListScreen(
                         isSelected = selectedPackages.contains(app.packageName),
                         accentColor = primaryAccent,
                         appBackups = appBackups,
+                        viewModel = viewModel,
                         onToggleSelect = {
-                            if (selectedPackages.contains(app.packageName)) {
-                                selectedPackages.remove(app.packageName)
-                            } else {
-                                selectedPackages.add(app.packageName)
-                            }
-                        },
-                        onClick = {
-                            if (isMultiSelectMode) {
+                            if (app.isInstalled) {
                                 if (selectedPackages.contains(app.packageName)) {
                                     selectedPackages.remove(app.packageName)
                                 } else {
                                     selectedPackages.add(app.packageName)
+                                }
+                            }
+                        },
+                        onClick = {
+                            if (isMultiSelectMode) {
+                                if (app.isInstalled) {
+                                    if (selectedPackages.contains(app.packageName)) {
+                                        selectedPackages.remove(app.packageName)
+                                    } else {
+                                        selectedPackages.add(app.packageName)
+                                    }
+                                }
+                            } else if (!app.isInstalled) {
+                                val points = viewModel.getBackupPointsForApp(app.packageName)
+                                if (points.isNotEmpty()) {
+                                    appForIndividualRestore = app
+                                    individualRestorePoint = points.maxByOrNull { it.timestamp }
+                                } else {
+                                    val record = appBackups.maxByOrNull { it.timestamp }
+                                    if (record != null) {
+                                        val pt = AppBackupPoint(
+                                            backupId = record.id,
+                                            backupTitle = record.title,
+                                            timestamp = record.timestamp,
+                                            isLocal = !record.filePath.isNullOrBlank(),
+                                            isDrive = !record.driveFileId.isNullOrBlank(),
+                                            filePath = record.filePath,
+                                            driveFileId = record.driveFileId,
+                                            containerSizeBytes = record.sizeBytes,
+                                            appSizeBytes = record.sizeBytes,
+                                            isFullPackage = record.includedAppsCount > 1
+                                        )
+                                        appForIndividualRestore = app
+                                        individualRestorePoint = pt
+                                    } else {
+                                        viewModel.selectAppForDetail(app)
+                                        onAppClick(app)
+                                    }
                                 }
                             } else {
                                 viewModel.selectAppForDetail(app)
@@ -903,9 +1053,11 @@ fun AppsListScreen(
                             }
                         },
                         onLongClick = {
-                            isMultiSelectMode = true
-                            if (!selectedPackages.contains(app.packageName)) {
-                                selectedPackages.add(app.packageName)
+                            if (app.isInstalled) {
+                                isMultiSelectMode = true
+                                if (!selectedPackages.contains(app.packageName)) {
+                                    selectedPackages.add(app.packageName)
+                                }
                             }
                         },
                         onRestoreBackup = { b ->
@@ -1318,6 +1470,7 @@ fun AppListItemCard(
     isSelected: Boolean,
     accentColor: Color,
     appBackups: List<BackupRecord>,
+    viewModel: MainViewModel? = null,
     onToggleSelect: () -> Unit,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
@@ -1327,11 +1480,24 @@ fun AppListItemCard(
     onRestoreAppClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
-    val iconCache = remember { IconCacheManager.getInstance(context) }
     var isHistoryExpanded by remember { mutableStateOf(false) }
 
-    val appIconState = produceState<ImageBitmap?>(initialValue = null, key1 = app.packageName) {
-        value = iconCache.getAppIcon(app.packageName)
+    val points = remember(app.packageName) {
+        viewModel?.getBackupPointsForApp(app.packageName).orEmpty()
+    }
+    val latestPt = remember(points) { points.maxByOrNull { it.timestamp } }
+    val effectiveContainerFile = remember(latestPt?.filePath) {
+        latestPt?.filePath?.takeIf { it.isNotBlank() }?.let { File(it) }?.takeIf { it.exists() }
+    }
+    val remoteIconFetcher: (suspend (String) -> ByteArray?)? = remember(latestPt?.backupId, latestPt?.driveFileId) {
+        val pt = latestPt
+        if (viewModel != null && pt != null && !pt.driveFileId.isNullOrBlank()) {
+            val rec = viewModel.createBackupRecordFromPoint(pt)
+            val fetcher: suspend (String) -> ByteArray? = { path ->
+                viewModel.fetchRemoteEntryBytes(rec, path)
+            }
+            fetcher
+        } else null
     }
 
     Card(
@@ -1340,12 +1506,22 @@ fun AppListItemCard(
             .clip(RoundedCornerShape(14.dp))
             .border(
                 1.dp,
-                if (isSelected) accentColor else DarkCardBorder,
+                if (isSelected) accentColor else if (!app.isInstalled) AccentSunsetOrange.copy(alpha = 0.4f) else DarkCardBorder,
                 RoundedCornerShape(14.dp)
             )
             .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick
+                onClick = {
+                    if (!app.isInstalled && !isMultiSelectMode) {
+                        onRestoreAppClick()
+                    } else {
+                        onClick()
+                    }
+                },
+                onLongClick = {
+                    if (app.isInstalled) {
+                        onLongClick()
+                    }
+                }
             ),
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected) DarkSurfaceVariant else DarkSurfaceVariant.copy(alpha = 0.5f)
@@ -1356,7 +1532,7 @@ fun AppListItemCard(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (isMultiSelectMode) {
+                if (isMultiSelectMode && app.isInstalled) {
                     Checkbox(
                         checked = isSelected,
                         onCheckedChange = { onToggleSelect() },
@@ -1368,28 +1544,14 @@ fun AppListItemCard(
                     Spacer(modifier = Modifier.width(8.dp))
                 }
 
-                // Real Icon Display
-                Box(
-                    modifier = Modifier
-                        .size(52.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(DarkBg),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (appIconState.value != null) {
-                        Image(
-                            bitmap = appIconState.value!!,
-                            contentDescription = app.appName,
-                            modifier = Modifier.size(44.dp)
-                        )
-                    } else {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(22.dp),
-                            strokeWidth = 2.dp,
-                            color = accentColor
-                        )
-                    }
-                }
+                // Real Icon Display with uninstalled APK extractor fallback
+                RealAppIcon(
+                    packageName = app.packageName,
+                    size = 52.dp,
+                    shapeRadius = 12.dp,
+                    containerFile = effectiveContainerFile,
+                    remoteIconFetcher = remoteIconFetcher
+                )
 
                 Spacer(modifier = Modifier.width(14.dp))
 
@@ -1425,7 +1587,25 @@ fun AppListItemCard(
                         overflow = TextOverflow.Ellipsis
                     )
 
-                    if (app.isSystemApp) {
+                    if (!app.isInstalled) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(AccentSunsetOrange.copy(alpha = 0.2f))
+                                    .border(1.dp, AccentSunsetOrange.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "NÃO INSTALADO • APENAS BACKUP",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = AccentSunsetOrange
+                                )
+                            }
+                        }
+                    } else if (app.isSystemApp) {
                         Spacer(modifier = Modifier.height(4.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             Box(
@@ -1453,7 +1633,7 @@ fun AppListItemCard(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         val hasBackup = backupStatus.hasBackup
-                        val backupTextColor = if (hasBackup) StatusSuccess else TextMuted
+                        val backupTextColor = if (!app.isInstalled) AccentSunsetOrange else if (hasBackup) StatusSuccess else TextMuted
 
                         Row(
                             modifier = Modifier.weight(1f, fill = false),
@@ -1468,7 +1648,7 @@ fun AppListItemCard(
                                 Icon(
                                     imageVector = locIcon,
                                     contentDescription = null,
-                                    tint = StatusSuccess,
+                                    tint = if (!app.isInstalled) AccentSunsetOrange else StatusSuccess,
                                     modifier = Modifier.size(13.dp)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
@@ -1484,22 +1664,22 @@ fun AppListItemCard(
 
                         Spacer(modifier = Modifier.width(8.dp))
 
-                        val statusBadgeText = if (hasBackup) "Com backup" else "Sem backup"
-                        val statusBadgeColor = if (hasBackup) StatusSuccess else TextMuted
+                        val statusBadgeText = if (!app.isInstalled) "Restaurar" else if (hasBackup) "Com backup" else "Sem backup"
+                        val statusBadgeColor = if (!app.isInstalled) AccentSunsetOrange else if (hasBackup) StatusSuccess else TextMuted
 
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(6.dp))
                                 .background(statusBadgeColor.copy(alpha = 0.15f))
                                 .then(
-                                    if (hasBackup) {
+                                    if (hasBackup || !app.isInstalled) {
                                         Modifier.clickable { onRestoreAppClick() }
                                     } else Modifier
                                 )
                                 .padding(horizontal = 7.dp, vertical = 3.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                if (hasBackup) {
+                                if (hasBackup || !app.isInstalled) {
                                     Icon(
                                         Icons.Default.Restore,
                                         contentDescription = "Restaurar",

@@ -106,6 +106,7 @@ data class AppInfo(
     val backupSize: Long = 0L,
     val architecture: String = "arm64-v8a",
     val isInternalSystemPackage: Boolean = false,
+    val isInstalled: Boolean = true,
     @Transient var iconBitmap: ImageBitmap? = null
 )
 

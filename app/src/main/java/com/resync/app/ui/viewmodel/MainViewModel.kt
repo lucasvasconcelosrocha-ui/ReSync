@@ -348,6 +348,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _appBackupPointsMap = MutableStateFlow<Map<String, List<AppBackupPoint>>>(emptyMap())
     val appBackupPointsMap: StateFlow<Map<String, List<AppBackupPoint>>> = _appBackupPointsMap.asStateFlow()
 
+    private val _uninstalledAppsWithBackup = MutableStateFlow<List<AppInfo>>(emptyList())
+    val uninstalledAppsWithBackup: StateFlow<List<AppInfo>> = _uninstalledAppsWithBackup.asStateFlow()
+
     fun getBackupPointsForApp(packageName: String): List<AppBackupPoint> {
         return _appBackupPointsMap.value[packageName]
             ?: appBackupDetector.getBackupPointsForApp(packageName)
@@ -388,6 +391,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             )
             _appBackupStatusMap.value = result
             _appBackupPointsMap.value = appBackupDetector.getAllBackupPoints()
+            _uninstalledAppsWithBackup.value = appBackupDetector.getUninstalledAppsWithBackup()
         }
     }
 
@@ -734,6 +738,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         _appBackupStatusMap.value = appBackupDetector.loadPersistedCache()
+        _uninstalledAppsWithBackup.value = appBackupDetector.getUninstalledAppsWithBackup()
         checkCrashLogOnStartup()
         loadData()
         observeDatabaseChanges()

@@ -10,6 +10,7 @@ import com.resync.app.cloud.gdrive.DriveFileMetadata
 import com.resync.app.data.database.AppDatabaseHelper
 import com.resync.app.data.model.AppBackupPoint
 import com.resync.app.data.model.AppBackupStatus
+import com.resync.app.data.model.AppInfo
 import com.resync.app.data.model.BackupItemType
 import com.resync.app.data.model.BackupManifest
 import com.resync.app.data.model.BackupPaths
@@ -38,12 +39,14 @@ class AppBackupDetector(
         private const val TAG = "AppBackupDetector"
         private const val PREFS_NAME = "resync_app_backup_status_cache"
         private const val KEY_STATUS_MAP_JSON = "status_map_json"
+        private const val KEY_UNINSTALLED_APPS_JSON = "uninstalled_apps_json"
         private const val KEY_LAST_DETECTION = "last_detection_timestamp"
     }
 
     private val gson = Gson()
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private val memoryCache = ConcurrentHashMap<String, AppBackupStatus>()
+    private val uninstalledAppsMap = ConcurrentHashMap<String, AppInfo>()
     private val appBackupPoints = ConcurrentHashMap<String, MutableList<AppBackupPoint>>()
     private val isDetecting = AtomicBoolean(false)
     private var lastDriveRefreshTime = 0L
@@ -69,7 +72,25 @@ class AppBackupDetector(
                 Log.w(TAG, "Falha ao desserializar cache persistente de status de backup: ${e.message}")
             }
         }
+
+        val uninstalledJson = prefs.getString(KEY_UNINSTALLED_APPS_JSON, null)
+        if (!uninstalledJson.isNullOrBlank()) {
+            try {
+                val type = object : TypeToken<List<AppInfo>>() {}.type
+                val cachedList: List<AppInfo> = gson.fromJson(uninstalledJson, type)
+                uninstalledAppsMap.clear()
+                cachedList.forEach { uninstalledAppsMap[it.packageName] = it }
+                Log.d(TAG, "Carregados ${cachedList.size} apps desinstalados com backup do cache persistente.")
+            } catch (e: Exception) {
+                Log.w(TAG, "Falha ao desserializar cache de apps desinstalados: ${e.message}")
+            }
+        }
+
         return memoryCache
+    }
+
+    fun getUninstalledAppsWithBackup(): List<AppInfo> {
+        return uninstalledAppsMap.values.toList().sortedBy { it.appName.lowercase() }
     }
 
     fun getCachedStatuses(): Map<String, AppBackupStatus> {
@@ -270,10 +291,18 @@ class AppBackupDetector(
                             rec.syncStatus == SyncStatus.SYNCED ||
                             rec.destination.contains("Drive", ignoreCase = true)
 
-                    // Match package from title or filePath if single app
+                    // Match package from title or filePath if single app, or if title/file looks like a package name
                     val matchedPkg = installedPackages.firstOrNull { pkg ->
                         rec.title.equals(pkg, ignoreCase = true) ||
                         rec.filePath.contains(pkg, ignoreCase = true)
+                    } ?: run {
+                        val cleanTitle = rec.title.trim()
+                        if (cleanTitle.contains(".") && !cleanTitle.contains(" ") && cleanTitle.length > 3) {
+                            cleanTitle
+                        } else {
+                            val candidate = rec.filePath.substringAfterLast("/").substringBeforeLast(".")
+                            if (candidate.contains(".") && !candidate.contains(" ") && candidate.length > 3) candidate else null
+                        }
                     }
                     if (matchedPkg != null) {
                         if (isLocal) {
@@ -296,7 +325,8 @@ class AppBackupDetector(
                             hasApk = true,
                             hasData = true,
                             isFullPackage = false,
-                            itemIds = emptyList()
+                            itemIds = emptyList(),
+                            appName = rec.title
                         )
                         newPointsMap.getOrPut(matchedPkg) { mutableListOf() }.add(point)
                     }
@@ -356,14 +386,74 @@ class AppBackupDetector(
 
             memoryCache.clear()
             memoryCache.putAll(newMap)
-            saveToPersistedCache(newMap)
-
             appBackupPoints.clear()
             for ((pkg, list) in newPointsMap) {
                 appBackupPoints[pkg] = list.distinctBy { (it.driveFileId ?: "") + it.filePath + it.timestamp }
                     .sortedByDescending { it.timestamp }
                     .toMutableList()
             }
+
+            // 5b. Identify uninstalled packages that have available backups
+            val uninstalledPkgs = (localLatestMap.keys + driveLatestMap.keys).filter { pkg ->
+                !installedPackages.contains(pkg)
+            }.distinct()
+
+            val uninstalledList = mutableListOf<AppInfo>()
+            val pm = context.packageManager
+            for (pkg in uninstalledPkgs) {
+                val isReallyInstalled = try {
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                        pm.getPackageInfo(pkg, android.content.pm.PackageManager.PackageInfoFlags.of(0))
+                    } else {
+                        @Suppress("DEPRECATION")
+                        pm.getPackageInfo(pkg, 0)
+                    }
+                    true
+                } catch (_: android.content.pm.PackageManager.NameNotFoundException) {
+                    false
+                } catch (_: Exception) {
+                    false
+                }
+
+                if (!isReallyInstalled) {
+                    val points = newPointsMap[pkg] ?: emptyList()
+                    val latestPt = points.maxByOrNull { it.timestamp }
+                    val appName = latestPt?.appName?.takeIf { it.isNotBlank() }
+                        ?: pkg.substringAfterLast('.').replaceFirstChar { if (it.isLowerCase()) it.titlecase(java.util.Locale.getDefault()) else it.toString() }
+                    val versionName = latestPt?.versionName ?: "1.0"
+                    val versionCode = latestPt?.versionCode ?: 0L
+                    val sizeBytes = latestPt?.appSizeBytes ?: 0L
+                    val timestamp = latestPt?.timestamp ?: System.currentTimeMillis()
+                    val dateFormatted = java.text.SimpleDateFormat("dd/MM/yyyy HH:mm", java.util.Locale.getDefault()).format(java.util.Date(timestamp))
+
+                    uninstalledList.add(
+                        AppInfo(
+                            packageName = pkg,
+                            appName = appName,
+                            versionName = versionName,
+                            versionCode = versionCode,
+                            minSdkVersion = 26,
+                            targetSdkVersion = 34,
+                            sourceDir = "",
+                            dataDir = "",
+                            isSystemApp = false,
+                            sizeBytes = sizeBytes,
+                            lastInstallTime = 0L,
+                            lastUpdateTime = 0L,
+                            lastBackupDate = dateFormatted,
+                            hasBackup = true,
+                            isOutdatedBackup = false,
+                            backupSize = sizeBytes,
+                            isInstalled = false
+                        )
+                    )
+                }
+            }
+
+            uninstalledAppsMap.clear()
+            uninstalledList.forEach { uninstalledAppsMap[it.packageName] = it }
+
+            saveToPersistedCache(newMap)
 
             Log.d(TAG, "Detecção de backups concluída para ${newMap.size} pacotes. (${newMap.count { it.value.hasBackup }} com backup)")
             return@withContext memoryCache
@@ -433,6 +523,11 @@ class AppBackupDetector(
                 ?: manifest.items.find { it.archiveEntryPath == "apps/$pkg/metadata.json" }?.metadata?.get("versionName")
             val metaCode = items.firstNotNullOfOrNull { it.metadata["versionCode"] }?.toLongOrNull() ?: 0L
 
+            val metaAppName = items.firstNotNullOfOrNull { it.metadata["appName"] }
+                ?: manifest.items.find { it.archiveEntryPath == "apps/$pkg/metadata.json" }?.metadata?.get("appName")
+                ?: items.firstOrNull { it.type == BackupItemType.APP_APK }?.name?.removeSuffix(" (Base APK)")
+                ?: pkg.substringAfterLast('.').replaceFirstChar { if (it.isLowerCase()) it.titlecase(java.util.Locale.getDefault()) else it.toString() }
+
             val point = AppBackupPoint(
                 backupId = manifest.backupId,
                 backupTitle = manifest.title.ifBlank { "Backup" },
@@ -448,7 +543,8 @@ class AppBackupDetector(
                 hasApk = hasApk,
                 hasData = hasData,
                 isFullPackage = isFullPackage,
-                itemIds = items.map { it.id }
+                itemIds = items.map { it.id },
+                appName = metaAppName
             )
             result[pkg] = point
         }
@@ -458,8 +554,10 @@ class AppBackupDetector(
     private fun saveToPersistedCache(map: Map<String, AppBackupStatus>) {
         try {
             val json = gson.toJson(map)
+            val uninstalledJson = gson.toJson(uninstalledAppsMap.values.toList())
             prefs.edit()
                 .putString(KEY_STATUS_MAP_JSON, json)
+                .putString(KEY_UNINSTALLED_APPS_JSON, uninstalledJson)
                 .putLong(KEY_LAST_DETECTION, System.currentTimeMillis())
                 .apply()
         } catch (e: Exception) {
