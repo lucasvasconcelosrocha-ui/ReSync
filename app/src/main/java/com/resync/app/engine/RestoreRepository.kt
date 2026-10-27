@@ -101,6 +101,7 @@ object RestoreRepository {
     private var lastSelectedTypes: Set<String>? = null
     private var lastPassword: String? = null
     private var lastTempDownloadedFile: File? = null
+    private var lastTotalBytesEstimated: Long = 0L
     private var totalPausedDurationMs = 0L
     private var pauseStartElapsedMono = 0L
 
@@ -166,7 +167,8 @@ object RestoreRepository {
         selectedSmsKeys: Set<String>? = null,
         selectedContactKeys: Set<String>? = null,
         selectedWifiKeys: Set<String>? = null,
-        selectedBtKeys: Set<String>? = null
+        selectedBtKeys: Set<String>? = null,
+        totalBytesEstimated: Long = 0L
     ) {
         val context = appContext ?: return
         lastLocalFile = localFile
@@ -179,6 +181,7 @@ object RestoreRepository {
         lastSelectedContactKeys = selectedContactKeys
         lastSelectedWifiKeys = selectedWifiKeys
         lastSelectedBtKeys = selectedBtKeys
+        lastTotalBytesEstimated = totalBytesEstimated
 
         activeRestoreJob?.cancel()
         restoreStartTime = System.currentTimeMillis()
@@ -226,7 +229,7 @@ object RestoreRepository {
                         val downloadResult = driveProvider.downloadManager.downloadBackupFile(
                             fileId = remoteDriveFileId,
                             destinationFile = targetLocal,
-                            totalBytesEstimated = 0L,
+                            totalBytesEstimated = totalBytesEstimated,
                             accountEmail = accountEmail
                         ) { progressInfo ->
                             val speedBytesSec = (progressInfo.speedMBps * 1024f * 1024f).toLong().coerceAtLeast(0L)
@@ -507,7 +510,8 @@ object RestoreRepository {
             selectedSmsKeys = lastSelectedSmsKeys,
             selectedContactKeys = lastSelectedContactKeys,
             selectedWifiKeys = lastSelectedWifiKeys,
-            selectedBtKeys = lastSelectedBtKeys
+            selectedBtKeys = lastSelectedBtKeys,
+            totalBytesEstimated = lastTotalBytesEstimated
         )
     }
 

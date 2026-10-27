@@ -1,5 +1,9 @@
 package com.resync.app.ui.components
 
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -30,43 +34,99 @@ import java.io.File
  * Universal real app icon composable.
  * Uses IconCacheManager and native Android PackageManager.
  * Guarantees that the device's real application icon is always displayed.
+ * Supports desaturation + discrete cloud badge for uninstalled apps.
  */
 @Composable
 fun RealAppIcon(
     packageName: String,
     modifier: Modifier = Modifier,
     size: Dp = 42.dp,
-    shapeRadius: Dp = 10.dp
+    shapeRadius: Dp = 10.dp,
+    containerFile: File? = null,
+    remoteIconFetcher: (suspend (String) -> ByteArray?)? = null,
+    password: String? = null,
+    accountEmail: String? = null
 ) {
     val context = LocalContext.current
     val iconCache = remember { IconCacheManager.getInstance(context) }
 
-    val iconState = produceState<ImageBitmap?>(initialValue = null, key1 = packageName) {
-        value = iconCache.getAppIcon(packageName)
+    val iconState = produceState<IconCacheManager.AppIconResult?>(
+        initialValue = null,
+        key1 = packageName,
+        key2 = containerFile?.path
+    ) {
+        value = iconCache.getAppIconWithStatus(
+            packageName = packageName,
+            containerFile = containerFile,
+            remoteIconFetcher = remoteIconFetcher,
+            password = password,
+            accountEmail = accountEmail
+        )
     }
 
+    val result = iconState.value
+    val bitmap = result?.bitmap
+    val isInstalled = result?.isInstalled ?: true
+
     Box(
-        modifier = modifier
-            .size(size)
-            .clip(RoundedCornerShape(shapeRadius))
-            .background(DarkSurfaceVariant),
-        contentAlignment = Alignment.Center
+        modifier = modifier.size(size)
     ) {
-        val bitmap = iconState.value
-        if (bitmap != null) {
-            Image(
-                bitmap = bitmap,
-                contentDescription = null,
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(RoundedCornerShape(shapeRadius))
+                .background(DarkSurfaceVariant),
+            contentAlignment = Alignment.Center
+        ) {
+            if (bitmap != null) {
+                val colorFilter = if (!isInstalled) {
+                    ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0.45f) })
+                } else null
+
+                Image(
+                    bitmap = bitmap,
+                    contentDescription = null,
+                    colorFilter = colorFilter,
+                    alpha = if (!isInstalled) 0.85f else 1.0f,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(RoundedCornerShape(shapeRadius))
+                )
+            } else if (result != null) {
+                Icon(
+                    imageVector = Icons.Default.Android,
+                    contentDescription = null,
+                    tint = if (!isInstalled) Color.White.copy(alpha = 0.40f) else Color.White.copy(alpha = 0.70f),
+                    modifier = Modifier.size(size * 0.52f)
+                )
+            } else {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(size * 0.45f),
+                    strokeWidth = 2.dp,
+                    color = Color.White.copy(alpha = 0.25f)
+                )
+            }
+        }
+
+        // Discrete badge for uninstalled cloud/backup apps
+        if (result != null && !isInstalled) {
+            val badgeSize = (size * 0.42f).coerceAtLeast(14.dp)
+            Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(shapeRadius))
-            )
-        } else {
-            CircularProgressIndicator(
-                modifier = Modifier.size(size * 0.45f),
-                strokeWidth = 2.dp,
-                color = Color.White.copy(alpha = 0.25f)
-            )
+                    .size(badgeSize)
+                    .align(Alignment.BottomEnd)
+                    .clip(CircleShape)
+                    .background(Color(0xFF0F172A))
+                    .border(1.dp, Color(0xFF38BDF8), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.CloudDownload,
+                    contentDescription = "Na nuvem / Não instalado",
+                    tint = Color(0xFF38BDF8),
+                    modifier = Modifier.size(badgeSize * 0.65f)
+                )
+            }
         }
     }
 }

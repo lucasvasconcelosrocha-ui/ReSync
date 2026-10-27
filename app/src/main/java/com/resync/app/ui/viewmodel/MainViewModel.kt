@@ -1835,17 +1835,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         selectedWifiKeys: Set<String>? = null,
         selectedBtKeys: Set<String>? = null
     ) {
-        val file = downloadedCacheFile?.takeIf { it.exists() }
+        val file = downloadedCacheFile?.takeIf { it.exists() && it.length() > 0L }
             ?: com.resync.app.data.model.BackupPaths.findLocalMirrorFile(record.filePath, record.title)
             ?: File(record.filePath)
-        val isLocal = file.exists()
+        val isLocalValid = file != null && file.exists() && file.length() > 0L && (record.sizeBytes <= 0L || file.length() >= (record.sizeBytes * 0.85).toLong())
+        val isLocal = isLocalValid
         val remoteId = record.driveFileId ?: (if (!isLocal) record.id else null)
 
         val emailRegex = "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}".toRegex()
         val accountFromDest = emailRegex.find(record.destination)?.value
         val email = accountFromDest ?: _activeAccountEmail.value
 
-        Log.d("RestoreInspection", "[RESTORE] Iniciando restauração: file=${file.absolutePath} (isLocal=$isLocal), remoteId=$remoteId, items=${selectedItemIds.size}, account=$email")
+        Log.d("RestoreInspection", "[RESTORE] Iniciando restauração: file=${file?.absolutePath} (isLocal=$isLocal), remoteId=$remoteId, items=${selectedItemIds.size}, account=$email")
         viewModelScope.launch {
             dbHelper.insertLog(LogLevel.INFO, "Restore", "Iniciando restauração de '${record.title}' (${selectedItemIds.size} itens selecionados)")
         }
@@ -1860,7 +1861,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             selectedSmsKeys = selectedSmsKeys,
             selectedContactKeys = selectedContactKeys,
             selectedWifiKeys = selectedWifiKeys,
-            selectedBtKeys = selectedBtKeys
+            selectedBtKeys = selectedBtKeys,
+            totalBytesEstimated = record.sizeBytes
         )
     }
 

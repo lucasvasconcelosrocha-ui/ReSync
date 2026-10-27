@@ -146,7 +146,21 @@ class RestoreEngine(private val context: Context) {
         send(RestoreProgress("Iniciando", "Lendo cabeçalho do container...", 0.05f))
         dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "Iniciando restauração seletiva de: ${containerFile.name}")
 
-        val itemsToRestore = manifest.items.filter { selectedItemIds.contains(it.id) }
+        val selectedFolders = manifest.items.filter { selectedItemIds.contains(it.id) && it.type == BackupItemType.FOLDER }
+        val itemsToRestore = mutableListOf<ManifestItem>()
+        for (item in manifest.items) {
+            if (selectedItemIds.contains(item.id)) {
+                itemsToRestore.add(item)
+            } else {
+                val isChildOfSelectedFolder = selectedFolders.any { folder ->
+                    item.archiveEntryPath.startsWith(folder.archiveEntryPath.trimEnd('/') + "/") ||
+                    (folder.originalPath.isNotBlank() && item.originalPath.startsWith(folder.originalPath.trimEnd('/') + "/"))
+                }
+                if (isChildOfSelectedFolder) {
+                    itemsToRestore.add(item)
+                }
+            }
+        }
         if (itemsToRestore.isEmpty()) {
             send(RestoreProgress("Concluído", "Nenhum item selecionado para restauração.", 1.0f, isFinished = true))
             return@channelFlow
@@ -181,7 +195,15 @@ class RestoreEngine(private val context: Context) {
             it.key != "unknown" && !ProcessControlManager.isPackageProtected(it.key, context)
         }
         val totalApps = validAppGroups.size
-        val otherItems = itemsToRestore.filter { !appItemsList.contains(it) && !it.archiveEntryPath.endsWith("metadata.json") }
+        // Exclude child files whose parent folder is being restored as a folder unit to avoid duplicate steps
+        val otherItems = itemsToRestore.filter { item ->
+            !appItemsList.contains(item) &&
+            !item.archiveEntryPath.endsWith("metadata.json") &&
+            !(item.type == BackupItemType.FILE && selectedFolders.any { folder ->
+                item.archiveEntryPath.startsWith(folder.archiveEntryPath.trimEnd('/') + "/") ||
+                (folder.originalPath.isNotBlank() && item.originalPath.startsWith(folder.originalPath.trimEnd('/') + "/"))
+            })
+        }
         val totalRestoreItems = totalApps + otherItems.size
         var currentItemIdx = 0
 
@@ -455,6 +477,9 @@ class RestoreEngine(private val context: Context) {
                 when (item.type) {
                     BackupItemType.FILE -> {
                         itemOutcome = restoreFile(tempRestoreDir, item)
+                    }
+                    BackupItemType.FOLDER -> {
+                        itemOutcome = restoreFolder(tempRestoreDir, item, manifest.items)
                     }
                     BackupItemType.WALLPAPER,
                     BackupItemType.WALLPAPER_LOCK -> {
@@ -974,33 +999,31 @@ class RestoreEngine(private val context: Context) {
         }
     }
 
-    private suspend fun restoreFile(tempDir: File, item: ManifestItem): ItemRestoreOutcome {
-        return try {
-            val extractedFile = File(tempDir, item.archiveEntryPath)
-            if (!extractedFile.exists() || extractedFile.length() == 0L) {
-                val err = "Arquivo não encontrado na extração: ${item.archiveEntryPath}"
-                dbHelper.insertLog(LogLevel.ERROR, "RestoreEngine", err)
-                return ItemRestoreOutcome(false, error = err, statusText = "Arquivo ausente")
-            }
-            val destination = File(item.originalPath)
+    private suspend fun writeRestoredFile(
+        extractedFile: File,
+        destination: File,
+        metadata: Map<String, String>? = null
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
             val isOutsideInternal = !destination.absolutePath.startsWith("/storage/emulated/0")
+            val hasRoot = Shell.isAppGrantedRoot() == true
 
-            if (isOutsideInternal && Shell.isAppGrantedRoot() == true) {
+            if (isOutsideInternal && hasRoot) {
                 destination.parentFile?.mkdirs()
                 val mkdirCmd = "mkdir -p \"${destination.parentFile?.absolutePath}\""
                 val cpCmd = "cp -a \"${extractedFile.absolutePath}\" \"${destination.absolutePath}\""
                 Shell.cmd(mkdirCmd, cpCmd).exec()
-                val selinuxCtx = item.metadata["selinux"]
+                val selinuxCtx = metadata?.get("selinux")
                 if (!selinuxCtx.isNullOrBlank()) {
                     Shell.cmd("chcon \"$selinuxCtx\" \"${destination.absolutePath}\" 2>/dev/null").exec()
                 } else {
                     Shell.cmd("restorecon -R \"${destination.absolutePath}\" 2>/dev/null").exec()
                 }
-                val mode = item.metadata["mode"]
+                val mode = metadata?.get("mode")
                 if (!mode.isNullOrBlank()) {
                     Shell.cmd("chmod $mode \"${destination.absolutePath}\" 2>/dev/null").exec()
                 }
-                val owner = item.metadata["owner"]
+                val owner = metadata?.get("owner")
                 if (!owner.isNullOrBlank()) {
                     Shell.cmd("chown $owner \"${destination.absolutePath}\" 2>/dev/null").exec()
                 }
@@ -1009,7 +1032,7 @@ class RestoreEngine(private val context: Context) {
                     destination.parentFile?.mkdirs()
                     extractedFile.copyTo(destination, overwrite = true)
                 } catch (writeEx: Exception) {
-                    if (Shell.isAppGrantedRoot() == true) {
+                    if (hasRoot) {
                         val mkdirCmd = "mkdir -p \"${destination.parentFile?.absolutePath}\""
                         val cpCmd = "cp -a \"${extractedFile.absolutePath}\" \"${destination.absolutePath}\""
                         Shell.cmd(mkdirCmd, cpCmd).exec()
@@ -1017,15 +1040,111 @@ class RestoreEngine(private val context: Context) {
                     } else throw writeEx
                 }
             }
-            if (!destination.exists() || destination.length() != extractedFile.length()) {
+            destination.exists() && destination.length() == extractedFile.length()
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+    private suspend fun restoreFile(tempDir: File, item: ManifestItem): ItemRestoreOutcome = withContext(Dispatchers.IO) {
+        try {
+            val extractedFile = File(tempDir, item.archiveEntryPath)
+            if (!extractedFile.exists() || extractedFile.length() == 0L) {
+                val err = "Arquivo não encontrado na extração: ${item.archiveEntryPath}"
+                dbHelper.insertLog(LogLevel.ERROR, "RestoreEngine", err)
+                return@withContext ItemRestoreOutcome(false, error = err, statusText = "Arquivo ausente")
+            }
+            val destination = File(item.originalPath)
+            val writtenOk = writeRestoredFile(extractedFile, destination, item.metadata)
+
+            if (!writtenOk || !destination.exists() || destination.length() != extractedFile.length()) {
                 val err = "Falha de integridade: tamanho no disco (${destination.length()}) difere do esperado (${extractedFile.length()})"
                 dbHelper.insertLog(LogLevel.ERROR, "RestoreEngine", err)
-                return ItemRestoreOutcome(false, error = err, statusText = "Falha de gravação")
+                return@withContext ItemRestoreOutcome(false, error = err, statusText = "Falha de gravação")
             }
             val sizeStr = StorageRepository.formatFileSize(destination.length())
             ItemRestoreOutcome(true, verified = true, detailCount = sizeStr, statusText = "Restaurado e verificado")
         } catch (e: Exception) {
             val err = "Falha ao restaurar arquivo ${item.name}: ${e.message}"
+            dbHelper.insertLog(LogLevel.ERROR, "RestoreEngine", err)
+            ItemRestoreOutcome(false, error = err, statusText = "Erro: ${e.message}")
+        }
+    }
+
+    private suspend fun restoreFolder(
+        tempDir: File,
+        folderItem: ManifestItem,
+        allManifestItems: List<ManifestItem>
+    ): ItemRestoreOutcome = withContext(Dispatchers.IO) {
+        try {
+            val extractedFolder = File(tempDir, folderItem.archiveEntryPath)
+            val destinationFolder = File(folderItem.originalPath)
+
+            dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "Restaurando pasta '${folderItem.name}' para '${destinationFolder.absolutePath}'...")
+
+            val childItems = allManifestItems.filter { child ->
+                child.id != folderItem.id &&
+                (child.archiveEntryPath.startsWith(folderItem.archiveEntryPath.trimEnd('/') + "/") ||
+                 (folderItem.originalPath.isNotBlank() && child.originalPath.startsWith(folderItem.originalPath.trimEnd('/') + "/")))
+            }
+
+            var filesRestored = 0
+            var bytesRestored = 0L
+            val failedFiles = mutableListOf<String>()
+
+            if (!destinationFolder.exists()) {
+                if (!destinationFolder.mkdirs() && Shell.isAppGrantedRoot() == true) {
+                    Shell.cmd("mkdir -p \"${destinationFolder.absolutePath}\"").exec()
+                }
+            }
+
+            if (extractedFolder.exists() && extractedFolder.isDirectory) {
+                extractedFolder.walkTopDown().filter { it.isFile }.forEach { file ->
+                    val relPath = file.relativeTo(extractedFolder).path
+                    val destFile = File(destinationFolder, relPath)
+                    val matchingChildItem = childItems.firstOrNull { it.archiveEntryPath.endsWith(relPath) }
+                    val ok = writeRestoredFile(file, destFile, matchingChildItem?.metadata)
+                    if (ok) {
+                        filesRestored++
+                        bytesRestored += destFile.length()
+                    } else {
+                        failedFiles.add(relPath)
+                    }
+                }
+            } else if (childItems.isNotEmpty()) {
+                for (child in childItems) {
+                    val src = File(tempDir, child.archiveEntryPath)
+                    if (src.exists() && src.isFile) {
+                        val dest = File(child.originalPath.ifBlank { File(destinationFolder, src.name).absolutePath })
+                        val ok = writeRestoredFile(src, dest, child.metadata)
+                        if (ok) {
+                            filesRestored++
+                            bytesRestored += dest.length()
+                        } else {
+                            failedFiles.add(child.name)
+                        }
+                    }
+                }
+            }
+
+            if (!destinationFolder.exists()) {
+                val err = "Pasta de destino não pôde ser criada: ${destinationFolder.absolutePath}"
+                dbHelper.insertLog(LogLevel.ERROR, "RestoreEngine", err)
+                return@withContext ItemRestoreOutcome(false, error = err, statusText = "Falha ao criar diretório")
+            }
+
+            if (failedFiles.isNotEmpty()) {
+                val err = "Falha ao gravar ${failedFiles.size} arquivos na pasta ${folderItem.name} (${failedFiles.take(3).joinToString()})"
+                dbHelper.insertLog(LogLevel.WARN, "RestoreEngine", err)
+                return@withContext ItemRestoreOutcome(false, error = err, detailCount = "$filesRestored arquivo(s) restaurados", statusText = "Restauração parcial")
+            }
+
+            val sizeStr = StorageRepository.formatFileSize(bytesRestored)
+            val detail = if (filesRestored == 1) "1 arquivo ($sizeStr)" else "$filesRestored arquivos ($sizeStr)"
+            dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "Pasta '${folderItem.name}' restaurada com sucesso: $detail.")
+            ItemRestoreOutcome(true, verified = true, detailCount = detail, statusText = "Restaurado e verificado")
+        } catch (e: Exception) {
+            val err = "Falha ao restaurar pasta ${folderItem.name}: ${e.message}"
             dbHelper.insertLog(LogLevel.ERROR, "RestoreEngine", err)
             ItemRestoreOutcome(false, error = err, statusText = "Erro: ${e.message}")
         }

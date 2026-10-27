@@ -1401,6 +1401,15 @@ fun RestoreSelectionScreen(
                                             }
                                         }
 
+                                        val remoteIconFetcher: (suspend (String) -> ByteArray?)? = remember(backup.id, backup.driveFileId) {
+                                            if (!backup.driveFileId.isNullOrBlank()) {
+                                                val fetcher: suspend (String) -> ByteArray? = { path ->
+                                                    viewModel.fetchRemoteEntryBytes(backup, path)
+                                                }
+                                                fetcher
+                                            } else null
+                                        }
+
                                         LazyColumn(
                                             modifier = Modifier.fillMaxSize(),
                                             verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -1447,7 +1456,10 @@ fun RestoreSelectionScreen(
                                                             RealAppIcon(
                                                                 packageName = appGroup.packageName,
                                                                 size = 40.dp,
-                                                                shapeRadius = 10.dp
+                                                                shapeRadius = 10.dp,
+                                                                containerFile = effectiveContainerFile?.takeIf { it.exists() },
+                                                                remoteIconFetcher = remoteIconFetcher,
+                                                                accountEmail = effectiveAccountEmail
                                                             )
 
                                                             Spacer(modifier = Modifier.width(10.dp))

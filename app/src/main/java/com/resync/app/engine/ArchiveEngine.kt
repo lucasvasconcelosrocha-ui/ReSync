@@ -468,7 +468,12 @@ object ArchiveEngine {
                     val entry = entries.nextElement()
                     if (entry.name == "manifest.json" || entry.isDirectory) continue
 
-                    if (selectedArchivePaths == null || selectedArchivePaths.contains(entry.name)) {
+                    val shouldExtract = selectedArchivePaths == null || selectedArchivePaths.any { path ->
+                        entry.name == path ||
+                        entry.name.startsWith(path.trimEnd('/') + "/") ||
+                        path.startsWith(entry.name.trimEnd('/') + "/")
+                    }
+                    if (shouldExtract) {
                         val outFile = File(targetOutputDir, entry.name)
                         // Anti-Path-Traversal check
                         val destCanonical = targetOutputDir.canonicalPath

@@ -84,6 +84,20 @@ fun AppIndividualRestoreScreen(
         }
     }
 
+    val effectiveContainerFile = remember(selectedPoint?.filePath) {
+        selectedPoint?.filePath?.takeIf { it.isNotBlank() }?.let { java.io.File(it) }?.takeIf { it.exists() }
+    }
+    val remoteIconFetcher: (suspend (String) -> ByteArray?)? = remember(selectedPoint?.backupId, selectedPoint?.driveFileId) {
+        val pt = selectedPoint
+        if (pt != null && !pt.driveFileId.isNullOrBlank()) {
+            val rec = viewModel.createBackupRecordFromPoint(pt)
+            val fetcher: suspend (String) -> ByteArray? = { path ->
+                viewModel.fetchRemoteEntryBytes(rec, path)
+            }
+            fetcher
+        } else null
+    }
+
     // Identificação dos componentes granulares do aplicativo
     val apkBaseItems = remember(appItems) {
         appItems.filter {
@@ -324,7 +338,12 @@ fun AppIndividualRestoreScreen(
                         Text("CONCLUIR", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 13.5.sp)
                     }
                 } else {
-                    RealAppIcon(packageName = app.packageName, size = 64.dp)
+                    RealAppIcon(
+                        packageName = app.packageName,
+                        size = 64.dp,
+                        containerFile = effectiveContainerFile,
+                        remoteIconFetcher = remoteIconFetcher
+                    )
                     Spacer(modifier = Modifier.height(18.dp))
                     Text(
                         text = "Restaurando ${app.appName}",
@@ -380,7 +399,12 @@ fun AppIndividualRestoreScreen(
                                 .padding(16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            RealAppIcon(packageName = app.packageName, size = 52.dp)
+                            RealAppIcon(
+                                packageName = app.packageName,
+                                size = 52.dp,
+                                containerFile = effectiveContainerFile,
+                                remoteIconFetcher = remoteIconFetcher
+                            )
                             Spacer(modifier = Modifier.width(14.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(

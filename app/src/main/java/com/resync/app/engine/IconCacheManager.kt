@@ -112,18 +112,61 @@ class IconCacheManager private constructor(private val context: Context) {
         }
     }
 
+    data class AppIconResult(
+        val bitmap: ImageBitmap?,
+        val isInstalled: Boolean
+    )
+
+    fun isPackageInstalled(packageName: String): Boolean {
+        if (packageName.isBlank()) return false
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                context.packageManager.getPackageInfo(packageName, PackageManager.PackageInfoFlags.of(0))
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(packageName, 0)
+            }
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     suspend fun getAppIconFromApk(apkFile: File, packageName: String): ImageBitmap? = withContext(Dispatchers.IO) {
         if (packageName.isNotBlank()) {
             memoryCache.get(packageName)?.let { return@withContext it }
         }
+        if (!apkFile.exists() || apkFile.length() == 0L) return@withContext null
         try {
             val pm = context.packageManager
-            val pi = pm.getPackageArchiveInfo(apkFile.absolutePath, 0) ?: return@withContext null
+            val pi = pm.getPackageArchiveInfo(apkFile.absolutePath, PackageManager.GET_ACTIVITIES)
+                ?: pm.getPackageArchiveInfo(apkFile.absolutePath, 0)
+                ?: return@withContext null
             val appInfo = pi.applicationInfo ?: return@withContext null
             appInfo.sourceDir = apkFile.absolutePath
             appInfo.publicSourceDir = apkFile.absolutePath
-            val drawable = appInfo.loadIcon(pm) ?: return@withContext null
-            val bitmap = drawableToBitmap(drawable)
+            
+            var drawable: Drawable? = null
+            try {
+                drawable = appInfo.loadIcon(pm)
+            } catch (_: Throwable) {}
+
+            if (drawable == null || drawable == pm.defaultActivityIcon) {
+                try {
+                    val res = pm.getResourcesForApplication(appInfo)
+                    if (appInfo.icon != 0) {
+                        drawable = res.getDrawable(appInfo.icon, null)
+                    }
+                } catch (_: Throwable) {}
+            }
+
+            if (drawable == null || drawable == pm.defaultActivityIcon) {
+                try {
+                    drawable = pm.getApplicationIcon(appInfo)
+                } catch (_: Throwable) {}
+            }
+
+            val bitmap = drawable?.let { drawableToBitmap(it) } ?: return@withContext null
             val imageBitmap = bitmap.asImageBitmap()
             if (packageName.isNotBlank()) {
                 memoryCache.put(packageName, imageBitmap)
@@ -143,55 +186,105 @@ class IconCacheManager private constructor(private val context: Context) {
     suspend fun getAppIconFromContainer(
         containerFile: File,
         entryPath: String,
-        packageName: String
+        packageName: String,
+        password: String? = null,
+        accountEmail: String? = null
     ): ImageBitmap? = withContext(Dispatchers.IO) {
         if (packageName.isNotBlank()) {
             memoryCache.get(packageName)?.let { return@withContext it }
         }
         if (!containerFile.exists()) return@withContext null
 
+        // 1. Try reading encrypted/stored apps/<packageName>/icon.png via ArchiveEngine
+        val directBytes = runCatching {
+            ArchiveEngine.readEntryBytes(
+                containerFile = containerFile,
+                entryPath = "apps/$packageName/icon.png",
+                password = password,
+                accountEmail = accountEmail
+            )
+        }.getOrNull()
+
+        if (directBytes != null && directBytes.isNotEmpty()) {
+            val bmp = loadAppIconFromPngBytes(packageName, directBytes)
+            if (bmp != null) return@withContext bmp
+        }
+
+        // 2. Try extracting APK to read icon
         var tempApk: File? = null
         try {
-            val files = ArchiveEngine.resolveArchiveFiles(containerFile)
-            val channel = MultiPartSeekableByteChannel(files)
-            var directIconBytes: ByteArray? = null
+            val apkBytes = runCatching {
+                ArchiveEngine.readEntryBytes(
+                    containerFile = containerFile,
+                    entryPath = entryPath,
+                    password = password,
+                    accountEmail = accountEmail
+                )
+            }.getOrNull()
 
-            channel.use { ch ->
-                org.apache.commons.compress.archivers.zip.ZipFile.builder().setSeekableByteChannel(ch).get().use { zipFile ->
-                    // 1. Verificar se existe o icon.png leve empacotado junto do container
-                    val iconEntry = zipFile.getEntry("apps/$packageName/icon.png")
-                    if (iconEntry != null) {
-                        zipFile.getInputStream(iconEntry).use { input ->
-                            directIconBytes = input.readBytes()
-                        }
-                    } else {
-                        // 2. Fallback: extrair o APK para ler o ícone
-                        val entry = zipFile.getEntry(entryPath) ?: return@withContext null
-                        tempApk = File.createTempFile("icon_${packageName}_", ".apk", context.cacheDir)
-                        zipFile.getInputStream(entry).use { input ->
-                            tempApk!!.outputStream().use { output ->
-                                input.copyTo(output)
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (directIconBytes != null) {
-                return@withContext loadAppIconFromPngBytes(packageName, directIconBytes!!)
-            }
-
-            tempApk?.let { apk ->
-                val icon = getAppIconFromApk(apk, packageName)
-                return@withContext icon
+            if (apkBytes != null && apkBytes.isNotEmpty()) {
+                tempApk = File.createTempFile("icon_${packageName}_", ".apk", context.cacheDir)
+                tempApk!!.writeBytes(apkBytes)
+                val icon = getAppIconFromApk(tempApk!!, packageName)
+                if (icon != null) return@withContext icon
             }
         } catch (_: Throwable) {
-            null
         } finally {
-            try {
-                tempApk?.delete()
-            } catch (_: Throwable) {}
+            try { tempApk?.delete() } catch (_: Throwable) {}
         }
+        null
+    }
+
+    suspend fun getAppIconWithStatus(
+        packageName: String,
+        containerFile: File? = null,
+        remoteIconFetcher: (suspend (String) -> ByteArray?)? = null,
+        password: String? = null,
+        accountEmail: String? = null
+    ): AppIconResult = withContext(Dispatchers.IO) {
+        if (packageName.isBlank()) return@withContext AppIconResult(null, false)
+        val installed = isPackageInstalled(packageName)
+        if (installed) {
+            val bmp = getAppIcon(packageName)
+            return@withContext AppIconResult(bmp, true)
+        }
+
+        // App not installed on device:
+        val uninstalledCacheKey = "uninstalled_icon_$packageName"
+        memoryCache.get(uninstalledCacheKey)?.let { return@withContext AppIconResult(it, false) }
+        memoryCache.get(packageName)?.let { return@withContext AppIconResult(it, false) }
+
+        // 1. Try reading from containerFile if available
+        if (containerFile != null && containerFile.exists()) {
+            val containerBmp = getAppIconFromContainer(
+                containerFile = containerFile,
+                entryPath = "apps/$packageName/base.apk",
+                packageName = packageName,
+                password = password,
+                accountEmail = accountEmail
+            )
+            if (containerBmp != null) {
+                memoryCache.put(uninstalledCacheKey, containerBmp)
+                return@withContext AppIconResult(containerBmp, false)
+            }
+        }
+
+        // 2. Try remoteIconFetcher if available (e.g. Google Drive range request for icon.png)
+        if (remoteIconFetcher != null) {
+            val remoteBytes = runCatching {
+                remoteIconFetcher("apps/$packageName/icon.png")
+            }.getOrNull()
+            if (remoteBytes != null && remoteBytes.isNotEmpty()) {
+                val remoteBmp = loadAppIconFromPngBytes(packageName, remoteBytes)
+                if (remoteBmp != null) {
+                    memoryCache.put(uninstalledCacheKey, remoteBmp)
+                    return@withContext AppIconResult(remoteBmp, false)
+                }
+            }
+        }
+
+        // App is not installed and icon could not be extracted
+        AppIconResult(null, false)
     }
 
     /**
