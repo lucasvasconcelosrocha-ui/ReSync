@@ -1831,9 +1831,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         downloadedCacheFile: File? = null,
         selectedCallKeys: Set<String>? = null,
         selectedSmsKeys: Set<String>? = null,
-        selectedContactKeys: Set<String>? = null
+        selectedContactKeys: Set<String>? = null,
+        selectedWifiKeys: Set<String>? = null,
+        selectedBtKeys: Set<String>? = null
     ) {
-        val file = downloadedCacheFile?.takeIf { it.exists() } ?: File(record.filePath)
+        val file = downloadedCacheFile?.takeIf { it.exists() }
+            ?: com.resync.app.data.model.BackupPaths.findLocalMirrorFile(record.filePath, record.title)
+            ?: File(record.filePath)
         val isLocal = file.exists()
         val remoteId = record.driveFileId ?: (if (!isLocal) record.id else null)
 
@@ -1854,7 +1858,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             encryptionPassword = password,
             selectedCallKeys = selectedCallKeys,
             selectedSmsKeys = selectedSmsKeys,
-            selectedContactKeys = selectedContactKeys
+            selectedContactKeys = selectedContactKeys,
+            selectedWifiKeys = selectedWifiKeys,
+            selectedBtKeys = selectedBtKeys
         )
     }
 

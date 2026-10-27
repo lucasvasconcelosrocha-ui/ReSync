@@ -35,6 +35,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.resync.app.data.model.*
 import com.resync.app.engine.ArchiveEngine
+import com.resync.app.engine.DeviceCategoryInspector
 import com.resync.app.engine.RestoreEngine
 import com.resync.app.engine.RestoreExecutionState
 import com.resync.app.engine.RestoreRepository
@@ -767,13 +768,21 @@ fun RestoreSelectionScreen(
                                     val chosenContactKeys = if (selectedContactKeys.isNotEmpty()) {
                                         selectedContactKeys.filter { it.value }.keys
                                     } else null
+                                    val chosenWifiKeys = if (selectedWifiKeys.isNotEmpty()) {
+                                        selectedWifiKeys.filter { it.value }.keys
+                                    } else null
+                                    val chosenBtKeys = if (selectedBtKeys.isNotEmpty()) {
+                                        selectedBtKeys.filter { it.value }.keys
+                                    } else null
                                     viewModel.launchRestore(
                                         record = backup,
                                         selectedItemIds = allTargetItemIds,
                                         downloadedCacheFile = cacheFile,
                                         selectedCallKeys = chosenCallKeys,
                                         selectedSmsKeys = chosenSmsKeys,
-                                        selectedContactKeys = chosenContactKeys
+                                        selectedContactKeys = chosenContactKeys,
+                                        selectedWifiKeys = chosenWifiKeys,
+                                        selectedBtKeys = chosenBtKeys
                                     )
                                 }
                             },
@@ -2399,22 +2408,101 @@ fun RestoreSelectionScreen(
                                         val btDevices = remember(containerFile, btItem, remoteBtBytes) {
                                             if (btItem == null) emptyList()
                                             else {
+                                                fun parseIniBt(text: String): List<BluetoothDeviceRecord> {
+                                                    val list = mutableListOf<BluetoothDeviceRecord>()
+                                                    val macRegex = Regex("""^\[([0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5})\]""")
+                                                    var currentMac: String? = null
+                                                    var currentName: String? = null
+                                                    var currentDevType: String? = null
+                                                    for (line in text.lines()) {
+                                                        val trimmed = line.trim()
+                                                        val match = macRegex.find(trimmed)
+                                                        if (match != null) {
+                                                            if (currentMac != null) {
+                                                                list.add(
+                                                                    BluetoothDeviceRecord(
+                                                                        name = currentName ?: "Dispositivo $currentMac",
+                                                                        address = currentMac,
+                                                                        deviceClass = currentDevType ?: "Audio/Outros",
+                                                                        bondState = "BONDED"
+                                                                    )
+                                                                )
+                                                            }
+                                                            currentMac = match.groupValues[1]
+                                                            currentName = null
+                                                            currentDevType = null
+                                                        } else if (currentMac != null) {
+                                                            if (trimmed.startsWith("Name = ", ignoreCase = true)) {
+                                                                currentName = trimmed.substringAfter("=").trim()
+                                                            } else if (trimmed.startsWith("DevType = ", ignoreCase = true)) {
+                                                                currentDevType = "Tipo " + trimmed.substringAfter("=").trim()
+                                                            }
+                                                        }
+                                                    }
+                                                    if (currentMac != null) {
+                                                        list.add(
+                                                            BluetoothDeviceRecord(
+                                                                name = currentName ?: "Dispositivo $currentMac",
+                                                                address = currentMac,
+                                                                deviceClass = currentDevType ?: "Audio/Outros",
+                                                                bondState = "BONDED"
+                                                            )
+                                                        )
+                                                    }
+                                                    return list
+                                                }
+
+                                                fun parseBytes(bytes: ByteArray): List<BluetoothDeviceRecord> {
+                                                    val str = String(bytes, Charsets.UTF_8)
+                                                    val jsonList = runCatching {
+                                                        val data = com.google.gson.Gson().fromJson(str, BluetoothBackupData::class.java)
+                                                        data.bondedDevices.ifEmpty { data.connectedDevices }
+                                                    }.getOrDefault(emptyList())
+                                                    if (jsonList.isNotEmpty()) return jsonList
+                                                    val iniList = parseIniBt(str)
+                                                    if (iniList.isNotEmpty()) return iniList
+                                                    return emptyList()
+                                                }
+
                                                 val rawBytes = if (containerFile.exists()) {
                                                     runCatching { ArchiveEngine.readEntryBytes(containerFile, btItem.archiveEntryPath, accountEmail = effectiveAccountEmail) }.getOrNull()
                                                 } else remoteBtBytes
 
-                                                if (rawBytes != null) {
-                                                    val list = runCatching {
-                                                        val str = String(rawBytes, Charsets.UTF_8)
-                                                        val data = com.google.gson.Gson().fromJson(str, BluetoothBackupData::class.java)
-                                                        data.bondedDevices.ifEmpty { data.connectedDevices }
-                                                    }.getOrDefault(emptyList())
-                                                    list.ifEmpty {
-                                                        listOf(BluetoothDeviceRecord("Dispositivos Bluetooth", "00:00:00:00:00:00", "Audio/Outros", "BONDED"))
+                                                var parsed = if (rawBytes != null) parseBytes(rawBytes) else emptyList()
+
+                                                if (parsed.isEmpty() && containerFile.exists()) {
+                                                    val altPaths = listOf("system/bluetooth/bluetooth_backup.json", "system/bluetooth/bt_config.conf")
+                                                    for (alt in altPaths) {
+                                                        if (alt != btItem.archiveEntryPath) {
+                                                            val altBytes = runCatching { ArchiveEngine.readEntryBytes(containerFile, alt, accountEmail = effectiveAccountEmail) }.getOrNull()
+                                                            if (altBytes != null) {
+                                                                val altParsed = parseBytes(altBytes)
+                                                                if (altParsed.isNotEmpty()) {
+                                                                    parsed = altParsed
+                                                                    break
+                                                                }
+                                                            }
+                                                        }
                                                     }
-                                                } else {
-                                                    listOf(BluetoothDeviceRecord("Dispositivos Bluetooth", "00:00:00:00:00:00", "Audio/Outros", "BONDED"))
                                                 }
+
+                                                if (parsed.isEmpty()) {
+                                                    parsed = runCatching {
+                                                        val bm = context.getSystemService(android.content.Context.BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager
+                                                        val adapter = bm?.adapter ?: android.bluetooth.BluetoothAdapter.getDefaultAdapter()
+                                                        val bonded = adapter?.bondedDevices ?: emptySet()
+                                                        bonded.map { d ->
+                                                            BluetoothDeviceRecord(
+                                                                name = runCatching { d.name }.getOrNull() ?: "Dispositivo ${d.address}",
+                                                                address = d.address,
+                                                                deviceClass = runCatching { d.bluetoothClass?.deviceClass?.toString() }.getOrNull() ?: "Audio/Outros",
+                                                                bondState = "BONDED"
+                                                            )
+                                                        }
+                                                    }.getOrDefault(emptyList())
+                                                }
+
+                                                parsed
                                             }
                                         }
 

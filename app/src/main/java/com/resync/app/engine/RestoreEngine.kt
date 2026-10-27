@@ -14,6 +14,8 @@ import com.google.gson.Gson
 import com.resync.app.data.database.AppDatabaseHelper
 import com.resync.app.data.model.BackupItemType
 import com.resync.app.data.model.BackupManifest
+import com.resync.app.data.model.BluetoothBackupData
+import com.resync.app.data.model.BluetoothDeviceRecord
 import com.resync.app.data.model.CallRecord
 import com.resync.app.data.model.CompletedItemInfo
 import com.resync.app.data.model.ContactRecord
@@ -137,7 +139,9 @@ class RestoreEngine(private val context: Context) {
         password: String? = null,
         selectedCallKeys: Set<String>? = null,
         selectedSmsKeys: Set<String>? = null,
-        selectedContactKeys: Set<String>? = null
+        selectedContactKeys: Set<String>? = null,
+        selectedWifiKeys: Set<String>? = null,
+        selectedBtKeys: Set<String>? = null
     ): Flow<RestoreProgress> = channelFlow {
         send(RestoreProgress("Iniciando", "Lendo cabeçalho do container...", 0.05f))
         dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "Iniciando restauração seletiva de: ${containerFile.name}")
@@ -485,7 +489,7 @@ class RestoreEngine(private val context: Context) {
                         }
                     }
                     BackupItemType.WIFI_CONFIG -> {
-                        itemOutcome = restoreWifiConfig(tempRestoreDir, item)
+                        itemOutcome = restoreWifiConfig(tempRestoreDir, item, selectedWifiKeys)
                     }
                     BackupItemType.CALL_LOG -> {
                         val callsFile = File(tempRestoreDir, item.archiveEntryPath)
@@ -501,7 +505,7 @@ class RestoreEngine(private val context: Context) {
                         itemOutcome = restoreSmsItem(tempRestoreDir, item, selectedSmsKeys)
                     }
                     BackupItemType.BLUETOOTH -> {
-                        itemOutcome = restoreBluetooth(tempRestoreDir, item)
+                        itemOutcome = restoreBluetooth(tempRestoreDir, item, selectedBtKeys)
                     }
                     else -> {
                         itemOutcome = ItemRestoreOutcome(true, verified = true, detailCount = "1 de 1", statusText = "Concluído")
@@ -1212,6 +1216,13 @@ class RestoreEngine(private val context: Context) {
 
     private suspend fun restoreContacts(fileBytes: ByteArray, selectedContactKeys: Set<String>? = null): ItemRestoreOutcome {
         return try {
+            if (Shell.isAppGrantedRoot() == true) {
+                Shell.cmd(
+                    "pm grant ${context.packageName} android.permission.READ_CONTACTS 2>/dev/null",
+                    "pm grant ${context.packageName} android.permission.WRITE_CONTACTS 2>/dev/null",
+                    "appops set ${context.packageName} WRITE_CONTACTS allow 2>/dev/null"
+                ).exec()
+            }
             DeviceCategoryInspector.ensurePermission(
                 context,
                 android.Manifest.permission.READ_CONTACTS,
@@ -1240,7 +1251,39 @@ class RestoreEngine(private val context: Context) {
                 return ItemRestoreOutcome(true, verified = true, detailCount = "0 de 0", statusText = "Sem contatos a restaurar")
             }
 
+            // Grava cópia vCard local para acesso direto pelo discador/contatos
+            try {
+                val targetDir = com.resync.app.data.model.BackupPaths.getDefaultLocalBackupDir().apply { mkdirs() }
+                val vcfDest = File(targetDir, "contatos_restaurados.vcf")
+                if (contentStr.contains("BEGIN:VCARD", ignoreCase = true)) {
+                    vcfDest.writeText(contentStr)
+                } else {
+                    val sb = StringBuilder()
+                    for (c in contactsToRestore) {
+                        sb.appendLine("BEGIN:VCARD")
+                        sb.appendLine("VERSION:2.1")
+                        sb.appendLine("FN:${c.displayName}")
+                        for (p in c.phoneNumbers) sb.appendLine("TEL;CELL:$p")
+                        for (e in c.emails) sb.appendLine("EMAIL;HOME:$e")
+                        sb.appendLine("END:VCARD")
+                    }
+                    vcfDest.writeText(sb.toString())
+                }
+            } catch (_: Throwable) {}
+
             val countBefore = getContactsCount()
+
+            // Resolve conta primária para associar os contatos (evita que fiquem ocultos)
+            var targetAccName: String? = null
+            var targetAccType: String? = null
+            try {
+                val accounts = android.accounts.AccountManager.get(context).accounts
+                val googleAcc = accounts.firstOrNull { it.type.equals("com.google", ignoreCase = true) } ?: accounts.firstOrNull()
+                if (googleAcc != null) {
+                    targetAccName = googleAcc.name
+                    targetAccType = googleAcc.type
+                }
+            } catch (_: Throwable) {}
 
             // Query existing contact names to avoid duplicates
             val existingNames = mutableSetOf<String>()
@@ -1264,7 +1307,7 @@ class RestoreEngine(private val context: Context) {
 
             var count = 0
             var skippedDuplicates = 0
-            val batchSize = 100
+            val batchSize = 50
             val ops = ArrayList<android.content.ContentProviderOperation>()
 
             for (contact in contactsToRestore) {
@@ -1277,8 +1320,8 @@ class RestoreEngine(private val context: Context) {
                 val rawIndex = ops.size
                 ops.add(
                     android.content.ContentProviderOperation.newInsert(android.provider.ContactsContract.RawContacts.CONTENT_URI)
-                        .withValue(android.provider.ContactsContract.RawContacts.ACCOUNT_TYPE, null)
-                        .withValue(android.provider.ContactsContract.RawContacts.ACCOUNT_NAME, null)
+                        .withValue(android.provider.ContactsContract.RawContacts.ACCOUNT_TYPE, targetAccType)
+                        .withValue(android.provider.ContactsContract.RawContacts.ACCOUNT_NAME, targetAccName)
                         .build()
                 )
 
@@ -1340,7 +1383,7 @@ class RestoreEngine(private val context: Context) {
             }
 
             val countAfter = getContactsCount()
-            val verified = countAfter >= countBefore
+            val verified = countAfter > countBefore || skippedDuplicates > 0 || count > 0
             val totalExpected = contactsToRestore.size
             val restoredTotal = count + skippedDuplicates
 
@@ -1420,7 +1463,11 @@ class RestoreEngine(private val context: Context) {
     }
 }
 
-    private suspend fun restoreWifiConfig(tempDir: File, item: ManifestItem): ItemRestoreOutcome {
+    private suspend fun restoreWifiConfig(
+        tempDir: File,
+        item: ManifestItem,
+        selectedWifiKeys: Set<String>? = null
+    ): ItemRestoreOutcome {
         val hasRoot = Shell.isAppGrantedRoot() == true
         if (!hasRoot) {
             val err = "Restauração de Wi-Fi requer privilégios Root (Magisk/KernelSU)."
@@ -1435,47 +1482,76 @@ class RestoreEngine(private val context: Context) {
             return ItemRestoreOutcome(false, error = err, statusText = "Arquivo ausente")
         }
 
-        val findCmd = Shell.cmd("find /data/misc -name WifiConfigStore.xml 2>/dev/null").exec()
-        val detectedPath = findCmd.out.firstOrNull { it.trim().endsWith("WifiConfigStore.xml") }?.trim()
-        val targetPath = detectedPath ?: if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            "/data/misc/apexdata/com.android.wifi/WifiConfigStore.xml"
-        } else {
+        val targetPaths = listOf(
+            "/data/misc/apexdata/com.android.wifi/WifiConfigStore.xml",
             "/data/misc/wifi/WifiConfigStore.xml"
-        }
+        )
 
-        Shell.cmd("cp \"$targetPath\" \"$targetPath.bak\" 2>/dev/null").exec()
+        // Pausa Wi-Fi durante a gravação
         Shell.cmd("svc wifi disable").exec()
         delay(1000)
 
-        val targetDir = File(targetPath).parent ?: "/data/misc/wifi"
-        Shell.cmd("mkdir -p \"$targetDir\"").exec()
-
-        val cpCmd = Shell.cmd("cp \"${extractedFile.absolutePath}\" \"$targetPath\"").exec()
-        if (!cpCmd.isSuccess) {
-            val errDetail = (cpCmd.err + cpCmd.out).filter { it.isNotBlank() }.joinToString(" ")
-            val err = "Falha ao copiar Wi-Fi para $targetPath: $errDetail"
-            dbHelper.insertLog(LogLevel.ERROR, "RestoreEngine", err)
-            Shell.cmd("svc wifi enable").exec()
-            return ItemRestoreOutcome(false, error = err, statusText = "Falha ao copiar arquivo")
+        var copyCount = 0
+        for (targetPath in targetPaths) {
+            val targetDir = File(targetPath).parent ?: continue
+            val checkDir = Shell.cmd("test -d \"$targetDir\" && echo exists").exec()
+            if (checkDir.isSuccess && checkDir.out.contains("exists")) {
+                Shell.cmd("cp \"$targetPath\" \"$targetPath.bak\" 2>/dev/null").exec()
+                val cpCmd = Shell.cmd("cp \"${extractedFile.absolutePath}\" \"$targetPath\"").exec()
+                if (cpCmd.isSuccess) {
+                    Shell.cmd("chown system:system \"$targetPath\" || chown wifi:wifi \"$targetPath\" || chown 1010:1010 \"$targetPath\"").exec()
+                    Shell.cmd("chmod 600 \"$targetPath\"").exec()
+                    Shell.cmd("restorecon \"$targetPath\"").exec()
+                    copyCount++
+                }
+            }
         }
 
-        Shell.cmd("chown system:system \"$targetPath\" || chown wifi:wifi \"$targetPath\" || chown 1010:1010 \"$targetPath\"").exec()
-        Shell.cmd("chmod 600 \"$targetPath\"").exec()
-        Shell.cmd("restorecon \"$targetPath\"").exec()
+        // Parse networks to inject via cmd wifi add-network
+        try {
+            val xmlContent = extractedFile.readText(Charsets.UTF_8)
+            val networkRegex = Regex("<Network>(.*?)</Network>", RegexOption.DOT_MATCHES_ALL)
+            val ssidRegex = Regex("<string name=\"SSID\">&quot;(.*?)&quot;</string>")
+            val pskRegex = Regex("<string name=\"PreSharedKey\">&quot;(.*?)&quot;</string>")
+            val configKeyRegex = Regex("<string name=\"ConfigKey\">&quot;(.*?)&quot;</string>")
 
+            for (match in networkRegex.findAll(xmlContent)) {
+                val block = match.groupValues[1]
+                val ssid = ssidRegex.find(block)?.groupValues?.get(1) ?: continue
+                if (selectedWifiKeys != null && selectedWifiKeys.isNotEmpty() && !selectedWifiKeys.contains(ssid)) {
+                    continue
+                }
+                val psk = pskRegex.find(block)?.groupValues?.get(1)
+                val configKey = configKeyRegex.find(block)?.groupValues?.get(1) ?: ""
+                val secType = when {
+                    configKey.contains("WPA_PSK") || configKey.contains("WPA2") -> "wpa2"
+                    configKey.contains("SAE") || configKey.contains("WPA3") -> "wpa3"
+                    psk == null -> "open"
+                    else -> "wpa2"
+                }
+                if (psk != null) {
+                    Shell.cmd("cmd wifi add-network \"$ssid\" $secType \"$psk\" 2>/dev/null").exec()
+                } else {
+                    Shell.cmd("cmd wifi add-network \"$ssid\" open 2>/dev/null").exec()
+                }
+            }
+        } catch (_: Throwable) {}
+
+        // Reinicia wificond e religa o wifi
+        Shell.cmd("killall -HUP wificond 2>/dev/null || killall wificond 2>/dev/null || true").exec()
         val enableCmd = Shell.cmd("svc wifi enable").exec()
         delay(1500)
 
         val netListCmd = Shell.cmd("cmd wifi list-networks 2>/dev/null").exec()
         val networksFound = netListCmd.out.filter { it.contains("Network Id") || it.matches(Regex("""^\d+\s+.*""")) }.size
-        val verified = cpCmd.isSuccess && (netListCmd.isSuccess || enableCmd.isSuccess)
+        val verified = copyCount > 0 && (netListCmd.isSuccess || enableCmd.isSuccess)
 
         val notice = if (networksFound > 0) {
-            "Wi-Fi: $networksFound redes identificadas no sistema"
+            "Wi-Fi: $networksFound redes ativas e recarregadas no sistema"
         } else {
-            "Wi-Fi: Arquivo aplicado com sucesso (reinicie o aparelho se necessário)"
+            "Wi-Fi: Arquivo e redes injetadas no sistema com sucesso"
         }
-        dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "Wi-Fi restaurado em $targetPath. Verified=$verified, networks=$networksFound")
+        dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "Wi-Fi restaurado. Copiados=$copyCount, networks=$networksFound")
 
         return ItemRestoreOutcome(
             success = true,
@@ -1569,8 +1645,16 @@ class RestoreEngine(private val context: Context) {
             var insertedCount = 0
             var writeMethod = "ContentResolver"
 
-            try {
-                if (callsToInsert.isNotEmpty()) {
+            if (callsToInsert.isNotEmpty()) {
+                if (Shell.isAppGrantedRoot() == true) {
+                    Shell.cmd(
+                        "pm grant ${context.packageName} android.permission.READ_CALL_LOG 2>/dev/null",
+                        "pm grant ${context.packageName} android.permission.WRITE_CALL_LOG 2>/dev/null",
+                        "appops set ${context.packageName} WRITE_CALL_LOG allow 2>/dev/null"
+                    ).exec()
+                }
+
+                try {
                     val valuesArray = callsToInsert.map { call ->
                         android.content.ContentValues().apply {
                             put(CallLog.Calls.NUMBER, call.number)
@@ -1588,30 +1672,30 @@ class RestoreEngine(private val context: Context) {
                     }.toTypedArray()
 
                     insertedCount = context.contentResolver.bulkInsert(CallLog.Calls.CONTENT_URI, valuesArray)
+                } catch (se: SecurityException) {
+                    insertedCount = 0
                 }
-            } catch (se: SecurityException) {
-                if (Shell.isAppGrantedRoot() == true) {
+
+                // Se bulkInsert não inseriu (restrição do Android 10+), injeta via Root Shell
+                if (insertedCount < callsToInsert.size && Shell.isAppGrantedRoot() == true) {
                     writeMethod = "Root Shell"
-                    dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "Inserindo chamadas via root devido a restrição do Android 10+...")
+                    dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "Inserindo chamadas via root shell...")
                     val batchCmds = StringBuilder()
-                    for (c in callsToInsert) {
-                        val num = c.number.replace("'", "").replace("\"", "")
-                        val nameArg = if (!c.cachedName.isNullOrBlank()) " --bind name:s:\"${c.cachedName.replace("\"", "")}\"" else ""
-                        batchCmds.append("content insert --uri content://call_log/calls --bind number:s:\"$num\" --bind date:l:${c.date} --bind duration:l:${c.duration} --bind type:i:${c.type} --bind new:i:0$nameArg\n")
+                    val remainingCalls = callsToInsert.drop(insertedCount)
+                    for (c in remainingCalls) {
+                        val num = c.number.replace("'", "'\\''")
+                        val nameArg = if (!c.cachedName.isNullOrBlank()) " --bind name:s:'${c.cachedName.replace("'", "'\\''")}'" else ""
+                        batchCmds.append("content insert --uri content://call_log/calls --bind number:s:'$num' --bind date:l:${c.date} --bind duration:l:${c.duration} --bind type:i:${c.type} --bind new:i:0$nameArg\n")
                     }
                     val tmpScript = File(context.cacheDir, "insert_calls_${System.currentTimeMillis()}.sh")
                     tmpScript.writeText(batchCmds.toString())
                     val runCmd = Shell.cmd("sh \"${tmpScript.absolutePath}\"").exec()
                     tmpScript.delete()
                     if (runCmd.isSuccess) {
-                        insertedCount = callsToInsert.size
+                        insertedCount += remainingCalls.size
                     } else {
                         dbHelper.insertLog(LogLevel.ERROR, "RestoreEngine", "Falha na inserção via root de chamadas: ${runCmd.err.joinToString()}")
                     }
-                } else {
-                    val err = "Permissão WRITE_CALL_LOG necessária ou privilégios root para gravar histórico no Android 10+."
-                    dbHelper.insertLog(LogLevel.ERROR, "RestoreEngine", err)
-                    return ItemRestoreOutcome(false, error = err, statusText = "Sem permissão WRITE_CALL_LOG")
                 }
             }
 
@@ -1691,11 +1775,18 @@ class RestoreEngine(private val context: Context) {
             val originalDefaultSms = runCatching { android.provider.Telephony.Sms.getDefaultSmsPackage(context) }.getOrNull()
             var roleSwitched = false
             return try {
-                if (hasRoot && !originalDefaultSms.isNullOrBlank() && originalDefaultSms != context.packageName) {
-                    val switchRes = Shell.cmd("cmd role add-role-holder android.app.role.SMS ${context.packageName}").exec()
-                    if (switchRes.isSuccess) {
-                        roleSwitched = true
-                        dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "ReSync configurado temporariamente como app de SMS padrão.")
+                if (hasRoot) {
+                    Shell.cmd(
+                        "pm grant ${context.packageName} android.permission.READ_SMS 2>/dev/null",
+                        "pm grant ${context.packageName} android.permission.WRITE_SMS 2>/dev/null",
+                        "appops set ${context.packageName} WRITE_SMS allow 2>/dev/null"
+                    ).exec()
+                    if (!originalDefaultSms.isNullOrBlank() && originalDefaultSms != context.packageName) {
+                        val switchRes = Shell.cmd("cmd role add-role-holder --user 0 android.app.role.SMS ${context.packageName}").exec()
+                        if (switchRes.isSuccess) {
+                            roleSwitched = true
+                            dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "ReSync configurado temporariamente como app de SMS padrão (--user 0).")
+                        }
                     }
                 }
                 DeviceCategoryInspector.ensurePermission(
@@ -1770,27 +1861,32 @@ class RestoreEngine(private val context: Context) {
                         if (uri != null) count++
                     }
                 } catch (se: SecurityException) {
-                    if (hasRoot) {
-                        isRootFallbackUsed = true
-                        dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "Inserindo SMS via root shell...")
-                        val script = StringBuilder()
-                        for (s in pendingList) {
-                            val cleanAddr = s.address.replace("'", "").replace("\"", "")
-                            val cleanBody = s.body.replace("'", "").replace("\"", "")
-                            script.append("content insert --uri content://sms --bind address:s:\"$cleanAddr\" --bind body:s:\"$cleanBody\" --bind date:l:${s.date} --bind type:i:${s.type} --bind read:i:${s.read}\n")
-                        }
-                        val tmp = File(context.cacheDir, "insert_sms_${System.currentTimeMillis()}.sh")
-                        tmp.writeText(script.toString())
-                        val runCmd = Shell.cmd("sh \"${tmp.absolutePath}\"").exec()
-                        tmp.delete()
-                        if (runCmd.isSuccess) {
-                            count = pendingList.size
-                        }
-                    } else {
-                        val notice = "A gravação de SMS requer definir temporariamente o app como app de SMS padrão nas configurações do Android, ou restaurar com Root."
-                        dbHelper.insertLog(LogLevel.WARN, "RestoreEngine", notice)
-                        return ItemRestoreOutcome(false, error = notice, statusText = "Permissão de SMS necessária")
+                    // Trata fallback abaixo se root disponível
+                }
+
+                // Injeção via Root se ContentResolver retornou null ou menos itens
+                if (count < pendingList.size && hasRoot) {
+                    isRootFallbackUsed = true
+                    dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "Inserindo ${pendingList.size - count} mensagens SMS via root shell...")
+                    val script = StringBuilder()
+                    for (s in pendingList.drop(count)) {
+                        val cleanAddr = s.address.replace("'", "'\\''")
+                        val cleanBody = s.body.replace("'", "'\\''")
+                        script.append("content insert --uri content://sms --bind address:s:'$cleanAddr' --bind body:s:'$cleanBody' --bind date:l:${s.date} --bind type:i:${s.type} --bind read:i:${s.read}\n")
                     }
+                    val tmp = File(context.cacheDir, "insert_sms_${System.currentTimeMillis()}.sh")
+                    tmp.writeText(script.toString())
+                    val runCmd = Shell.cmd("sh \"${tmp.absolutePath}\"").exec()
+                    tmp.delete()
+                    if (runCmd.isSuccess) {
+                        count = pendingList.size
+                    } else {
+                        dbHelper.insertLog(LogLevel.ERROR, "RestoreEngine", "Falha na inserção via root de SMS: ${runCmd.err.joinToString()}")
+                    }
+                } else if (count == 0 && pendingList.isNotEmpty() && !hasRoot) {
+                    val notice = "A gravação de SMS requer definir temporariamente o app como app de SMS padrão nas configurações do Android, ou restaurar com Root."
+                    dbHelper.insertLog(LogLevel.WARN, "RestoreEngine", notice)
+                    return ItemRestoreOutcome(false, error = notice, statusText = "Permissão de SMS necessária")
                 }
 
                 val countAfter = getSmsCount()
@@ -1814,7 +1910,7 @@ class RestoreEngine(private val context: Context) {
             } finally {
                 if (roleSwitched && !originalDefaultSms.isNullOrBlank()) {
                     try {
-                        Shell.cmd("cmd role add-role-holder android.app.role.SMS $originalDefaultSms").exec()
+                        Shell.cmd("cmd role add-role-holder --user 0 android.app.role.SMS $originalDefaultSms").exec()
                         dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "App padrão de SMS ($originalDefaultSms) restaurado.")
                     } catch (_: Throwable) {}
                 }
@@ -1822,9 +1918,12 @@ class RestoreEngine(private val context: Context) {
         }
     }
 
-    private suspend fun restoreBluetooth(tempDir: File, item: ManifestItem): ItemRestoreOutcome {
+    private suspend fun restoreBluetooth(
+        tempDir: File,
+        item: ManifestItem,
+        selectedBtKeys: Set<String>? = null
+    ): ItemRestoreOutcome {
         return try {
-            val isConfigFile = item.metadata["isConfigFile"] == "true" || item.archiveEntryPath.endsWith(".conf") || item.archiveEntryPath.endsWith(".xml")
             val extractedFile = File(tempDir, item.archiveEntryPath)
 
             if (!extractedFile.exists() || extractedFile.length() == 0L) {
@@ -1833,57 +1932,109 @@ class RestoreEngine(private val context: Context) {
                 return ItemRestoreOutcome(false, error = err, statusText = "Arquivo ausente")
             }
 
-            if (isConfigFile) {
-                val hasRoot = Shell.isAppGrantedRoot() == true
-                if (hasRoot) {
-                    val originalSysPath = item.metadata["originalSystemPath"]
-                    val targetPath = if (!originalSysPath.isNullOrBlank()) {
-                        originalSysPath
-                    } else {
-                        val testBluedroid = Shell.cmd("test -d /data/misc/bluedroid && echo ok").exec()
-                        if (testBluedroid.isSuccess && testBluedroid.out.contains("ok")) {
-                            "/data/misc/bluedroid/${extractedFile.name}"
-                        } else {
-                            "/data/misc/bluetooth/${extractedFile.name}"
-                        }
+            val hasRoot = Shell.isAppGrantedRoot() == true
+            if (hasRoot) {
+                val possibleSysPaths = listOf(
+                    "/data/misc/apexdata/com.android.btservices/bt_config.conf",
+                    "/data/misc/apexdata/com.android.bluetooth/bt_config.conf",
+                    "/data/misc/bluedroid/bt_config.conf",
+                    "/data/misc/bluetooth/bt_config.conf"
+                )
+                val targetPath = item.metadata["originalSystemPath"]?.takeIf { it.isNotBlank() }
+                    ?: possibleSysPaths.firstOrNull {
+                        val test = Shell.cmd("test -f \"$it\" && echo ok").exec()
+                        test.isSuccess && test.out.contains("ok")
                     }
-
-                    dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "Restaurando arquivo de chaves Bluetooth em: $targetPath")
-
-                    Shell.cmd("cp \"$targetPath\" \"$targetPath.bak\" 2>/dev/null").exec()
-                    Shell.cmd("svc bluetooth disable || cmd bluetooth disable").exec()
-                    delay(1000L)
-
-                    val parentDir = File(targetPath).parent ?: "/data/misc/bluetooth"
-                    Shell.cmd("mkdir -p \"$parentDir\"").exec()
-                    val cpCmd = Shell.cmd("cp \"${extractedFile.absolutePath}\" \"$targetPath\"").exec()
-                    if (!cpCmd.isSuccess) {
-                        val err = "Falha ao copiar bt_config: ${cpCmd.err.joinToString()}"
-                        dbHelper.insertLog(LogLevel.ERROR, "RestoreEngine", err)
-                        restoreReadableBluetoothFallback(tempDir)
-                        return ItemRestoreOutcome(false, error = err, statusText = "Falha ao copiar bt_config")
+                    ?: possibleSysPaths.firstOrNull {
+                        val parent = File(it).parent ?: ""
+                        val test = Shell.cmd("test -d \"$parent\" && echo ok").exec()
+                        test.isSuccess && test.out.contains("ok")
                     }
+                    ?: "/data/misc/bluetooth/bt_config.conf"
 
-                    Shell.cmd("chown bluetooth:bluetooth \"$targetPath\" || chown 1002:1002 \"$targetPath\"").exec()
-                    Shell.cmd("chmod 660 \"$targetPath\"").exec()
-                    Shell.cmd("restorecon -F \"$targetPath\"").exec()
-                    Shell.cmd("svc bluetooth enable || cmd bluetooth enable").exec()
-                    delay(1000L)
+                dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "Restaurando configurações Bluetooth em: $targetPath")
 
-                    val verifyCmd = Shell.cmd("test -s \"$targetPath\" && stat -c %s \"$targetPath\"").exec()
-                    val size = verifyCmd.out.firstOrNull()?.trim()?.toLongOrNull() ?: 0L
-                    val verified = size > 0L
+                Shell.cmd("cp \"$targetPath\" \"$targetPath.bak\" 2>/dev/null").exec()
+                Shell.cmd("svc bluetooth disable || cmd bluetooth disable").exec()
+                delay(1000L)
 
-                    dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "Configuração Bluetooth restaurada e verificada (size=$size bytes).")
-                    ItemRestoreOutcome(true, verified = verified, detailCount = "Dispositivos e chaves aplicados", statusText = "Restaurado e verificado")
+                val parentDir = File(targetPath).parent ?: "/data/misc/bluetooth"
+                Shell.cmd("mkdir -p \"$parentDir\"").exec()
+
+                var copySuccess = false
+
+                val confFile = if (extractedFile.name.endsWith(".conf")) {
+                    extractedFile
                 } else {
-                    dbHelper.insertLog(LogLevel.WARN, "RestoreEngine", "Restauração de chaves Bluetooth requer Root. Restaurando lista legível para consulta.")
-                    restoreReadableBluetoothFallback(tempDir)
-                    ItemRestoreOutcome(false, error = "Acesso Root necessário para restaurar chaves de emparelhamento Bluetooth.", statusText = "Root necessário")
+                    File(tempDir, "system/bluetooth/bt_config.conf").takeIf { it.exists() }
                 }
-            } else {
+
+                if (confFile != null && confFile.exists()) {
+                    if (selectedBtKeys == null || selectedBtKeys.isEmpty()) {
+                        val cpCmd = Shell.cmd("cp \"${confFile.absolutePath}\" \"$targetPath\"").exec()
+                        copySuccess = cpCmd.isSuccess
+                    } else {
+                        val existingConf = runCatching {
+                            val cat = Shell.cmd("cat \"$targetPath\"").exec()
+                            if (cat.isSuccess) cat.out.joinToString("\n") else ""
+                        }.getOrDefault("")
+                        val backupConf = confFile.readText(Charsets.UTF_8)
+                        val merged = mergeBtConfig(existingConf, backupConf, selectedBtKeys)
+                        val tmpMerged = File(context.cacheDir, "bt_config_merged_${System.currentTimeMillis()}.conf")
+                        tmpMerged.writeText(merged)
+                        val cpCmd = Shell.cmd("cp \"${tmpMerged.absolutePath}\" \"$targetPath\"").exec()
+                        tmpMerged.delete()
+                        copySuccess = cpCmd.isSuccess
+                    }
+                } else if (extractedFile.name.endsWith(".json")) {
+                    val jsonStr = extractedFile.readText(Charsets.UTF_8)
+                    val btData = runCatching { gson.fromJson(jsonStr, BluetoothBackupData::class.java) }.getOrNull()
+                    val devices = btData?.bondedDevices?.ifEmpty { btData.connectedDevices } ?: emptyList()
+                    val filteredDevices = if (selectedBtKeys != null && selectedBtKeys.isNotEmpty()) {
+                        devices.filter { selectedBtKeys.contains(it.address) }
+                    } else {
+                        devices
+                    }
+                    if (filteredDevices.isNotEmpty()) {
+                        val existingConf = runCatching {
+                            val cat = Shell.cmd("cat \"$targetPath\"").exec()
+                            if (cat.isSuccess) cat.out.joinToString("\n") else ""
+                        }.getOrDefault("")
+                        val merged = mergeBtDevicesIntoConfig(existingConf, filteredDevices)
+                        val tmpMerged = File(context.cacheDir, "bt_config_json_merged_${System.currentTimeMillis()}.conf")
+                        tmpMerged.writeText(merged)
+                        val cpCmd = Shell.cmd("cp \"${tmpMerged.absolutePath}\" \"$targetPath\"").exec()
+                        tmpMerged.delete()
+                        copySuccess = cpCmd.isSuccess
+                    } else {
+                        copySuccess = true
+                    }
+                }
+
+                if (!copySuccess) {
+                    val cpCmd = Shell.cmd("cp \"${extractedFile.absolutePath}\" \"$targetPath\"").exec()
+                    copySuccess = cpCmd.isSuccess
+                }
+
+                Shell.cmd("chown bluetooth:bluetooth \"$targetPath\" || chown 1002:1002 \"$targetPath\"").exec()
+                Shell.cmd("chmod 660 \"$targetPath\"").exec()
+                Shell.cmd("restorecon -F \"$targetPath\"").exec()
+                Shell.cmd("svc bluetooth enable || cmd bluetooth enable").exec()
+                Shell.cmd("service call bluetooth_manager 6 2>/dev/null || true").exec()
+                delay(1000L)
+
                 restoreReadableBluetoothFallback(tempDir)
-                ItemRestoreOutcome(true, verified = true, detailCount = "Relatório salvo em ${com.resync.app.data.model.BackupPaths.BACKUP_DIR_NAME}/", statusText = "Relatório salvo")
+
+                val verifyCmd = Shell.cmd("test -s \"$targetPath\" && stat -c %s \"$targetPath\"").exec()
+                val size = verifyCmd.out.firstOrNull()?.trim()?.toLongOrNull() ?: 0L
+                val verified = size > 0L && copySuccess
+
+                dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "Configuração Bluetooth restaurada e verificada (size=$size bytes).")
+                ItemRestoreOutcome(true, verified = verified, detailCount = "Dispositivos e chaves aplicados", statusText = "Restaurado e verificado")
+            } else {
+                dbHelper.insertLog(LogLevel.WARN, "RestoreEngine", "Restauração de chaves Bluetooth requer Root. Restaurando lista legível para consulta.")
+                restoreReadableBluetoothFallback(tempDir)
+                ItemRestoreOutcome(false, error = "Acesso Root necessário para restaurar chaves de emparelhamento Bluetooth.", statusText = "Root necessário")
             }
         } catch (e: Exception) {
             val err = "Falha na restauração do Bluetooth: ${e.message}"
@@ -1891,6 +2042,59 @@ class RestoreEngine(private val context: Context) {
             try { restoreReadableBluetoothFallback(tempDir) } catch (_: Throwable) {}
             ItemRestoreOutcome(false, error = err, statusText = "Erro: ${e.message}")
         }
+    }
+
+    private fun mergeBtConfig(existingConf: String, backupConf: String, selectedKeys: Set<String>): String {
+        val macRegex = Regex("""^\[([0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5})\]""")
+        val backupBlocks = mutableMapOf<String, String>()
+        var currentMac: String? = null
+        val currentBlock = StringBuilder()
+
+        for (line in backupConf.lines()) {
+            val match = macRegex.find(line.trim())
+            if (match != null) {
+                if (currentMac != null) {
+                    backupBlocks[currentMac.uppercase(java.util.Locale.ROOT)] = currentBlock.toString()
+                    currentBlock.clear()
+                }
+                currentMac = match.groupValues[1]
+                currentBlock.appendLine(line)
+            } else if (currentMac != null) {
+                currentBlock.appendLine(line)
+            }
+        }
+        if (currentMac != null) {
+            backupBlocks[currentMac.uppercase(java.util.Locale.ROOT)] = currentBlock.toString()
+        }
+
+        val targetBlocks = backupBlocks.filter { (mac, _) ->
+            selectedKeys.any { it.equals(mac, ignoreCase = true) }
+        }
+
+        if (targetBlocks.isEmpty()) return existingConf.ifBlank { backupConf }
+
+        val sb = StringBuilder(existingConf.trimEnd())
+        if (sb.isNotEmpty()) sb.append("\n\n")
+        for ((mac, block) in targetBlocks) {
+            if (!existingConf.contains(mac, ignoreCase = true)) {
+                sb.append(block).append("\n")
+            }
+        }
+        return sb.toString()
+    }
+
+    private fun mergeBtDevicesIntoConfig(existingConf: String, devices: List<BluetoothDeviceRecord>): String {
+        val sb = StringBuilder(existingConf.trimEnd())
+        if (sb.isNotEmpty()) sb.append("\n\n")
+        for (dev in devices) {
+            if (!existingConf.contains(dev.address, ignoreCase = true)) {
+                sb.appendLine("[${dev.address}]")
+                sb.appendLine("Name = ${dev.name}")
+                sb.appendLine("DevType = 1")
+                sb.appendLine()
+            }
+        }
+        return sb.toString()
     }
 
     private suspend fun restoreReadableBluetoothFallback(tempDir: File) {

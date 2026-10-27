@@ -153,6 +153,8 @@ object RestoreRepository {
     private var lastSelectedCallKeys: Set<String>? = null
     private var lastSelectedSmsKeys: Set<String>? = null
     private var lastSelectedContactKeys: Set<String>? = null
+    private var lastSelectedWifiKeys: Set<String>? = null
+    private var lastSelectedBtKeys: Set<String>? = null
 
     fun startRestore(
         localFile: File?,
@@ -162,7 +164,9 @@ object RestoreRepository {
         encryptionPassword: String? = null,
         selectedCallKeys: Set<String>? = null,
         selectedSmsKeys: Set<String>? = null,
-        selectedContactKeys: Set<String>? = null
+        selectedContactKeys: Set<String>? = null,
+        selectedWifiKeys: Set<String>? = null,
+        selectedBtKeys: Set<String>? = null
     ) {
         val context = appContext ?: return
         lastLocalFile = localFile
@@ -173,6 +177,8 @@ object RestoreRepository {
         lastSelectedCallKeys = selectedCallKeys
         lastSelectedSmsKeys = selectedSmsKeys
         lastSelectedContactKeys = selectedContactKeys
+        lastSelectedWifiKeys = selectedWifiKeys
+        lastSelectedBtKeys = selectedBtKeys
 
         activeRestoreJob?.cancel()
         restoreStartTime = System.currentTimeMillis()
@@ -284,7 +290,9 @@ object RestoreRepository {
                     password = encryptionPassword,
                     selectedCallKeys = selectedCallKeys ?: lastSelectedCallKeys,
                     selectedSmsKeys = selectedSmsKeys ?: lastSelectedSmsKeys,
-                    selectedContactKeys = selectedContactKeys ?: lastSelectedContactKeys
+                    selectedContactKeys = selectedContactKeys ?: lastSelectedContactKeys,
+                    selectedWifiKeys = selectedWifiKeys ?: lastSelectedWifiKeys,
+                    selectedBtKeys = selectedBtKeys ?: lastSelectedBtKeys
                 ).collect { progress ->
                     _restoreProgress.value = progress
                     if (progress.currentItemName.isNotBlank() && progress.stage != "Pausado") {
@@ -494,7 +502,12 @@ object RestoreRepository {
             remoteDriveFileId = lastRemoteDriveFileId,
             accountEmail = lastAccountEmail,
             selectedItemTypes = types,
-            encryptionPassword = lastPassword
+            encryptionPassword = lastPassword,
+            selectedCallKeys = lastSelectedCallKeys,
+            selectedSmsKeys = lastSelectedSmsKeys,
+            selectedContactKeys = lastSelectedContactKeys,
+            selectedWifiKeys = lastSelectedWifiKeys,
+            selectedBtKeys = lastSelectedBtKeys
         )
     }
 

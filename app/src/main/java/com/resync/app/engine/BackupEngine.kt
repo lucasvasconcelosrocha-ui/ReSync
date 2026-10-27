@@ -2979,6 +2979,8 @@ class BackupEngine(private val context: Context) {
 
         if (com.topjohnwu.superuser.Shell.isAppGrantedRoot() == true) {
             val candidatePaths = listOf(
+                "/data/misc/apexdata/com.android.btservices/bt_config.conf",
+                "/data/misc/apexdata/com.android.bluetooth/bt_config.conf",
                 "/data/misc/bluedroid/bt_config.conf",
                 "/data/misc/bluetooth/bt_config.conf",
                 "/data/misc/bluetooth/bt_config.xml",
@@ -3001,6 +3003,53 @@ class BackupEngine(private val context: Context) {
                     configFileStaged = targetStaged
                     configStatusMsg = "Capturado com sucesso de: $configFoundPath"
                     dbHelper.insertLog(LogLevel.INFO, "BackupEngine", "bt_config.conf copiado com sucesso de $configFoundPath (${targetStaged.length()} bytes)")
+
+                    // Parse config file directly to extract any additional paired devices
+                    try {
+                        val lines = targetStaged.readLines()
+                        var curMac: String? = null
+                        var curName: String? = null
+                        var curClass: String? = null
+                        for (line in lines) {
+                            val trimmed = line.trim()
+                            if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+                                val section = trimmed.removeSurrounding("[", "]")
+                                if (section.matches(Regex("([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}"))) {
+                                    if (curMac != null && bondedRecords.none { it.address.equals(curMac, ignoreCase = true) }) {
+                                        bondedRecords.add(
+                                            BluetoothDeviceRecord(
+                                                name = curName ?: "Dispositivo $curMac",
+                                                address = curMac,
+                                                deviceClass = curClass ?: "Dispositivo Salvo",
+                                                bondState = "BONDED",
+                                                isConnected = false
+                                            )
+                                        )
+                                    }
+                                    curMac = section
+                                    curName = null
+                                    curClass = null
+                                }
+                            } else if (curMac != null && trimmed.contains("=")) {
+                                val parts = trimmed.split("=", limit = 2)
+                                val k = parts[0].trim()
+                                val v = parts[1].trim()
+                                if (k == "Name") curName = v
+                                if (k == "DevClass") curClass = "0x$v"
+                            }
+                        }
+                        if (curMac != null && bondedRecords.none { it.address.equals(curMac, ignoreCase = true) }) {
+                            bondedRecords.add(
+                                BluetoothDeviceRecord(
+                                    name = curName ?: "Dispositivo $curMac",
+                                    address = curMac,
+                                    deviceClass = curClass ?: "Dispositivo Salvo",
+                                    bondState = "BONDED",
+                                    isConnected = false
+                                )
+                            )
+                        }
+                    } catch (_: Throwable) {}
                 } else {
                     configStatusMsg = "Falha ao ler arquivo em $configFoundPath: ${cpCmd.err.joinToString()}"
                     dbHelper.insertLog(LogLevel.WARN, "BackupEngine", configStatusMsg)
@@ -3012,6 +3061,27 @@ class BackupEngine(private val context: Context) {
         } else {
             configStatusMsg = "indisponível nesta versão (requer root)"
             dbHelper.insertLog(LogLevel.INFO, "BackupEngine", "Root não autorizado para acessar arquivos de sistema do Bluetooth")
+        }
+
+        // Se ainda não encontrou dispositivos (ex: Bluetooth desligado ou permissão restrita), consulta DeviceCategoryInspector
+        if (bondedRecords.isEmpty()) {
+            try {
+                val fallbackList = DeviceCategoryInspector.getBluetoothDevices(context)
+                for (dev in fallbackList) {
+                    if (bondedRecords.none { it.address.equals(dev.address, ignoreCase = true) }) {
+                        bondedRecords.add(
+                            BluetoothDeviceRecord(
+                                name = dev.name,
+                                address = dev.address,
+                                deviceClass = dev.type,
+                                bondState = "BONDED",
+                                isConnected = dev.isConnected,
+                                connectedProfiles = if (dev.isConnected) listOf("A2DP (Áudio)") else emptyList()
+                            )
+                        )
+                    }
+                }
+            } catch (_: Throwable) {}
         }
 
         // d) Save everything in .svb as JSON, human-readable report and original config file
