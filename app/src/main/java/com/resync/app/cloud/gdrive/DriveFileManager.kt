@@ -459,6 +459,65 @@ class DriveFileManager(private val oAuthManager: OAuthManager) {
         }
     }
 
+    /**
+     * Updates appProperties for an existing file in Google Drive via PATCH request.
+     */
+    suspend fun updateFileAppProperties(fileId: String, properties: Map<String, String>, accountEmail: String? = null): Result<Boolean> = withContext(Dispatchers.IO) {
+        var token = oAuthManager.getValidAccessToken(accountEmail)
+            ?: return@withContext Result.failure(GoogleDriveSessionExpiredException("Usuário não autenticado no Google Drive.", 401))
+
+        try {
+            var res = updateFileAppPropertiesInternal(fileId, properties, token)
+            val initialEx = res.exceptionOrNull()
+            if (initialEx is GoogleDriveSessionExpiredException || (initialEx is GoogleDriveApiException && (initialEx.statusCode == 401 || initialEx.statusCode == 403))) {
+                oAuthManager.invalidateToken(token)
+                val refreshed = oAuthManager.forceRefreshToken(currentToken = token, accountEmail = accountEmail)
+                if (refreshed.isSuccess) {
+                    token = refreshed.getOrThrow()
+                    res = updateFileAppPropertiesInternal(fileId, properties, token)
+                }
+            }
+            res
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private fun updateFileAppPropertiesInternal(fileId: String, properties: Map<String, String>, token: String): Result<Boolean> {
+        val url = URL("$API_BASE/files/$fileId")
+        val conn = url.openConnection() as HttpURLConnection
+        try {
+            conn.requestMethod = "PATCH"
+            conn.setRequestProperty("Authorization", "Bearer $token")
+            conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
+            conn.doOutput = true
+            conn.connectTimeout = 10000
+            conn.readTimeout = 10000
+
+            val jsonBody = JsonObject().apply {
+                val propsObj = JsonObject()
+                for ((k, v) in properties) {
+                    propsObj.addProperty(k, v)
+                }
+                add("appProperties", propsObj)
+            }
+            conn.outputStream.use { os ->
+                os.write(jsonBody.toString().toByteArray(Charsets.UTF_8))
+            }
+
+            val code = conn.responseCode
+            return if (code in 200..299) {
+                Result.success(true)
+            } else if (code == 401 || code == 403) {
+                Result.failure(GoogleDriveSessionExpiredException("Acesso expirado ou não autorizado no Google Drive (HTTP $code).", code))
+            } else {
+                handleApiError(conn, code)
+            }
+        } finally {
+            conn.disconnect()
+        }
+    }
+
     private fun checkFolderValid(folderId: String, token: String): Result<Boolean> {
         return try {
             val url = URL("$API_BASE/files/$folderId?fields=id,name,trashed,mimeType")

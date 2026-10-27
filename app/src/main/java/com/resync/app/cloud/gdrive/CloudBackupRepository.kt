@@ -96,14 +96,18 @@ class CloudBackupRepository(
         val currentLabel = context.getSharedPreferences("swiftvault_prefs", Context.MODE_PRIVATE)
             .getString("custom_device_label", null) ?: com.resync.app.util.FormatUtils.getDeviceIdentifier(context)
 
-        val appProps = mapOf(
+        val categoryProps = CloudBackupCategoryHelper.inspectLocalFile(context, localFile, backupRecord.title)
+
+        val appProps = mutableMapOf(
             "backupId" to backupRecord.id,
             "title" to backupRecord.title,
             "version" to "1.0",
             "isEncrypted" to backupRecord.isEncrypted.toString(),
             "sha256" to backupRecord.checksumSha256,
             "deviceLabel" to currentLabel
-        )
+        ).apply {
+            putAll(categoryProps)
+        }
 
         dbHelper.updateBackupSyncStatus(backupRecord.id, SyncStatus.UPLOADING)
 
@@ -274,6 +278,13 @@ class CloudBackupRepository(
      */
     suspend fun deleteRemoteBackup(fileId: String, accountEmail: String? = null): Result<Boolean> = withContext(Dispatchers.IO) {
         driveFileManager.deleteFile(fileId, accountEmail)
+    }
+
+    /**
+     * Updates appProperties for remote backup file in Google Drive.
+     */
+    suspend fun updateRemoteBackupProperties(fileId: String, properties: Map<String, String>, accountEmail: String? = null): Result<Boolean> = withContext(Dispatchers.IO) {
+        driveFileManager.updateFileAppProperties(fileId, properties, accountEmail)
     }
 
     /**

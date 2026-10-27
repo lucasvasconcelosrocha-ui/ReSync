@@ -160,13 +160,18 @@ class FileUploadWorker(
                 "Iniciando envio de '$fileName' (${localFile.length()} bytes) para a pasta ID '$parentFolderId' (Conta: $targetEmail)"
             )
 
+            // Calcular propriedades e categorias do backup para registro no Google Drive
+            val categoryProps = com.resync.app.cloud.gdrive.CloudBackupCategoryHelper.inspectLocalFile(appContext, localFile, fileName)
+
             // Verificar se o arquivo já existe na pasta destino para reutilizar/atualizar em vez de duplicar
             val existingFile = driveRepo.findFileInFolder(targetEmail, fileName, parentFolderId)
             val mediaContent = FileContent(mimeType, localFile)
 
             val uploadedDriveFile = if (existingFile != null && !existingFile.id.isNullOrBlank()) {
                 // Atualizar / sobrescrever arquivo existente
-                val updateMetadata = DriveFile()
+                val updateMetadata = DriveFile().apply {
+                    appProperties = categoryProps
+                }
                 val updateRequest = drive.files().update(existingFile.id, updateMetadata, mediaContent)
                 updateRequest.fields = "id, name, size, md5Checksum"
                 val totalFileBytes = localFile.length()
@@ -290,6 +295,7 @@ class FileUploadWorker(
                 val fileMetadata = DriveFile().apply {
                     name = fileName
                     parents = listOf(parentFolderId)
+                    appProperties = categoryProps
                 }
                 val insertRequest = drive.files().create(fileMetadata, mediaContent)
                 insertRequest.fields = "id, name, size, md5Checksum"
@@ -469,7 +475,7 @@ class FileUploadWorker(
                                 appProperties = mapOf(
                                     "indexFor" to uploadedDriveFile.id,
                                     "containerName" to fileName
-                                )
+                                ) + categoryProps
                             }
                             drive.files().create(indexMeta, indexMedia).execute()
                         }

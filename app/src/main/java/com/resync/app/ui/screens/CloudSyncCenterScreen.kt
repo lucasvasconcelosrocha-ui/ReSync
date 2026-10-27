@@ -61,6 +61,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.resync.app.cloud.gdrive.AutoSyncSettings
+import com.resync.app.cloud.gdrive.CloudBackupCategoryHelper
 import com.resync.app.cloud.gdrive.DriveConstants
 import com.resync.app.cloud.gdrive.DriveFileMetadata
 import com.resync.app.data.model.*
@@ -136,11 +137,37 @@ fun CloudSyncCenterScreen(
     var showBackupSelectionDialog by remember { mutableStateOf(false) }
     var accountToRemove by remember { mutableStateOf<CloudAccount?>(null) }
     var remoteBackupToDelete by remember { mutableStateOf<DriveFileMetadata?>(null) }
-    var showDeleteLabelDialog by remember { mutableStateOf(false) }
     var isDeletingLabelBackups by remember { mutableStateOf(false) }
-    var showEditLabelDialog by remember { mutableStateOf(false) }
 
-    val fullDeviceLabel by viewModel.customDeviceLabel.collectAsState()
+    val customDeviceLabel by viewModel.customDeviceLabel.collectAsState()
+    val selectedViewLabel by viewModel.selectedViewLabel.collectAsState()
+    val savedDeviceLabels by viewModel.savedDeviceLabels.collectAsState()
+    val fullDeviceLabel = selectedViewLabel.ifBlank { customDeviceLabel }
+    val effectiveViewLabel: String = fullDeviceLabel.trim()
+
+    val remoteList: List<DriveFileMetadata> = (remoteBackupsState as? RemoteBackupsState.Loaded)?.backups ?: remoteBackups
+    val labelBackups: List<DriveFileMetadata> = remember(remoteList, effectiveViewLabel) {
+        if (effectiveViewLabel.isBlank()) {
+            remoteList
+        } else {
+            remoteList.filter { file ->
+                val prop = file.appProperties["deviceLabel"]?.trim()
+                if (!prop.isNullOrBlank()) {
+                    prop.equals(effectiveViewLabel, ignoreCase = true)
+                } else {
+                    file.name.contains(effectiveViewLabel, ignoreCase = true)
+                }
+            }
+        }
+    }
+
+    var showLabelManagerModal by remember { mutableStateOf(false) }
+    var showCreateLabelDialog by remember { mutableStateOf(false) }
+    var showRenameLabelDialog by remember { mutableStateOf(false) }
+    var showDeleteSpecificLabelDialog by remember { mutableStateOf(false) }
+    var labelToRename by remember { mutableStateOf("") }
+    var labelToDelete by remember { mutableStateOf("") }
+    var selectedCategoryModal by remember { mutableStateOf<String?>(null) }
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -207,9 +234,15 @@ fun CloudSyncCenterScreen(
         }
     }
 
-    val hasInternalBack = isFabExpanded || showBackupSelectionDialog || accountToRemove != null || selectedTab != 0
+    val hasInternalBack = isFabExpanded || showBackupSelectionDialog || accountToRemove != null || selectedTab != 0 ||
+            showLabelManagerModal || selectedCategoryModal != null || showCreateLabelDialog || showRenameLabelDialog || showDeleteSpecificLabelDialog
     BackHandler(enabled = hasInternalBack) {
         when {
+            showCreateLabelDialog -> showCreateLabelDialog = false
+            showRenameLabelDialog -> showRenameLabelDialog = false
+            showDeleteSpecificLabelDialog -> showDeleteSpecificLabelDialog = false
+            selectedCategoryModal != null -> selectedCategoryModal = null
+            showLabelManagerModal -> showLabelManagerModal = false
             isFabExpanded -> isFabExpanded = false
             showBackupSelectionDialog -> showBackupSelectionDialog = false
             accountToRemove != null -> accountToRemove = null
@@ -424,7 +457,9 @@ fun CloudSyncCenterScreen(
         floatingActionButton = {
             Column(
                 horizontalAlignment = Alignment.End,
-                modifier = Modifier.padding(bottom = 16.dp, end = 16.dp)
+                modifier = Modifier
+                    .navigationBarsPadding()
+                    .padding(bottom = 16.dp, end = 16.dp)
             ) {
                 AnimatedVisibility(
                     visible = isFabExpanded,
@@ -967,26 +1002,34 @@ fun CloudSyncCenterScreen(
                         Spacer(modifier = Modifier.height(16.dp))
 
                         // Cartão "Etiqueta do backup na nuvem"
-                        val remoteList = (remoteBackupsState as? RemoteBackupsState.Loaded)?.backups ?: remoteBackups
-                        val currentLabelTrimmed = fullDeviceLabel.trim()
-                        val labelBackups = remember(remoteList, fullDeviceLabel) {
-                            remoteList.filter { file ->
-                                val prop = file.appProperties["deviceLabel"]?.trim()
-                                if (!prop.isNullOrBlank()) {
-                                    prop.equals(currentLabelTrimmed, ignoreCase = true)
-                                } else {
-                                    currentLabelTrimmed.isNotBlank() && file.name.contains(currentLabelTrimmed, ignoreCase = true)
-                                }
-                            }
+                        val categorySummaries = remember(labelBackups) {
+                            labelBackups.map { it to CloudBackupCategoryHelper.inspectRemoteFile(it) }
                         }
-                        val remoteAppsCount = labelBackups.count { it.name.endsWith(".apk") || it.name.endsWith(".resync") || it.name.endsWith(".svb") || it.name.contains("app", ignoreCase = true) }
-                        val remoteSmsCount = labelBackups.count { it.name.contains("sms", ignoreCase = true) || it.name.contains("message", ignoreCase = true) || it.name.contains("mensag", ignoreCase = true) }
-                        val remoteCallsCount = labelBackups.count { it.name.contains("call", ignoreCase = true) || it.name.contains("chamada", ignoreCase = true) }
-                        val remoteFoldersCount = labelBackups.count { it.name.contains("folder", ignoreCase = true) || it.name.contains("pasta", ignoreCase = true) || it.name.contains("file", ignoreCase = true) }
-                        val remoteBluetoothCount = labelBackups.count { it.name.contains("bluetooth", ignoreCase = true) }
-                        val remoteDnsCount = labelBackups.count { it.name.contains("dns", ignoreCase = true) }
-                        val remoteWifiCount = labelBackups.count { it.name.contains("wifi", ignoreCase = true) || it.name.contains("wi-fi", ignoreCase = true) }
-                        val remoteContactsCount = labelBackups.count { it.name.contains("contact", ignoreCase = true) || it.name.contains("contato", ignoreCase = true) }
+
+                        val remoteAppsCount = remember(categorySummaries) {
+                            categorySummaries.sumOf { (_, s) -> if (s.hasApps) s.countApps.coerceAtLeast(1) else 0 }
+                        }
+                        val remoteSmsCount = remember(categorySummaries) {
+                            categorySummaries.sumOf { (_, s) -> if (s.hasSms) s.countSms.coerceAtLeast(1) else 0 }
+                        }
+                        val remoteCallsCount = remember(categorySummaries) {
+                            categorySummaries.sumOf { (_, s) -> if (s.hasCalls) s.countCalls.coerceAtLeast(1) else 0 }
+                        }
+                        val remoteFoldersCount = remember(categorySummaries) {
+                            categorySummaries.sumOf { (_, s) -> if (s.hasFolders) s.countFolders.coerceAtLeast(1) else 0 }
+                        }
+                        val remoteBluetoothCount = remember(categorySummaries) {
+                            categorySummaries.sumOf { (_, s) -> if (s.hasBluetooth) s.countBluetooth.coerceAtLeast(1) else 0 }
+                        }
+                        val remoteDnsCount = remember(categorySummaries) {
+                            categorySummaries.sumOf { (_, s) -> if (s.hasDns) s.countDns.coerceAtLeast(1) else 0 }
+                        }
+                        val remoteWifiCount = remember(categorySummaries) {
+                            categorySummaries.sumOf { (_, s) -> if (s.hasWifi) s.countWifi.coerceAtLeast(1) else 0 }
+                        }
+                        val remoteContactsCount = remember(categorySummaries) {
+                            categorySummaries.sumOf { (_, s) -> if (s.hasContacts) s.countContacts.coerceAtLeast(1) else 0 }
+                        }
 
                         Card(
                             modifier = Modifier
@@ -996,18 +1039,32 @@ fun CloudSyncCenterScreen(
                             colors = CardDefaults.cardColors(containerColor = DarkSurfaceVariant)
                         ) {
                             Column(modifier = Modifier.padding(18.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.Label, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(20.dp))
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "Etiqueta do backup na nuvem",
-                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                        color = TextPrimary
-                                    )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Label, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(20.dp))
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = "Etiqueta do backup na nuvem",
+                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = TextPrimary
+                                        )
+                                    }
+                                    TextButton(
+                                        onClick = { showLabelManagerModal = true },
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                    ) {
+                                        Icon(Icons.Default.Tune, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(15.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text("Gerenciar", fontSize = 12.sp, color = primaryAccent, fontWeight = FontWeight.Bold)
+                                    }
                                 }
-                                Spacer(modifier = Modifier.height(6.dp))
+                                Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = "A etiqueta do backup na nuvem identifica seu aparelho no Google Drive para agrupar e gerenciar backups criados exclusivamente por este dispositivo.",
+                                    text = "A etiqueta identifica seu aparelho no Google Drive para agrupar e gerenciar backups. Toque para alternar ou criar etiquetas.",
                                     fontSize = 12.sp,
                                     color = TextSecondary,
                                     lineHeight = 16.sp
@@ -1015,63 +1072,123 @@ fun CloudSyncCenterScreen(
 
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Surface(
-                                    shape = RoundedCornerShape(8.dp),
+                                    shape = RoundedCornerShape(10.dp),
                                     color = DarkBg,
-                                    border = BorderStroke(1.dp, DarkCardBorder),
-                                    modifier = Modifier.fillMaxWidth().clickable { showEditLabelDialog = true }
+                                    border = BorderStroke(1.dp, if (effectiveViewLabel == customDeviceLabel) primaryAccent.copy(alpha = 0.5f) else DarkCardBorder),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { showLabelManagerModal = true }
                                 ) {
                                     Row(
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Icon(Icons.Default.Smartphone, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(18.dp))
-                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Icon(Icons.Default.Smartphone, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(22.dp))
+                                        Spacer(modifier = Modifier.width(10.dp))
                                         Column(modifier = Modifier.weight(1f)) {
-                                            Text("Etiqueta atual do dispositivo (toque para renomear)", fontSize = 10.sp, color = TextMuted)
-                                            Text(fullDeviceLabel, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text("Etiqueta em exibição", fontSize = 10.5.sp, color = TextMuted)
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                if (effectiveViewLabel == customDeviceLabel) {
+                                                    Surface(
+                                                        shape = RoundedCornerShape(4.dp),
+                                                        color = primaryAccent.copy(alpha = 0.15f)
+                                                    ) {
+                                                        Text("Ativa neste dispositivo", fontSize = 9.sp, color = primaryAccent, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
+                                                    }
+                                                } else {
+                                                    Surface(
+                                                        shape = RoundedCornerShape(4.dp),
+                                                        color = StatusWarning.copy(alpha = 0.15f)
+                                                    ) {
+                                                        Text("Visualizando outro aparelho", fontSize = 9.sp, color = StatusWarning, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp))
+                                                    }
+                                                }
+                                            }
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Text(effectiveViewLabel, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
                                         }
-                                        Icon(Icons.Default.Edit, contentDescription = "Editar", tint = primaryAccent, modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Default.SwapHoriz, contentDescription = "Alternar", tint = primaryAccent, modifier = Modifier.size(20.dp))
                                     }
                                 }
 
                                 Spacer(modifier = Modifier.height(14.dp))
-                                Text(
-                                    text = "Backups marcados com esta etiqueta:",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = TextPrimary
-                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Backups nesta etiqueta (${labelBackups.size} arq.):",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = TextPrimary
+                                    )
+                                    Text(
+                                        text = "Toque para ver/restaurar",
+                                        fontSize = 10.sp,
+                                        color = primaryAccent
+                                    )
+                                }
                                 Spacer(modifier = Modifier.height(8.dp))
 
-                                // 4 colunas x 2 linhas
+                                // 4 colunas x 2 linhas (Clicáveis)
                                 Column(
                                     modifier = Modifier.fillMaxWidth(),
                                     verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    // Linha 1
+                                    // Linha 1: Aplicativos, Mensagens, Chamadas, Pastas
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        Card(modifier = Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = DarkBg), shape = RoundedCornerShape(10.dp)) {
+                                        Card(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .border(0.5.dp, if (remoteAppsCount > 0) primaryAccent.copy(alpha = 0.4f) else DarkCardBorder, RoundedCornerShape(10.dp))
+                                                .clickable { selectedCategoryModal = "Aplicativos" },
+                                            colors = CardDefaults.cardColors(containerColor = DarkBg)
+                                        ) {
                                             Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                                 Text("$remoteAppsCount", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = primaryAccent)
                                                 Text("Aplicativos", fontSize = 9.5.sp, color = TextSecondary, maxLines = 1)
                                             }
                                         }
-                                        Card(modifier = Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = DarkBg), shape = RoundedCornerShape(10.dp)) {
+                                        Card(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .border(0.5.dp, if (remoteSmsCount > 0) AccentElectricCyan.copy(alpha = 0.4f) else DarkCardBorder, RoundedCornerShape(10.dp))
+                                                .clickable { selectedCategoryModal = "Mensagens" },
+                                            colors = CardDefaults.cardColors(containerColor = DarkBg)
+                                        ) {
                                             Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                                 Text("$remoteSmsCount", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = AccentElectricCyan)
                                                 Text("Mensagens", fontSize = 9.5.sp, color = TextSecondary, maxLines = 1)
                                             }
                                         }
-                                        Card(modifier = Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = DarkBg), shape = RoundedCornerShape(10.dp)) {
+                                        Card(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .border(0.5.dp, if (remoteCallsCount > 0) AccentEmeraldGreen.copy(alpha = 0.4f) else DarkCardBorder, RoundedCornerShape(10.dp))
+                                                .clickable { selectedCategoryModal = "Chamadas" },
+                                            colors = CardDefaults.cardColors(containerColor = DarkBg)
+                                        ) {
                                             Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                                 Text("$remoteCallsCount", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = AccentEmeraldGreen)
                                                 Text("Chamadas", fontSize = 9.5.sp, color = TextSecondary, maxLines = 1)
                                             }
                                         }
-                                        Card(modifier = Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = DarkBg), shape = RoundedCornerShape(10.dp)) {
+                                        Card(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .border(0.5.dp, if (remoteFoldersCount > 0) AccentNeonPurple.copy(alpha = 0.4f) else DarkCardBorder, RoundedCornerShape(10.dp))
+                                                .clickable { selectedCategoryModal = "Pastas" },
+                                            colors = CardDefaults.cardColors(containerColor = DarkBg)
+                                        ) {
                                             Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                                 Text("$remoteFoldersCount", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = AccentNeonPurple)
                                                 Text("Pastas", fontSize = 9.5.sp, color = TextSecondary, maxLines = 1)
@@ -1079,30 +1196,58 @@ fun CloudSyncCenterScreen(
                                         }
                                     }
 
-                                    // Linha 2
+                                    // Linha 2: Bluetooth, DNS, Wi-Fi, Contatos
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        Card(modifier = Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = DarkBg), shape = RoundedCornerShape(10.dp)) {
+                                        Card(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .border(0.5.dp, if (remoteBluetoothCount > 0) AccentNeonBlue.copy(alpha = 0.4f) else DarkCardBorder, RoundedCornerShape(10.dp))
+                                                .clickable { selectedCategoryModal = "Bluetooth" },
+                                            colors = CardDefaults.cardColors(containerColor = DarkBg)
+                                        ) {
                                             Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                                 Text("$remoteBluetoothCount", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = AccentNeonBlue)
                                                 Text("Bluetooth", fontSize = 9.5.sp, color = TextSecondary, maxLines = 1)
                                             }
                                         }
-                                        Card(modifier = Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = DarkBg), shape = RoundedCornerShape(10.dp)) {
+                                        Card(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .border(0.5.dp, if (remoteDnsCount > 0) AccentCyberPurple.copy(alpha = 0.4f) else DarkCardBorder, RoundedCornerShape(10.dp))
+                                                .clickable { selectedCategoryModal = "DNS" },
+                                            colors = CardDefaults.cardColors(containerColor = DarkBg)
+                                        ) {
                                             Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                                 Text("$remoteDnsCount", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = AccentCyberPurple)
                                                 Text("DNS", fontSize = 9.5.sp, color = TextSecondary, maxLines = 1)
                                             }
                                         }
-                                        Card(modifier = Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = DarkBg), shape = RoundedCornerShape(10.dp)) {
+                                        Card(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .border(0.5.dp, if (remoteWifiCount > 0) StatusWarning.copy(alpha = 0.4f) else DarkCardBorder, RoundedCornerShape(10.dp))
+                                                .clickable { selectedCategoryModal = "Wi-Fi" },
+                                            colors = CardDefaults.cardColors(containerColor = DarkBg)
+                                        ) {
                                             Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                                 Text("$remoteWifiCount", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = StatusWarning)
                                                 Text("Wi-Fi", fontSize = 9.5.sp, color = TextSecondary, maxLines = 1)
                                             }
                                         }
-                                        Card(modifier = Modifier.weight(1f), colors = CardDefaults.cardColors(containerColor = DarkBg), shape = RoundedCornerShape(10.dp)) {
+                                        Card(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .border(0.5.dp, if (remoteContactsCount > 0) AccentSunsetOrange.copy(alpha = 0.4f) else DarkCardBorder, RoundedCornerShape(10.dp))
+                                                .clickable { selectedCategoryModal = "Contatos" },
+                                            colors = CardDefaults.cardColors(containerColor = DarkBg)
+                                        ) {
                                             Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                                 Text("$remoteContactsCount", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = AccentSunsetOrange)
                                                 Text("Contatos", fontSize = 9.5.sp, color = TextSecondary, maxLines = 1)
@@ -1124,7 +1269,7 @@ fun CloudSyncCenterScreen(
                                         Icon(Icons.Default.Info, contentDescription = null, tint = TextMuted, modifier = Modifier.size(16.dp))
                                         Spacer(modifier = Modifier.width(6.dp))
                                         Text(
-                                            text = "Observação: somente papéis de parede não podem ser marcados.",
+                                            text = "Toque em qualquer categoria para listar os backups e restaurar diretamente.",
                                             fontSize = 11.sp,
                                             color = TextMuted
                                         )
@@ -1133,7 +1278,10 @@ fun CloudSyncCenterScreen(
 
                                 Spacer(modifier = Modifier.height(14.dp))
                                 OutlinedButton(
-                                    onClick = { showDeleteLabelDialog = true },
+                                    onClick = {
+                                        labelToDelete = effectiveViewLabel
+                                        showDeleteSpecificLabelDialog = true
+                                    },
                                     modifier = Modifier.fillMaxWidth().height(42.dp),
                                     shape = RoundedCornerShape(10.dp),
                                     border = BorderStroke(1.dp, StatusError.copy(alpha = 0.7f)),
@@ -1709,40 +1857,33 @@ fun CloudSyncCenterScreen(
         )
     }
 
-    if (showDeleteLabelDialog) {
-        val remoteList = (remoteBackupsState as? RemoteBackupsState.Loaded)?.backups ?: remoteBackups
-        val currentLabelTrimmed = fullDeviceLabel.trim()
-        val labelBackups = remoteList.filter { file ->
-            val prop = file.appProperties["deviceLabel"]?.trim()
-            if (!prop.isNullOrBlank()) {
-                prop.equals(currentLabelTrimmed, ignoreCase = true)
-            } else {
-                currentLabelTrimmed.isNotBlank() && file.name.contains(currentLabelTrimmed, ignoreCase = true)
+    if (showDeleteSpecificLabelDialog && labelToDelete.isNotBlank()) {
+        val targetLabel = labelToDelete.trim()
+        val targetBackups = remember(remoteList, targetLabel) {
+            remoteList.filter { file ->
+                val prop = file.appProperties["deviceLabel"]?.trim()
+                if (!prop.isNullOrBlank()) {
+                    prop.equals(targetLabel, ignoreCase = true)
+                } else {
+                    file.name.contains(targetLabel, ignoreCase = true)
+                }
             }
         }
-        val remoteAppsCount = labelBackups.count { it.name.endsWith(".apk") || it.name.endsWith(".resync") || it.name.endsWith(".svb") || it.name.contains("app", ignoreCase = true) }
-        val remoteSmsCount = labelBackups.count { it.name.contains("sms", ignoreCase = true) || it.name.contains("message", ignoreCase = true) || it.name.contains("mensag", ignoreCase = true) }
-        val remoteCallsCount = labelBackups.count { it.name.contains("call", ignoreCase = true) || it.name.contains("chamada", ignoreCase = true) }
-        val remoteFoldersCount = labelBackups.count { it.name.contains("folder", ignoreCase = true) || it.name.contains("pasta", ignoreCase = true) || it.name.contains("file", ignoreCase = true) }
-        val remoteBluetoothCount = labelBackups.count { it.name.contains("bluetooth", ignoreCase = true) }
-        val remoteDnsCount = labelBackups.count { it.name.contains("dns", ignoreCase = true) }
-        val remoteWifiCount = labelBackups.count { it.name.contains("wifi", ignoreCase = true) || it.name.contains("wi-fi", ignoreCase = true) }
-        val remoteContactsCount = labelBackups.count { it.name.contains("contact", ignoreCase = true) || it.name.contains("contato", ignoreCase = true) }
 
         AlertDialog(
-            onDismissRequest = { if (!isDeletingLabelBackups) showDeleteLabelDialog = false },
+            onDismissRequest = { if (!isDeletingLabelBackups) showDeleteSpecificLabelDialog = false },
             containerColor = DarkSurface,
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.DeleteSweep, contentDescription = null, tint = StatusError, modifier = Modifier.size(22.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Excluir backups da etiqueta?", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 16.sp)
+                    Text("Excluir etiqueta e backups?", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 16.sp)
                 }
             },
             text = {
                 Column {
                     Text(
-                        "Deseja realmente excluir todos os backups associados à etiqueta \"$fullDeviceLabel\"?",
+                        "Deseja realmente excluir a etiqueta \"$targetLabel\" e todos os ${targetBackups.size} backup(s) associados a ela no Google Drive?",
                         color = TextPrimary,
                         fontSize = 13.sp
                     )
@@ -1753,21 +1894,14 @@ fun CloudSyncCenterScreen(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
                     ) {
                         Column(modifier = Modifier.padding(10.dp)) {
-                            Text("Itens que serão removidos da nuvem:", fontSize = 11.sp, color = TextMuted)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text("• $remoteAppsCount Aplicativos", fontSize = 12.sp, color = TextSecondary)
-                            Text("• $remoteSmsCount Mensagens", fontSize = 12.sp, color = TextSecondary)
-                            Text("• $remoteCallsCount Chamadas", fontSize = 12.sp, color = TextSecondary)
-                            Text("• $remoteFoldersCount Pastas", fontSize = 12.sp, color = TextSecondary)
-                            Text("• $remoteBluetoothCount Bluetooth", fontSize = 12.sp, color = TextSecondary)
-                            Text("• $remoteDnsCount DNS", fontSize = 12.sp, color = TextSecondary)
-                            Text("• $remoteWifiCount Wi-Fi", fontSize = 12.sp, color = TextSecondary)
-                            Text("• $remoteContactsCount Contatos", fontSize = 12.sp, color = TextSecondary)
+                            Text("Total de arquivos no Google Drive: ${targetBackups.size}", fontSize = 11.sp, color = TextMuted)
+                            val totalBytes = targetBackups.sumOf { it.sizeBytes }
+                            Text("Espaço a ser liberado: ${formatStorageSize(totalBytes)}", fontSize = 11.sp, color = TextSecondary, fontWeight = FontWeight.SemiBold)
                         }
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        "Essa ação não afeta backups locais no aparelho. Papéis de parede não são apagados.",
+                        "Essa ação apagará os arquivos correspondentes na nuvem permanentemente. Os backups locais no aparelho não serão afetados.",
                         fontSize = 11.sp,
                         color = TextMuted
                     )
@@ -1777,11 +1911,11 @@ fun CloudSyncCenterScreen(
                 Button(
                     onClick = {
                         isDeletingLabelBackups = true
-                        viewModel.deleteRemoteBackupsForLabel(fullDeviceLabel) { deletedCount ->
+                        viewModel.deleteDeviceLabel(targetLabel) { deletedCount ->
                             isDeletingLabelBackups = false
-                            showDeleteLabelDialog = false
-                            Toast.makeText(context, "$deletedCount backup(s) foram excluídos da nuvem.", Toast.LENGTH_LONG).show()
-                            viewModel.fetchRemoteDriveBackups()
+                            showDeleteSpecificLabelDialog = false
+                            labelToDelete = ""
+                            Toast.makeText(context, "$deletedCount backup(s) excluídos da nuvem com sucesso.", Toast.LENGTH_SHORT).show()
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = StatusError),
@@ -1792,13 +1926,13 @@ fun CloudSyncCenterScreen(
                         Spacer(modifier = Modifier.width(6.dp))
                         Text("Excluindo...", color = Color.White)
                     } else {
-                        Text("EXCLUIR TUDO", color = Color.White, fontWeight = FontWeight.Bold)
+                        Text("EXCLUIR PERMANENTEMENTE", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     }
                 }
             },
             dismissButton = {
                 TextButton(
-                    onClick = { showDeleteLabelDialog = false },
+                    onClick = { showDeleteSpecificLabelDialog = false },
                     enabled = !isDeletingLabelBackups
                 ) {
                     Text("Cancelar", color = TextSecondary)
@@ -1807,21 +1941,28 @@ fun CloudSyncCenterScreen(
         )
     }
 
-    if (showEditLabelDialog) {
-        var tempLabel by remember { mutableStateOf(fullDeviceLabel) }
+    if (showCreateLabelDialog) {
+        var newLabelInput by remember { mutableStateOf("") }
+        var setAsActive by remember { mutableStateOf(true) }
+
         AlertDialog(
-            onDismissRequest = { showEditLabelDialog = false },
+            onDismissRequest = { showCreateLabelDialog = false },
             containerColor = DarkSurface,
             title = {
-                Text("Editar Etiqueta do Dispositivo", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 16.sp)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.AddCircleOutline, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(22.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Criar Nova Etiqueta", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 16.sp)
+                }
             },
             text = {
                 Column {
-                    Text("Digite o nome ou identificador para este dispositivo na nuvem:", fontSize = 12.sp, color = TextSecondary)
+                    Text("Digite o nome da nova etiqueta para organizar seus backups:", fontSize = 12.sp, color = TextSecondary)
                     Spacer(modifier = Modifier.height(10.dp))
                     OutlinedTextField(
-                        value = tempLabel,
-                        onValueChange = { tempLabel = it },
+                        value = newLabelInput,
+                        onValueChange = { newLabelInput = it },
+                        placeholder = { Text("Ex: POCO X7 Pro - Diário, Backup Format", fontSize = 12.sp, color = TextMuted) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = primaryAccent,
@@ -1831,23 +1972,428 @@ fun CloudSyncCenterScreen(
                         ),
                         modifier = Modifier.fillMaxWidth()
                     )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { setAsActive = !setAsActive },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(
+                            checked = setAsActive,
+                            onCheckedChange = { setAsActive = it },
+                            colors = CheckboxDefaults.colors(checkedColor = primaryAccent)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Column {
+                            Text("Definir como etiqueta ativa", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                            Text("Novos backups usarão esta etiqueta", fontSize = 10.sp, color = TextMuted)
+                        }
+                    }
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.setCustomDeviceLabel(tempLabel)
-                        showEditLabelDialog = false
-                        viewModel.fetchRemoteDriveBackups()
+                        val trimmed = newLabelInput.trim()
+                        if (trimmed.isNotBlank()) {
+                            viewModel.createDeviceLabel(trimmed, setAsActive)
+                            showCreateLabelDialog = false
+                            Toast.makeText(context, "Etiqueta \"$trimmed\" criada com sucesso!", Toast.LENGTH_SHORT).show()
+                        }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = primaryAccent)
+                    colors = ButtonDefaults.buttonColors(containerColor = primaryAccent),
+                    enabled = newLabelInput.isNotBlank()
                 ) {
-                    Text("Salvar", color = Color.Black, fontWeight = FontWeight.Bold)
+                    Text("Criar", color = Color.Black, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showEditLabelDialog = false }) {
+                TextButton(onClick = { showCreateLabelDialog = false }) {
                     Text("Cancelar", color = TextSecondary)
+                }
+            }
+        )
+    }
+
+    if (showRenameLabelDialog && labelToRename.isNotBlank()) {
+        var renamedInput by remember { mutableStateOf(labelToRename) }
+        var isRenaming by remember { mutableStateOf(false) }
+
+        AlertDialog(
+            onDismissRequest = { if (!isRenaming) showRenameLabelDialog = false },
+            containerColor = DarkSurface,
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Edit, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(22.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Renomear Etiqueta", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 16.sp)
+                }
+            },
+            text = {
+                Column {
+                    Text("Digite o novo nome para a etiqueta \"$labelToRename\":", fontSize = 12.sp, color = TextSecondary)
+                    Spacer(modifier = Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = renamedInput,
+                        onValueChange = { renamedInput = it },
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = primaryAccent,
+                            unfocusedBorderColor = DarkCardBorder,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Isso atualizará os metadados dos arquivos existentes no Google Drive associados a esta etiqueta.", fontSize = 11.sp, color = TextMuted)
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val trimmed = renamedInput.trim()
+                        if (trimmed.isNotBlank() && trimmed != labelToRename) {
+                            isRenaming = true
+                            viewModel.renameDeviceLabel(labelToRename, trimmed) { count ->
+                                isRenaming = false
+                                showRenameLabelDialog = false
+                                Toast.makeText(context, "$count backup(s) atualizados com a nova etiqueta.", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = primaryAccent),
+                    enabled = renamedInput.isNotBlank() && !isRenaming
+                ) {
+                    if (isRenaming) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.Black, strokeWidth = 2.dp)
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Atualizando...", color = Color.Black)
+                    } else {
+                        Text("Salvar", color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRenameLabelDialog = false }, enabled = !isRenaming) {
+                    Text("Cancelar", color = TextSecondary)
+                }
+            }
+        )
+    }
+
+    if (showLabelManagerModal) {
+        val allDiscoveredLabels = remember(remoteList, savedDeviceLabels, customDeviceLabel) {
+            val list = mutableListOf<String>()
+            val cLabel = customDeviceLabel.trim()
+            if (cLabel.isNotBlank()) list.add(cLabel)
+            savedDeviceLabels.forEach { s ->
+                val tr = s.trim()
+                if (tr.isNotBlank() && !list.contains(tr)) list.add(tr)
+            }
+            remoteList.forEach { f ->
+                val p = f.appProperties["deviceLabel"]?.trim()
+                if (!p.isNullOrBlank() && !list.contains(p)) list.add(p)
+            }
+            list
+        }
+
+        AlertDialog(
+            onDismissRequest = { showLabelManagerModal = false },
+            containerColor = DarkSurface,
+            title = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Label, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(22.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Gerenciar Etiquetas", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 16.sp)
+                    }
+                    IconButton(
+                        onClick = { showCreateLabelDialog = true },
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = "Criar", tint = primaryAccent)
+                    }
+                }
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "Selecione uma etiqueta para ver seus backups ou use o botão '+' para criar uma nova.",
+                        fontSize = 12.sp,
+                        color = TextSecondary
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    if (allDiscoveredLabels.isEmpty()) {
+                        Text("Nenhuma etiqueta encontrada.", fontSize = 12.sp, color = TextMuted)
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 320.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(allDiscoveredLabels, key = { it }) { labelItem ->
+                                val isSelected = labelItem.equals(effectiveViewLabel, ignoreCase = true)
+                                val isActiveDevice = labelItem.equals(customDeviceLabel, ignoreCase = true)
+                                val count = remoteList.count { f ->
+                                    val prop = f.appProperties["deviceLabel"]?.trim()
+                                    if (!prop.isNullOrBlank()) prop.equals(labelItem, ignoreCase = true)
+                                    else f.name.contains(labelItem, ignoreCase = true)
+                                }
+
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = if (isSelected) primaryAccent.copy(alpha = 0.12f) else DarkBg,
+                                    border = BorderStroke(1.dp, if (isSelected) primaryAccent else DarkCardBorder),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            viewModel.setSelectedViewLabel(labelItem)
+                                            showLabelManagerModal = false
+                                        }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            if (isSelected) Icons.Default.RadioButtonChecked else Icons.Default.RadioButtonUnchecked,
+                                            contentDescription = null,
+                                            tint = if (isSelected) primaryAccent else TextMuted,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(labelItem, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                                if (isActiveDevice) {
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Surface(shape = RoundedCornerShape(4.dp), color = primaryAccent.copy(alpha = 0.2f)) {
+                                                        Text("Ativa", fontSize = 9.sp, color = primaryAccent, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
+                                                    }
+                                                }
+                                            }
+                                            Text("$count backup(s) no Google Drive", fontSize = 11.sp, color = TextSecondary)
+                                        }
+
+                                        // Botões de ação rápida
+                                        IconButton(
+                                            onClick = {
+                                                labelToRename = labelItem
+                                                showRenameLabelDialog = true
+                                            },
+                                            modifier = Modifier.size(28.dp)
+                                        ) {
+                                            Icon(Icons.Default.Edit, contentDescription = "Renomear", tint = TextSecondary, modifier = Modifier.size(16.dp))
+                                        }
+                                        IconButton(
+                                            onClick = {
+                                                labelToDelete = labelItem
+                                                showDeleteSpecificLabelDialog = true
+                                            },
+                                            modifier = Modifier.size(28.dp)
+                                        ) {
+                                            Icon(Icons.Default.Delete, contentDescription = "Excluir", tint = StatusError, modifier = Modifier.size(16.dp))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedButton(
+                        onClick = { showCreateLabelDialog = true },
+                        modifier = Modifier.fillMaxWidth().height(40.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, primaryAccent)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Criar nova etiqueta", color = primaryAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showLabelManagerModal = false }) {
+                    Text("Concluir", color = primaryAccent, fontWeight = FontWeight.Bold)
+                }
+            }
+        )
+    }
+
+    if (selectedCategoryModal != null) {
+        val catName = selectedCategoryModal!!
+        val matchingBackups = remember(labelBackups, catName) {
+            labelBackups.filter { file ->
+                val s = CloudBackupCategoryHelper.inspectRemoteFile(file)
+                s.containsCategory(catName)
+            }
+        }
+
+        AlertDialog(
+            onDismissRequest = { selectedCategoryModal = null },
+            containerColor = DarkSurface,
+            title = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        val icon = when (catName.lowercase()) {
+                            "aplicativos" -> Icons.Default.Apps
+                            "mensagens" -> Icons.Default.Sms
+                            "chamadas" -> Icons.Default.Call
+                            "pastas" -> Icons.Default.Folder
+                            "bluetooth" -> Icons.Default.Bluetooth
+                            "dns" -> Icons.Default.Dns
+                            "wi-fi" -> Icons.Default.Wifi
+                            "contatos" -> Icons.Default.Contacts
+                            else -> Icons.Default.Inventory2
+                        }
+                        Icon(icon, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(22.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(catName, fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 16.sp)
+                    }
+                    IconButton(onClick = { selectedCategoryModal = null }, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = "Fechar", tint = TextMuted)
+                    }
+                }
+            },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "Backups contendo \"$catName\" sob a etiqueta \"$effectiveViewLabel\":",
+                        fontSize = 12.sp,
+                        color = TextSecondary
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    if (matchingBackups.isEmpty()) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = DarkBg,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Icon(Icons.Default.FolderOpen, contentDescription = null, tint = TextMuted, modifier = Modifier.size(32.dp))
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    "Nenhum backup encontrado contendo $catName nesta etiqueta.",
+                                    fontSize = 12.sp,
+                                    color = TextMuted,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 340.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(matchingBackups, key = { it.id }) { file ->
+                                val summary = remember(file) { CloudBackupCategoryHelper.inspectRemoteFile(file) }
+                                val count = when (catName.lowercase()) {
+                                    "aplicativos" -> summary.countApps
+                                    "mensagens" -> summary.countSms
+                                    "chamadas" -> summary.countCalls
+                                    "pastas" -> summary.countFolders
+                                    "bluetooth" -> summary.countBluetooth
+                                    "dns" -> summary.countDns
+                                    "wi-fi" -> summary.countWifi
+                                    "contatos" -> summary.countContacts
+                                    else -> 1
+                                }
+                                val isFullPkg = file.name.endsWith(".resync", ignoreCase = true) || file.name.endsWith(".svb", ignoreCase = true)
+                                val displayTitle = file.appProperties["title"] ?: file.name
+
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = DarkBg,
+                                    border = BorderStroke(1.dp, DarkCardBorder),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.padding(12.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = displayTitle,
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = TextPrimary,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Surface(
+                                                shape = RoundedCornerShape(4.dp),
+                                                color = if (isFullPkg) primaryAccent.copy(alpha = 0.15f) else TextSecondary.copy(alpha = 0.15f)
+                                            ) {
+                                                Text(
+                                                    text = if (isFullPkg) "Pacote Completo" else "Avulso",
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = if (isFullPkg) primaryAccent else TextSecondary,
+                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "${formatStorageSize(file.sizeBytes)} • ${if (count > 0) "$count item(ns)" else "Incluso"}",
+                                                fontSize = 11.sp,
+                                                color = TextSecondary
+                                            )
+                                            Button(
+                                                onClick = {
+                                                    val unifiedEntry = viewModel.createUnifiedEntryFromDriveFile(file)
+                                                    Toast.makeText(context, "Iniciando restauração de $catName...", Toast.LENGTH_SHORT).show()
+                                                    viewModel.restoreCategoryBackup(unifiedEntry, catName)
+                                                    selectedCategoryModal = null
+                                                },
+                                                colors = ButtonDefaults.buttonColors(containerColor = primaryAccent),
+                                                shape = RoundedCornerShape(6.dp),
+                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                                modifier = Modifier.height(30.dp)
+                                            ) {
+                                                Icon(Icons.Default.Restore, contentDescription = null, tint = Color.Black, modifier = Modifier.size(14.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Restaurar", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { selectedCategoryModal = null }) {
+                    Text("Fechar", color = TextSecondary)
                 }
             }
         )
