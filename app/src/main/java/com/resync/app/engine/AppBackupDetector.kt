@@ -8,7 +8,9 @@ import com.google.gson.reflect.TypeToken
 import com.resync.app.cloud.gdrive.BackupIndexManager
 import com.resync.app.cloud.gdrive.DriveFileMetadata
 import com.resync.app.data.database.AppDatabaseHelper
+import com.resync.app.data.model.AppBackupPoint
 import com.resync.app.data.model.AppBackupStatus
+import com.resync.app.data.model.BackupItemType
 import com.resync.app.data.model.BackupManifest
 import com.resync.app.data.model.BackupPaths
 import com.resync.app.data.model.SyncStatus
@@ -42,6 +44,7 @@ class AppBackupDetector(
     private val gson = Gson()
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private val memoryCache = ConcurrentHashMap<String, AppBackupStatus>()
+    private val appBackupPoints = ConcurrentHashMap<String, MutableList<AppBackupPoint>>()
     private val isDetecting = AtomicBoolean(false)
     private var lastDriveRefreshTime = 0L
 
@@ -73,6 +76,16 @@ class AppBackupDetector(
         return memoryCache
     }
 
+    fun getBackupPointsForApp(packageName: String): List<AppBackupPoint> {
+        return appBackupPoints[packageName]?.distinctBy { (it.driveFileId ?: "") + it.filePath + it.timestamp }?.sortedByDescending { it.timestamp } ?: emptyList()
+    }
+
+    fun getAllBackupPoints(): Map<String, List<AppBackupPoint>> {
+        return appBackupPoints.mapValues { (_, list) ->
+            list.distinctBy { (it.driveFileId ?: "") + it.filePath + it.timestamp }.sortedByDescending { it.timestamp }
+        }
+    }
+
     /**
      * Detects backup status for all installed apps and cataloged packages across:
      * a) Memória interna (local folder, SQLite records, Room cache)
@@ -96,6 +109,7 @@ class AppBackupDetector(
         try {
             val localLatestMap = mutableMapOf<String, Long>()
             val driveLatestMap = mutableMapOf<String, Long>()
+            val newPointsMap = mutableMapOf<String, MutableList<AppBackupPoint>>()
 
             // 1. Scan Room Index Database (Instant cached manifests)
             try {
@@ -160,6 +174,19 @@ class AppBackupDetector(
                             driveLatestMap[pkg] = maxOf(driveLatestMap[pkg] ?: 0L, timestamp)
                         }
                     }
+
+                    // Extract detailed app backup points from manifest
+                    val points = extractAppPointsFromManifest(
+                        manifest = manifest,
+                        isLocal = isLocal,
+                        isDrive = isDrive,
+                        filePath = entity.filePath ?: "",
+                        driveFileId = entity.driveFileId,
+                        containerSizeBytes = entity.sizeBytes
+                    )
+                    for ((pkg, pt) in points) {
+                        newPointsMap.getOrPut(pkg) { mutableListOf() }.add(pt)
+                    }
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Erro ao consultar índices do Room: ${e.message}")
@@ -183,6 +210,17 @@ class AppBackupDetector(
                             for (pkg in packages) {
                                 localLatestMap[pkg] = maxOf(localLatestMap[pkg] ?: 0L, timestamp)
                             }
+                            val points = extractAppPointsFromManifest(
+                                manifest = manifest,
+                                isLocal = true,
+                                isDrive = false,
+                                filePath = sidecar.absolutePath.removeSuffix(".index.json"),
+                                driveFileId = null,
+                                containerSizeBytes = sidecar.length()
+                            )
+                            for ((pkg, pt) in points) {
+                                newPointsMap.getOrPut(pkg) { mutableListOf() }.add(pt)
+                            }
                         } catch (_: Exception) {}
                     }
 
@@ -203,6 +241,17 @@ class AppBackupDetector(
                                 val packages = extractPackagesFromManifest(manifest)
                                 for (pkg in packages) {
                                     localLatestMap[pkg] = maxOf(localLatestMap[pkg] ?: 0L, timestamp)
+                                }
+                                val points = extractAppPointsFromManifest(
+                                    manifest = manifest,
+                                    isLocal = true,
+                                    isDrive = false,
+                                    filePath = container.absolutePath,
+                                    driveFileId = null,
+                                    containerSizeBytes = container.length()
+                                )
+                                for ((pkg, pt) in points) {
+                                    newPointsMap.getOrPut(pkg) { mutableListOf() }.add(pt)
                                 }
                             } catch (_: Exception) {}
                         }
@@ -233,6 +282,23 @@ class AppBackupDetector(
                         if (isDrive) {
                             driveLatestMap[matchedPkg] = maxOf(driveLatestMap[matchedPkg] ?: 0L, rec.timestamp)
                         }
+                        val point = AppBackupPoint(
+                            backupId = rec.id,
+                            backupTitle = rec.title,
+                            timestamp = rec.timestamp,
+                            isLocal = isLocal,
+                            isDrive = isDrive,
+                            filePath = rec.filePath,
+                            driveFileId = rec.driveFileId,
+                            containerSizeBytes = rec.sizeBytes,
+                            appSizeBytes = rec.sizeBytes,
+                            versionName = null,
+                            hasApk = true,
+                            hasData = true,
+                            isFullPackage = false,
+                            itemIds = emptyList()
+                        )
+                        newPointsMap.getOrPut(matchedPkg) { mutableListOf() }.add(point)
                     }
                 }
             } catch (e: Exception) {
@@ -255,6 +321,23 @@ class AppBackupDetector(
                 val pkgProp = remote.appProperties["packageName"]
                 if (!pkgProp.isNullOrBlank()) {
                     driveLatestMap[pkgProp] = maxOf(driveLatestMap[pkgProp] ?: 0L, remote.modifiedTime)
+                    val point = AppBackupPoint(
+                        backupId = remote.id,
+                        backupTitle = remote.name,
+                        timestamp = remote.modifiedTime,
+                        isLocal = false,
+                        isDrive = true,
+                        filePath = "",
+                        driveFileId = remote.id,
+                        containerSizeBytes = remote.sizeBytes,
+                        appSizeBytes = remote.sizeBytes,
+                        versionName = remote.appProperties["versionName"],
+                        hasApk = true,
+                        hasData = true,
+                        isFullPackage = false,
+                        itemIds = emptyList()
+                    )
+                    newPointsMap.getOrPut(pkgProp) { mutableListOf() }.add(point)
                 }
             }
 
@@ -274,6 +357,13 @@ class AppBackupDetector(
             memoryCache.clear()
             memoryCache.putAll(newMap)
             saveToPersistedCache(newMap)
+
+            appBackupPoints.clear()
+            for ((pkg, list) in newPointsMap) {
+                appBackupPoints[pkg] = list.distinctBy { (it.driveFileId ?: "") + it.filePath + it.timestamp }
+                    .sortedByDescending { it.timestamp }
+                    .toMutableList()
+            }
 
             Log.d(TAG, "Detecção de backups concluída para ${newMap.size} pacotes. (${newMap.count { it.value.hasBackup }} com backup)")
             return@withContext memoryCache
@@ -299,6 +389,70 @@ class AppBackupDetector(
             }
         }
         return packages
+    }
+
+    private fun extractAppPointsFromManifest(
+        manifest: BackupManifest,
+        isLocal: Boolean,
+        isDrive: Boolean,
+        filePath: String,
+        driveFileId: String?,
+        containerSizeBytes: Long
+    ): Map<String, AppBackupPoint> {
+        val result = mutableMapOf<String, AppBackupPoint>()
+        val appItems = manifest.items.filter {
+            it.type in listOf(BackupItemType.APP_APK, BackupItemType.APP_SPLIT_APKS, BackupItemType.APP_DATA) ||
+            it.archiveEntryPath.startsWith("apps/")
+        }
+        if (appItems.isEmpty()) return result
+
+        val isFullPackage = manifest.items.any {
+            it.type !in listOf(BackupItemType.APP_APK, BackupItemType.APP_SPLIT_APKS, BackupItemType.APP_DATA) &&
+            !it.archiveEntryPath.startsWith("apps/") &&
+            !it.archiveEntryPath.endsWith("metadata.json")
+        } || appItems.mapNotNull { it.metadata["packageName"] ?: it.archiveEntryPath.removePrefix("apps/").substringBefore("/").takeIf { s -> s.isNotBlank() } }.distinct().size > 1
+
+        val byPkg = appItems.groupBy {
+            it.metadata["packageName"] ?: it.archiveEntryPath.removePrefix("apps/").substringBefore("/").takeIf { s -> s.isNotBlank() } ?: "unknown"
+        }.filterKeys { it != "unknown" && !it.endsWith(".json") && it != "splits" && !it.contains("/") }
+
+        for ((pkg, items) in byPkg) {
+            val hasApk = items.any {
+                it.type == BackupItemType.APP_APK ||
+                it.type == BackupItemType.APP_SPLIT_APKS ||
+                it.archiveEntryPath.endsWith(".apk")
+            }
+            val hasData = items.any {
+                it.type == BackupItemType.APP_DATA ||
+                it.archiveEntryPath.endsWith(".tar") ||
+                it.archiveEntryPath.endsWith(".tar.gz") ||
+                it.metadata["dataType"] == "internal_data"
+            }
+            val appSizeBytes = items.sumOf { it.sizeBytes }
+            val metaVer = items.firstNotNullOfOrNull { it.metadata["versionName"] }
+                ?: manifest.items.find { it.archiveEntryPath == "apps/$pkg/metadata.json" }?.metadata?.get("versionName")
+            val metaCode = items.firstNotNullOfOrNull { it.metadata["versionCode"] }?.toLongOrNull() ?: 0L
+
+            val point = AppBackupPoint(
+                backupId = manifest.backupId,
+                backupTitle = manifest.title.ifBlank { "Backup" },
+                timestamp = if (manifest.createdAt > 0L) manifest.createdAt else System.currentTimeMillis(),
+                isLocal = isLocal,
+                isDrive = isDrive,
+                filePath = filePath,
+                driveFileId = driveFileId,
+                containerSizeBytes = if (containerSizeBytes > 0L) containerSizeBytes else manifest.totalSizeBytes,
+                appSizeBytes = appSizeBytes,
+                versionName = metaVer,
+                versionCode = metaCode,
+                hasApk = hasApk,
+                hasData = hasData,
+                isFullPackage = isFullPackage,
+                itemIds = items.map { it.id }
+            )
+            result[pkg] = point
+        }
+        return result
     }
 
     private fun saveToPersistedCache(map: Map<String, AppBackupStatus>) {

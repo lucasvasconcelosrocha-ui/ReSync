@@ -1,5 +1,6 @@
 package com.resync.app.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -37,6 +38,7 @@ import com.resync.app.data.model.AppBackupStatus
 import com.resync.app.data.model.AppInfo
 import com.resync.app.data.model.AppSelectionOptions
 import com.resync.app.data.model.BackupRecord
+import com.resync.app.data.model.RestoreSource
 import com.resync.app.data.model.SyncStatus
 import com.resync.app.engine.CapabilityManager
 import com.resync.app.engine.IconCacheManager
@@ -79,6 +81,7 @@ fun AppsListScreen(
     var showNonRootConfirmDialog by remember { mutableStateOf(false) }
     var pendingCustomBackupLaunch by remember { mutableStateOf<((Boolean) -> Unit)?>(null) }
     var backupToRestore by remember { mutableStateOf<BackupRecord?>(null) }
+    var selectedBackupForRestoreScreen by remember { mutableStateOf<BackupRecord?>(null) }
     var backupToDelete by remember { mutableStateOf<BackupRecord?>(null) }
 
     val playStoreUpdatesResult by viewModel.playStoreUpdatesState.collectAsState()
@@ -146,6 +149,20 @@ fun AppsListScreen(
 
     val totalSelectedSize = remember(selectedPackages, apps) {
         apps.filter { selectedPackages.contains(it.packageName) }.sumOf { it.sizeBytes }
+    }
+
+    if (selectedBackupForRestoreScreen != null) {
+        val b = selectedBackupForRestoreScreen!!
+        val isCloud = !b.driveFileId.isNullOrBlank()
+        BackHandler { selectedBackupForRestoreScreen = null }
+        RestoreSelectionScreen(
+            backup = b,
+            source = if (isCloud) RestoreSource.DRIVE else RestoreSource.LOCAL,
+            viewModel = viewModel,
+            onBack = { selectedBackupForRestoreScreen = null },
+            onFinished = { selectedBackupForRestoreScreen = null }
+        )
+        return
     }
 
     Scaffold(
@@ -665,11 +682,25 @@ fun AppsListScreen(
                                     selectedPackages.add(app.packageName)
                                 }
                             },
-                            onRestoreBackup = { backupToRestore = it },
+                            onRestoreBackup = { selectedBackupForRestoreScreen = it },
                             onDeleteBackup = { backupToDelete = it },
                             onUploadBackupToDrive = {
                                 viewModel.uploadBackupsToDrive(listOf(it), DriveConstants.ROOT_FOLDER_NAME, selectedDriveAccountEmail)
                                 Toast.makeText(context, "Enviando backup para o Drive...", Toast.LENGTH_SHORT).show()
+                            },
+                            onRestoreAppClick = {
+                                val points = viewModel.getBackupPointsForApp(app.packageName)
+                                val latest = points.maxByOrNull { it.timestamp }
+                                if (latest != null) {
+                                    selectedBackupForRestoreScreen = viewModel.createBackupRecordFromPoint(latest)
+                                } else {
+                                    val record = appBackups.maxByOrNull { it.timestamp }
+                                    if (record != null) {
+                                        selectedBackupForRestoreScreen = record
+                                    } else {
+                                        Toast.makeText(context, "Nenhum backup encontrado para este app", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
                             }
                         )
                     }
@@ -725,11 +756,25 @@ fun AppsListScreen(
                                     selectedPackages.add(app.packageName)
                                 }
                             },
-                            onRestoreBackup = { backupToRestore = it },
+                            onRestoreBackup = { selectedBackupForRestoreScreen = it },
                             onDeleteBackup = { backupToDelete = it },
                             onUploadBackupToDrive = {
                                 viewModel.uploadBackupsToDrive(listOf(it), DriveConstants.ROOT_FOLDER_NAME, selectedDriveAccountEmail)
                                 Toast.makeText(context, "Enviando backup para o Drive...", Toast.LENGTH_SHORT).show()
+                            },
+                            onRestoreAppClick = {
+                                val points = viewModel.getBackupPointsForApp(app.packageName)
+                                val latest = points.maxByOrNull { it.timestamp }
+                                if (latest != null) {
+                                    selectedBackupForRestoreScreen = viewModel.createBackupRecordFromPoint(latest)
+                                } else {
+                                    val record = appBackups.maxByOrNull { it.timestamp }
+                                    if (record != null) {
+                                        selectedBackupForRestoreScreen = record
+                                    } else {
+                                        Toast.makeText(context, "Nenhum backup encontrado para este app", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
                             }
                         )
                     }
@@ -785,11 +830,25 @@ fun AppsListScreen(
                                 selectedPackages.add(app.packageName)
                             }
                         },
-                        onRestoreBackup = { backupToRestore = it },
+                        onRestoreBackup = { selectedBackupForRestoreScreen = it },
                         onDeleteBackup = { backupToDelete = it },
                         onUploadBackupToDrive = {
                             viewModel.uploadBackupsToDrive(listOf(it), DriveConstants.ROOT_FOLDER_NAME, selectedDriveAccountEmail)
                             Toast.makeText(context, "Enviando backup para o Drive...", Toast.LENGTH_SHORT).show()
+                        },
+                        onRestoreAppClick = {
+                            val points = viewModel.getBackupPointsForApp(app.packageName)
+                            val latest = points.maxByOrNull { it.timestamp }
+                            if (latest != null) {
+                                selectedBackupForRestoreScreen = viewModel.createBackupRecordFromPoint(latest)
+                            } else {
+                                val record = appBackups.maxByOrNull { it.timestamp }
+                                if (record != null) {
+                                    selectedBackupForRestoreScreen = record
+                                } else {
+                                    Toast.makeText(context, "Nenhum backup encontrado para este app", Toast.LENGTH_SHORT).show()
+                                }
+                            }
                         }
                     )
                 }
@@ -1158,7 +1217,8 @@ fun AppListItemCard(
     onLongClick: () -> Unit,
     onRestoreBackup: (BackupRecord) -> Unit,
     onDeleteBackup: (BackupRecord) -> Unit,
-    onUploadBackupToDrive: (BackupRecord) -> Unit
+    onUploadBackupToDrive: (BackupRecord) -> Unit,
+    onRestoreAppClick: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val iconCache = remember { IconCacheManager.getInstance(context) }
@@ -1287,17 +1347,34 @@ fun AppListItemCard(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         val hasBackup = backupStatus.hasBackup
-                        val backupText = if (hasBackup) backupStatus.formattedText else "Sem backup"
                         val backupTextColor = if (hasBackup) StatusSuccess else TextMuted
 
-                        Text(
-                            text = backupText,
-                            fontSize = 10.5.sp,
-                            color = backupTextColor,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false)
-                        )
+                        Row(
+                            modifier = Modifier.weight(1f, fill = false),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (hasBackup) {
+                                val locIcon = when {
+                                    backupStatus.hasLocal && backupStatus.hasDrive -> Icons.Default.CloudDone
+                                    backupStatus.hasDrive -> Icons.Default.Cloud
+                                    else -> Icons.Default.Smartphone
+                                }
+                                Icon(
+                                    imageVector = locIcon,
+                                    contentDescription = null,
+                                    tint = StatusSuccess,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                            }
+                            Text(
+                                text = if (hasBackup) backupStatus.formattedText else "Sem backup",
+                                fontSize = 11.sp,
+                                color = backupTextColor,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
 
                         Spacer(modifier = Modifier.width(8.dp))
 
@@ -1306,18 +1383,34 @@ fun AppListItemCard(
 
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
+                                .clip(RoundedCornerShape(6.dp))
                                 .background(statusBadgeColor.copy(alpha = 0.15f))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                                .then(
+                                    if (hasBackup) {
+                                        Modifier.clickable { onRestoreAppClick() }
+                                    } else Modifier
+                                )
+                                .padding(horizontal = 7.dp, vertical = 3.dp)
                         ) {
-                            Text(
-                                text = statusBadgeText,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = statusBadgeColor,
-                                maxLines = 1,
-                                softWrap = false
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (hasBackup) {
+                                    Icon(
+                                        Icons.Default.Restore,
+                                        contentDescription = "Restaurar",
+                                        tint = statusBadgeColor,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                }
+                                Text(
+                                    text = statusBadgeText,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = statusBadgeColor,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            }
                         }
                     }
                 }

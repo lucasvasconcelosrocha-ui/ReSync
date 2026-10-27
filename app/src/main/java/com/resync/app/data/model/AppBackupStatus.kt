@@ -5,6 +5,28 @@ import com.resync.app.util.FormatUtils
 /**
  * Model representing the detected backup status of an installed or recorded application.
  */
+/**
+ * Granular backup point for an application, whether from an individual backup
+ * or inside a full backup package (.resync, .zip).
+ */
+data class AppBackupPoint(
+    val backupId: String,
+    val backupTitle: String,
+    val timestamp: Long,
+    val isLocal: Boolean,
+    val isDrive: Boolean,
+    val filePath: String = "",
+    val driveFileId: String? = null,
+    val containerSizeBytes: Long = 0L,
+    val appSizeBytes: Long = 0L,
+    val versionName: String? = null,
+    val versionCode: Long = 0L,
+    val hasApk: Boolean = true,
+    val hasData: Boolean = false,
+    val isFullPackage: Boolean = false,
+    val itemIds: List<String> = emptyList()
+)
+
 data class AppBackupStatus(
     val packageName: String,
     val hasBackup: Boolean = false,
@@ -38,9 +60,9 @@ data class AppBackupStatus(
             val latestTime = maxOf(localTime ?: 0L, driveTime ?: 0L)
             val dateFormatted = FormatUtils.formatDate(latestTime)
             val location = when {
-                hasLocal && hasDrive -> "Memória interna + Drive"
-                hasLocal -> "Memória interna"
-                else -> "Drive"
+                hasLocal && hasDrive -> "Local + Nuvem"
+                hasLocal -> "Local"
+                else -> "Nuvem"
             }
 
             return AppBackupStatus(
@@ -49,7 +71,7 @@ data class AppBackupStatus(
                 latestTimestamp = latestTime,
                 hasLocal = hasLocal,
                 hasDrive = hasDrive,
-                formattedText = "Backup: $dateFormatted · $location",
+                formattedText = "Backup: $dateFormatted • $location",
                 badgeText = "Com backup"
             )
         }
