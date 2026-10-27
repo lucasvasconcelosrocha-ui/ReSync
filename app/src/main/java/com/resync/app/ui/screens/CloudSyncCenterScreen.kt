@@ -6,6 +6,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import java.io.File
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -245,7 +246,7 @@ fun CloudSyncCenterScreen(
         }
         RestoreSelectionScreen(
             backup = b,
-            source = if (!b.driveFileId.isNullOrBlank()) RestoreSource.DRIVE else RestoreSource.LOCAL,
+            source = if (File(b.filePath).exists()) RestoreSource.LOCAL else (if (!b.driveFileId.isNullOrBlank()) RestoreSource.DRIVE else RestoreSource.LOCAL),
             viewModel = viewModel,
             initialCategoryId = cat,
             exclusiveCategoryMode = true,
@@ -270,10 +271,11 @@ fun CloudSyncCenterScreen(
             Toast.makeText(context, "Nenhum backup de $catName encontrado nesta etiqueta.", Toast.LENGTH_SHORT).show()
         } else if (matching.size == 1) {
             val file = matching.first()
+            val localFile = resolveLocalMirrorFile(context, viewModel.backupRecords.value, file.name, file.id)
             val rec = BackupRecord(
                 id = file.id,
                 title = file.name,
-                filePath = "",
+                filePath = localFile?.absolutePath ?: "",
                 sizeBytes = file.sizeBytes,
                 checksumSha256 = file.md5Checksum ?: "",
                 isEncrypted = file.name.endsWith(".svb") || file.name.endsWith(".resync"),
@@ -281,7 +283,7 @@ fun CloudSyncCenterScreen(
                 itemCount = 1,
                 status = BackupStatus.COMPLETED,
                 destination = "Google Drive",
-                syncStatus = SyncStatus.UPLOADED,
+                syncStatus = if (localFile != null && localFile.exists()) SyncStatus.SYNCED else SyncStatus.UPLOADED,
                 driveFileId = file.id
             )
             selectiveRestoreBackup = rec
@@ -1101,22 +1103,28 @@ fun CloudSyncCenterScreen(
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Row(
+                                        modifier = Modifier.weight(1f),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
                                         Icon(Icons.Default.Label, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(20.dp))
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text(
                                             text = "Etiqueta do backup na nuvem",
                                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                            color = TextPrimary
+                                            color = TextPrimary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                     }
+                                    Spacer(modifier = Modifier.width(8.dp))
                                     TextButton(
                                         onClick = { showLabelManagerModal = true },
                                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                                     ) {
                                         Icon(Icons.Default.Tune, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(15.dp))
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Gerenciar", fontSize = 12.sp, color = primaryAccent, fontWeight = FontWeight.Bold)
+                                        Text("Gerenciar", fontSize = 12.sp, color = primaryAccent, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
                                     }
                                 }
                                 Spacer(modifier = Modifier.height(4.dp))
@@ -2447,10 +2455,11 @@ fun CloudSyncCenterScreen(
                                             )
                                             Button(
                                                 onClick = {
+                                                    val localFile = resolveLocalMirrorFile(context, viewModel.backupRecords.value, file.name, file.id)
                                                     val rec = BackupRecord(
                                                         id = file.id,
                                                         title = file.name,
-                                                        filePath = "",
+                                                        filePath = localFile?.absolutePath ?: "",
                                                         sizeBytes = file.sizeBytes,
                                                         checksumSha256 = file.md5Checksum ?: "",
                                                         isEncrypted = file.name.endsWith(".svb") || file.name.endsWith(".resync"),
@@ -2458,7 +2467,7 @@ fun CloudSyncCenterScreen(
                                                         itemCount = 1,
                                                         status = BackupStatus.COMPLETED,
                                                         destination = "Google Drive",
-                                                        syncStatus = SyncStatus.UPLOADED,
+                                                        syncStatus = if (localFile != null && localFile.exists()) SyncStatus.SYNCED else SyncStatus.UPLOADED,
                                                         driveFileId = file.id
                                                     )
                                                     selectedCategoryModal = null
@@ -3025,5 +3034,36 @@ private fun CompactCloudInfoRow(
             overflow = TextOverflow.Ellipsis
         )
     }
+}
+
+private fun resolveLocalMirrorFile(
+    context: Context,
+    localRecords: List<BackupRecord>,
+    fileName: String,
+    driveFileId: String?
+): File? {
+    // 1. Procurar nos registros do Room do ViewModel
+    localRecords.firstOrNull {
+        (!driveFileId.isNullOrBlank() && it.driveFileId == driveFileId) ||
+        (it.title.isNotBlank() && (it.title == fileName || it.filePath.endsWith(fileName) || it.filePath.endsWith("${fileName}.resync")))
+    }?.let { rec ->
+        val f = File(rec.filePath)
+        if (f.exists() && f.length() > 0L) return f
+    }
+
+    // 2. Procurar nos diretórios locais de backup
+    val baseName = fileName.removeSuffix(".resync").removeSuffix(".svb").removeSuffix(".zip")
+    com.resync.app.data.model.BackupPaths.getAllLocalBackupDirs(context).forEach { baseDir ->
+        if (baseDir.exists()) {
+            baseDir.walkTopDown().maxDepth(3).forEach { f ->
+                if (f.isFile && f.length() > 0L) {
+                    if (f.name == fileName || f.name == "$baseName.resync" || f.name == "$baseName.svb" || f.name == "$baseName.zip") {
+                        return f
+                    }
+                }
+            }
+        }
+    }
+    return null
 }
 

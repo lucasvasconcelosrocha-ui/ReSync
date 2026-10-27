@@ -12,6 +12,7 @@ import com.resync.app.data.model.BackupRecord
 import com.resync.app.data.room.AppRoomDatabase
 import com.resync.app.data.room.BackupIndexCacheEntity
 import com.resync.app.engine.MultiPartSeekableByteChannel
+import com.resync.app.engine.SecurityManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -781,12 +782,13 @@ class BackupIndexManager(
 
     /**
      * Lê o Diretório Central via Range em STREAMING (sem carregar tudo em memória).
-     * Retorna a entrada de manifest.json ou null se não existir.
+     * Localiza qualquer entrada especificada (como manifest.json, sms_backup.json, etc.).
      */
-    private suspend fun findManifestInRemoteCentralDirectory(
+    private suspend fun findEntryInRemoteCentralDirectory(
         fileId: String,
         cdOffset: Long,
         cdSize: Long,
+        targetEntryPath: String,
         accountEmail: String?,
         onFraction: ((Float) -> Unit)? = null
     ): Result<CdEntry?> = withContext(Dispatchers.IO) {
@@ -826,6 +828,7 @@ class BackupIndexManager(
             val fixed = ByteArray(46)
             var consumed = 0L
             var lastReport = 0L
+            val targetClean = targetEntryPath.trim().removePrefix("/")
 
             while (consumed + 46 <= cdSize) {
                 input.readFully(fixed)
@@ -846,8 +849,13 @@ class BackupIndexManager(
                 if (commentLen > 0) input.skipFully(commentLen.toLong())
                 consumed += 46L + nameLen + extraLen + commentLen
 
-                val entryName = String(nameBytes, Charsets.UTF_8)
-                if (entryName == "manifest.json" || entryName.endsWith("/manifest.json")) {
+                val entryName = String(nameBytes, Charsets.UTF_8).removePrefix("/")
+                val matches = entryName.equals(targetClean, ignoreCase = true) ||
+                        entryName.endsWith("/$targetClean", ignoreCase = true) ||
+                        targetClean.endsWith("/$entryName", ignoreCase = true) ||
+                        entryName.substringAfterLast("/").equals(targetClean.substringAfterLast("/"), ignoreCase = true)
+
+                if (matches) {
                     if (extraLen > 0) {
                         val eb = ByteBuffer.wrap(extra).order(ByteOrder.LITTLE_ENDIAN)
                         while (eb.remaining() >= 4) {
@@ -876,6 +884,170 @@ class BackupIndexManager(
             Result.failure(e)
         } finally {
             conn?.disconnect()
+        }
+    }
+
+    private suspend fun findManifestInRemoteCentralDirectory(
+        fileId: String,
+        cdOffset: Long,
+        cdSize: Long,
+        accountEmail: String?,
+        onFraction: ((Float) -> Unit)? = null
+    ): Result<CdEntry?> {
+        return findEntryInRemoteCentralDirectory(fileId, cdOffset, cdSize, "manifest.json", accountEmail, onFraction)
+    }
+
+    /**
+     * Baixa e descriptografa sob demanda apenas uma entrada específica de um container ZIP no Drive
+     * usando HTTP Range request, sem necessidade de baixar o container completo.
+     */
+    suspend fun fetchRemoteEntryBytes(
+        fileId: String,
+        fileName: String,
+        fileSize: Long,
+        entryPath: String,
+        accountEmail: String?,
+        decryptionPassword: String? = null
+    ): ByteArray? = withContext(Dispatchers.IO) {
+        val cacheDir = File(context.cacheDir, "remote_entry_cache/$fileId")
+        cacheDir.mkdirs()
+        val safeEntryName = entryPath.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+        val cachedFile = File(cacheDir, safeEntryName)
+        if (cachedFile.exists() && cachedFile.length() > 0L) {
+            return@withContext cachedFile.readBytes()
+        }
+
+        try {
+            var token = oAuthManager.getValidAccessToken(accountEmail)
+            if (token == null) {
+                val refreshed = oAuthManager.forceRefreshToken(accountEmail = accountEmail)
+                if (refreshed.isSuccess) token = refreshed.getOrThrow()
+            }
+            if (token == null) return@withContext null
+
+            var realFileSize = fileSize
+            if (realFileSize <= 0L) {
+                val meta = fetchDriveFileMetadata(fileId, token).getOrNull()
+                if (meta != null && meta.sizeBytes > 0L) {
+                    realFileSize = meta.sizeBytes
+                }
+            }
+            if (realFileSize <= 0L) return@withContext null
+
+            // 1. Localizar Diretório Central via EOCD / ZIP64
+            val tailReadSize = minOf(realFileSize, 65557L).toInt()
+            val tailStart = realFileSize - tailReadSize
+            val tailResult = fetchRemoteRangeBytes(fileId, fileName, realFileSize, tailStart, realFileSize - 1, accountEmail)
+            if (tailResult.isFailure) return@withContext null
+            val tailBytes = tailResult.getOrThrow()
+
+            var eocdOffsetInTail = -1
+            for (i in (tailBytes.size - 22) downTo 0) {
+                if (tailBytes[i] == 0x50.toByte() && tailBytes[i + 1] == 0x4B.toByte() &&
+                    tailBytes[i + 2] == 0x05.toByte() && tailBytes[i + 3] == 0x06.toByte()
+                ) {
+                    eocdOffsetInTail = i
+                    break
+                }
+            }
+            if (eocdOffsetInTail == -1) return@withContext null
+
+            val bbEocd = ByteBuffer.wrap(tailBytes, eocdOffsetInTail, tailBytes.size - eocdOffsetInTail).order(ByteOrder.LITTLE_ENDIAN)
+            bbEocd.position(12)
+            var cdSize = bbEocd.int.toLong() and 0xFFFFFFFFL
+            var cdOffset = bbEocd.int.toLong() and 0xFFFFFFFFL
+
+            val zip64LocatorOffsetInTail = eocdOffsetInTail - 20
+            if (zip64LocatorOffsetInTail >= 0) {
+                val bbLoc = ByteBuffer.wrap(tailBytes, zip64LocatorOffsetInTail, 20).order(ByteOrder.LITTLE_ENDIAN)
+                if (bbLoc.int == 0x07064b50) {
+                    bbLoc.position(8)
+                    val zip64EocdOffset = bbLoc.long
+                    val z64Res = fetchRemoteRangeBytes(fileId, fileName, realFileSize, zip64EocdOffset, zip64EocdOffset + 55, accountEmail)
+                    if (z64Res.isSuccess) {
+                        val bbZ64 = ByteBuffer.wrap(z64Res.getOrThrow()).order(ByteOrder.LITTLE_ENDIAN)
+                        if (bbZ64.int == 0x06064b50) {
+                            bbZ64.position(40)
+                            cdSize = bbZ64.long
+                            cdOffset = bbZ64.long
+                        }
+                    }
+                }
+            }
+
+            if (cdOffset <= 0L || cdSize <= 0L) return@withContext null
+
+            // 2. Localizar entrada desejada no Diretório Central
+            val cdEntry = findEntryInRemoteCentralDirectory(fileId, cdOffset, cdSize, entryPath, accountEmail).getOrNull()
+                ?: return@withContext null
+
+            val localHeaderEnd = minOf(realFileSize - 1, cdEntry.localHeaderOffset + 30 + 512L)
+            val localHeaderRes = fetchRemoteRangeBytes(fileId, fileName, realFileSize, cdEntry.localHeaderOffset, localHeaderEnd, accountEmail)
+            if (localHeaderRes.isFailure) return@withContext null
+            val localBytes = localHeaderRes.getOrThrow()
+            val bbLoc = ByteBuffer.wrap(localBytes).order(ByteOrder.LITTLE_ENDIAN)
+            if (bbLoc.int != 0x04034b50) return@withContext null
+            bbLoc.position(26)
+            val locNameLen = bbLoc.short.toInt() and 0xFFFF
+            val locExtraLen = bbLoc.short.toInt() and 0xFFFF
+            val dataOffset = cdEntry.localHeaderOffset + 30 + locNameLen + locExtraLen
+
+            // 3. Baixar os bytes da entrada
+            if (cdEntry.compSize <= 0L) return@withContext ByteArray(0)
+            val dataEnd = minOf(realFileSize - 1, dataOffset + cdEntry.compSize - 1)
+            val dataRes = fetchRemoteRangeBytes(fileId, fileName, realFileSize, dataOffset, dataEnd, accountEmail)
+            if (dataRes.isFailure) return@withContext null
+            val rawCompressed = dataRes.getOrThrow()
+
+            // 4. Descompactar se DEFLATED
+            val decompressed = when (cdEntry.method) {
+                0 -> rawCompressed
+                8 -> {
+                    try {
+                        val inflater = java.util.zip.Inflater(true)
+                        try {
+                            java.util.zip.InflaterInputStream(ByteArrayInputStream(rawCompressed), inflater).use { it.readBytes() }
+                        } finally {
+                            inflater.end()
+                        }
+                    } catch (_: Exception) {
+                        val inflater = java.util.zip.Inflater(false)
+                        try {
+                            java.util.zip.InflaterInputStream(ByteArrayInputStream(rawCompressed), inflater).use { it.readBytes() }
+                        } finally {
+                            inflater.end()
+                        }
+                    }
+                }
+                else -> rawCompressed
+            }
+
+            // 5. Descriptografar se criptografado
+            val finalBytes = if (decompressed.size >= 4 && (
+                (decompressed[0] == SecurityManager.RESY_MAGIC[0] &&
+                 decompressed[1] == SecurityManager.RESY_MAGIC[1] &&
+                 decompressed[2] == SecurityManager.RESY_MAGIC[2] &&
+                 decompressed[3] == SecurityManager.RESY_MAGIC[3]) ||
+                (decompressed[0] == SecurityManager.SVBE_MAGIC[0] &&
+                 decompressed[1] == SecurityManager.SVBE_MAGIC[1] &&
+                 decompressed[2] == SecurityManager.SVBE_MAGIC[2] &&
+                 decompressed[3] == SecurityManager.SVBE_MAGIC[3])
+            )) {
+                val baos = ByteArrayOutputStream()
+                SecurityManager.decryptStreamChunked(
+                    ByteArrayInputStream(decompressed), baos, decryptionPassword, accountEmail
+                )
+                baos.toByteArray()
+            } else {
+                decompressed
+            }
+
+            cachedFile.writeBytes(finalBytes)
+            Log.i(TAG, "Entrada remota '$entryPath' baixada com sucesso (${finalBytes.size} bytes).")
+            finalBytes
+        } catch (e: Exception) {
+            Log.e(TAG, "Falha ao obter entrada remota '$entryPath': ${e.message}", e)
+            null
         }
     }
 

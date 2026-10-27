@@ -1610,14 +1610,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             Log.d("RestoreInspection", "[INSPECT] Verificando backup ${record.id} ('${record.title}')...")
             dbHelper.insertLog(LogLevel.INFO, "Restore", "Iniciando inspeção do backup '${record.title}' (${record.id})")
 
-            val localFile = File(record.filePath)
-            val hasValidLocalFile = !forceCloudSource && localFile.exists() && localFile.length() > 0 && !record.filePath.contains("/staging")
+            var localFile = File(record.filePath)
+            if (!localFile.exists() || localFile.length() == 0L) {
+                val matched = _backupRecords.value.firstOrNull {
+                    (!it.driveFileId.isNullOrBlank() && it.driveFileId == record.driveFileId) ||
+                    (it.title.isNotBlank() && (it.title == record.title || it.filePath.endsWith(record.title) || it.filePath.endsWith("${record.title}.resync")))
+                }
+                if (matched != null && File(matched.filePath).exists()) {
+                    localFile = File(matched.filePath)
+                } else {
+                    val baseName = record.title.removeSuffix(".resync").removeSuffix(".svb").removeSuffix(".zip")
+                    val found = com.resync.app.data.model.BackupPaths.getAllLocalBackupDirs(context).flatMap { baseDir ->
+                        if (baseDir.exists()) {
+                            baseDir.walkTopDown().maxDepth(3).filter { f ->
+                                f.isFile && f.length() > 0L && (f.name == record.title || f.name == "$baseName.resync" || f.name == "$baseName.svb" || f.name == "$baseName.zip")
+                            }
+                        } else emptySequence()
+                    }.firstOrNull()
+                    if (found != null) {
+                        localFile = found
+                    }
+                }
+            }
+
+            val hasValidLocalFile = !forceCloudSource && localFile.exists() && localFile.length() > 0 && !localFile.absolutePath.contains("/staging")
 
             // 1. Tentar recuperar instantaneamente do cache no Room (Problema 2, item 3)
             val cachedManifest = backupIndexManager.getCachedManifest(record.id, record.driveFileId, record.filePath)
             if (cachedManifest != null) {
                 Log.d("RestoreInspection", "[INSPECT] Manifesto lido instantaneamente do cache Room (${cachedManifest.items.size} itens).")
-                _manifestInspectState.value = ManifestInspectState.Ready(cachedManifest, if (hasValidLocalFile) localFile else null)
+                _manifestInspectState.value = ManifestInspectState.Ready(cachedManifest, if (localFile.exists() && localFile.length() > 0L) localFile else null)
                 return@launch
             }
 
@@ -1718,7 +1740,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val manifest = inspectRes.getOrThrow()
                 Log.d("RestoreInspection", "[INSPECT] Índice lido com sucesso da nuvem (${manifest.items.size} itens).")
                 dbHelper.insertLog(LogLevel.INFO, "Restore", "Índice do backup lido com sucesso (${manifest.items.size} itens disponíveis para restauração).")
-                _manifestInspectState.value = ManifestInspectState.Ready(manifest, null)
+                _manifestInspectState.value = ManifestInspectState.Ready(manifest, if (localFile.exists() && localFile.length() > 0L) localFile else null)
             } else {
                 val dlEx = inspectRes.exceptionOrNull()
                 val fullCauses = mutableListOf<String>()
@@ -1746,6 +1768,38 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _manifestInspectState.value = ManifestInspectState.Error(errMsg, canRetry = true)
             }
         }
+    }
+
+    suspend fun fetchRemoteEntryBytes(record: BackupRecord, entryPath: String, password: String? = null): ByteArray? {
+        val fileId = record.driveFileId ?: (if (File(record.filePath).exists()) null else record.id) ?: return null
+        val emailRegex = "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}".toRegex()
+        val accountFromDest = emailRegex.find(record.destination)?.value
+        val primaryEmail = accountFromDest ?: _activeAccountEmail.value ?: _multiCloudAccounts.value.firstOrNull()?.email
+        
+        val firstResult = backupIndexManager.fetchRemoteEntryBytes(
+            fileId = fileId,
+            fileName = record.title,
+            fileSize = record.sizeBytes,
+            entryPath = entryPath,
+            accountEmail = primaryEmail,
+            decryptionPassword = password
+        )
+        if (firstResult != null) return firstResult
+
+        // Se falhar na conta primária, tenta nas outras contas Google conectadas
+        val candidates = _multiCloudAccounts.value.map { it.email }.filter { it != primaryEmail }
+        for (altEmail in candidates) {
+            val altResult = backupIndexManager.fetchRemoteEntryBytes(
+                fileId = fileId,
+                fileName = record.title,
+                fileSize = record.sizeBytes,
+                entryPath = entryPath,
+                accountEmail = altEmail,
+                decryptionPassword = password
+            )
+            if (altResult != null) return altResult
+        }
+        return null
     }
 
     fun launchRestore(

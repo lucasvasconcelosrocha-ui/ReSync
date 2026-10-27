@@ -163,7 +163,20 @@ fun AppDetailScreen(
     var appTags by remember(app.packageName) { mutableStateOf(viewModel.getAppTags(app.packageName)) }
 
     // Diálogos e Menus
-    var showBackupDropdown by remember { mutableStateOf(false) }
+    var showSelectiveBackupSheet by remember { mutableStateOf(false) }
+    var selectiveDestType by remember { mutableStateOf(BackupDestinationType.SOMENTE_INTERNA) }
+    var checkedBaseApk by remember { mutableStateOf(true) }
+    var checkedSplits by remember { mutableStateOf(true) }
+    var checkedInternalData by remember { mutableStateOf(true) }
+    var checkedExternalData by remember { mutableStateOf(true) }
+    var checkedObb by remember { mutableStateOf(true) }
+    var checkedPermissions by remember { mutableStateOf(true) }
+
+    // Opções de inclusão rápida no backup
+    var backupIncludeApk by remember { mutableStateOf(true) }
+    var backupIncludeInternalData by remember { mutableStateOf(true) }
+    var backupIncludeExternalData by remember { mutableStateOf(true) }
+    var backupIncludeObb by remember { mutableStateOf(true) }
     var showOptionsMenuSheet by remember { mutableStateOf(false) }
     var showUninstallDialog by remember { mutableStateOf(false) }
     var showClearDataDialog by remember { mutableStateOf(false) }
@@ -172,12 +185,6 @@ fun AppDetailScreen(
     var showApksBottomSheet by remember { mutableStateOf(false) }
     var showDataBottomSheet by remember { mutableStateOf(false) }
     var backupToDelete by remember { mutableStateOf<Pair<UnifiedBackupEntry, String>?>(null) }
-
-    // Opções de inclusão no backup
-    var backupIncludeApk by remember { mutableStateOf(true) }
-    var backupIncludeInternalData by remember { mutableStateOf(true) }
-    var backupIncludeExternalData by remember { mutableStateOf(true) }
-    var backupIncludeObb by remember { mutableStateOf(true) }
 
     // Estado de medição real de APKs e Dados
     var apkDetails by remember(app.packageName) { mutableStateOf(AppStorageInspector.getCachedApkDetails(app.packageName)) }
@@ -629,146 +636,22 @@ fun AppDetailScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Box(modifier = Modifier.weight(1f)) {
-                        Button(
-                            onClick = { showBackupDropdown = true },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(50.dp),
-                            shape = RoundedCornerShape(50),
-                            colors = ButtonDefaults.buttonColors(containerColor = primaryAccent)
-                        ) {
-                            Icon(imageVector = Icons.Default.Add, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "BACKUP",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.Black
-                            )
-                            Spacer(modifier = Modifier.width(2.dp))
-                            Icon(imageVector = Icons.Default.ArrowDropDown, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
-                        }
-
-                        DropdownMenu(
-                            expanded = showBackupDropdown,
-                            onDismissRequest = { showBackupDropdown = false },
-                            modifier = Modifier
-                                .background(DarkSurface)
-                                .border(1.dp, DarkCardBorder, RoundedCornerShape(12.dp))
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("Backup para o dispositivo", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium) },
-                                leadingIcon = { Icon(Icons.Default.PhoneAndroid, contentDescription = null, tint = primaryAccent) },
-                                onClick = {
-                                    showBackupDropdown = false
-                                    viewModel.launchBackup(
-                                        title = "Backup de ${app.appName}",
-                                        selectedApps = listOf(
-                                            Pair(
-                                                app,
-                                                AppSelectionOptions(
-                                                    includeBaseApk = backupIncludeApk,
-                                                    includeSplits = backupIncludeApk && app.splitSourceDirs.isNotEmpty(),
-                                                    includeData = backupIncludeInternalData || backupIncludeExternalData || backupIncludeObb,
-                                                    includeInternalData = backupIncludeInternalData,
-                                                    includeExternalData = backupIncludeExternalData,
-                                                    includeObb = backupIncludeObb,
-                                                    relatedSettings = true
-                                                )
-                                            )
-                                        ),
-                                        selectedFiles = emptyList(),
-                                        includeSms = false,
-                                        includeCalls = false,
-                                        includeDns = false,
-                                        includeWallpaper = false,
-                                        destinationLabel = "Memória interna",
-                                        destinationType = BackupDestinationType.SOMENTE_INTERNA
-                                    )
-                                    Toast.makeText(context, "Iniciando backup no dispositivo...", Toast.LENGTH_SHORT).show()
-                                }
-                            )
-
-                            DropdownMenuItem(
-                                text = { Text("Backup na Nuvem (Google Drive)", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium) },
-                                leadingIcon = { Icon(Icons.Default.CloudUpload, contentDescription = null, tint = AccentElectricCyan) },
-                                onClick = {
-                                    showBackupDropdown = false
-                                    viewModel.launchBackup(
-                                        title = "Backup de ${app.appName}",
-                                        selectedApps = listOf(
-                                            Pair(
-                                                app,
-                                                AppSelectionOptions(
-                                                    includeBaseApk = backupIncludeApk,
-                                                    includeSplits = backupIncludeApk && app.splitSourceDirs.isNotEmpty(),
-                                                    includeData = backupIncludeInternalData || backupIncludeExternalData || backupIncludeObb,
-                                                    includeInternalData = backupIncludeInternalData,
-                                                    includeExternalData = backupIncludeExternalData,
-                                                    includeObb = backupIncludeObb,
-                                                    relatedSettings = true
-                                                )
-                                            )
-                                        ),
-                                        selectedFiles = emptyList(),
-                                        includeSms = false,
-                                        includeCalls = false,
-                                        includeDns = false,
-                                        includeWallpaper = false,
-                                        targetCloudProvider = CloudProviderType.GOOGLE_DRIVE,
-                                        destinationLabel = "Google Drive",
-                                        destinationType = BackupDestinationType.SOMENTE_DRIVE
-                                    )
-                                    Toast.makeText(context, "Iniciando backup no Google Drive...", Toast.LENGTH_SHORT).show()
-                                }
-                            )
-
-                            DropdownMenuItem(
-                                text = { Text("Backup para o dispositivo e nuvem", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium) },
-                                leadingIcon = { Icon(Icons.Default.Sync, contentDescription = null, tint = AccentEmeraldGreen) },
-                                onClick = {
-                                    showBackupDropdown = false
-                                    viewModel.launchBackup(
-                                        title = "Backup de ${app.appName}",
-                                        selectedApps = listOf(
-                                            Pair(
-                                                app,
-                                                AppSelectionOptions(
-                                                    includeBaseApk = backupIncludeApk,
-                                                    includeSplits = backupIncludeApk && app.splitSourceDirs.isNotEmpty(),
-                                                    includeData = backupIncludeInternalData || backupIncludeExternalData || backupIncludeObb,
-                                                    includeInternalData = backupIncludeInternalData,
-                                                    includeExternalData = backupIncludeExternalData,
-                                                    includeObb = backupIncludeObb,
-                                                    relatedSettings = true
-                                                )
-                                            )
-                                        ),
-                                        selectedFiles = emptyList(),
-                                        includeSms = false,
-                                        includeCalls = false,
-                                        includeDns = false,
-                                        includeWallpaper = false,
-                                        targetCloudProvider = CloudProviderType.GOOGLE_DRIVE,
-                                        destinationLabel = "Interna + Drive",
-                                        destinationType = BackupDestinationType.INTERNA_E_DRIVE
-                                    )
-                                    Toast.makeText(context, "Iniciando backup no dispositivo e nuvem...", Toast.LENGTH_SHORT).show()
-                                }
-                            )
-
-                            HorizontalDivider(color = DarkCardBorder)
-
-                            DropdownMenuItem(
-                                text = { Text("Compartilhar APK", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium) },
-                                leadingIcon = { Icon(Icons.Default.Share, contentDescription = null, tint = AccentSunsetOrange) },
-                                onClick = {
-                                    showBackupDropdown = false
-                                    shareAppApk()
-                                }
-                            )
-                        }
+                    Button(
+                        onClick = { showSelectiveBackupSheet = true },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(50.dp),
+                        shape = RoundedCornerShape(50),
+                        colors = ButtonDefaults.buttonColors(containerColor = primaryAccent)
+                    ) {
+                        Icon(imageVector = Icons.Default.Add, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "BACKUP",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Black
+                        )
                     }
 
                     // Botão destacado "RESTAURAR"
@@ -802,146 +685,22 @@ fun AppDetailScreen(
                     }
                 }
             } else {
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    Button(
-                        onClick = { showBackupDropdown = true },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp),
-                        shape = RoundedCornerShape(50),
-                        colors = ButtonDefaults.buttonColors(containerColor = primaryAccent)
-                    ) {
-                        Icon(imageVector = Icons.Default.Add, contentDescription = null, tint = Color.Black, modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "BACKUP",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.Black
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Icon(imageVector = Icons.Default.ArrowDropDown, contentDescription = null, tint = Color.Black)
-                    }
-
-                    DropdownMenu(
-                        expanded = showBackupDropdown,
-                        onDismissRequest = { showBackupDropdown = false },
-                        modifier = Modifier
-                            .background(DarkSurface)
-                            .border(1.dp, DarkCardBorder, RoundedCornerShape(12.dp))
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Backup para o dispositivo", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium) },
-                            leadingIcon = { Icon(Icons.Default.PhoneAndroid, contentDescription = null, tint = primaryAccent) },
-                            onClick = {
-                                showBackupDropdown = false
-                                viewModel.launchBackup(
-                                    title = "Backup de ${app.appName}",
-                                    selectedApps = listOf(
-                                        Pair(
-                                            app,
-                                            AppSelectionOptions(
-                                                includeBaseApk = backupIncludeApk,
-                                                includeSplits = backupIncludeApk && app.splitSourceDirs.isNotEmpty(),
-                                                includeData = backupIncludeInternalData || backupIncludeExternalData || backupIncludeObb,
-                                                includeInternalData = backupIncludeInternalData,
-                                                includeExternalData = backupIncludeExternalData,
-                                                includeObb = backupIncludeObb,
-                                                relatedSettings = true
-                                            )
-                                        )
-                                    ),
-                                    selectedFiles = emptyList(),
-                                    includeSms = false,
-                                    includeCalls = false,
-                                    includeDns = false,
-                                    includeWallpaper = false,
-                                    destinationLabel = "Memória interna",
-                                    destinationType = BackupDestinationType.SOMENTE_INTERNA
-                                )
-                                Toast.makeText(context, "Iniciando backup no dispositivo...", Toast.LENGTH_SHORT).show()
-                            }
-                        )
-
-                        DropdownMenuItem(
-                            text = { Text("Backup na Nuvem (Google Drive)", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium) },
-                            leadingIcon = { Icon(Icons.Default.CloudUpload, contentDescription = null, tint = AccentElectricCyan) },
-                            onClick = {
-                                showBackupDropdown = false
-                                viewModel.launchBackup(
-                                    title = "Backup de ${app.appName}",
-                                    selectedApps = listOf(
-                                        Pair(
-                                            app,
-                                            AppSelectionOptions(
-                                                includeBaseApk = backupIncludeApk,
-                                                includeSplits = backupIncludeApk && app.splitSourceDirs.isNotEmpty(),
-                                                includeData = backupIncludeInternalData || backupIncludeExternalData || backupIncludeObb,
-                                                includeInternalData = backupIncludeInternalData,
-                                                includeExternalData = backupIncludeExternalData,
-                                                includeObb = backupIncludeObb,
-                                                relatedSettings = true
-                                            )
-                                        )
-                                    ),
-                                    selectedFiles = emptyList(),
-                                    includeSms = false,
-                                    includeCalls = false,
-                                    includeDns = false,
-                                    includeWallpaper = false,
-                                    targetCloudProvider = CloudProviderType.GOOGLE_DRIVE,
-                                    destinationLabel = "Google Drive",
-                                    destinationType = BackupDestinationType.SOMENTE_DRIVE
-                                )
-                                Toast.makeText(context, "Iniciando backup no Google Drive...", Toast.LENGTH_SHORT).show()
-                            }
-                        )
-
-                        DropdownMenuItem(
-                            text = { Text("Backup para o dispositivo e nuvem", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium) },
-                            leadingIcon = { Icon(Icons.Default.Sync, contentDescription = null, tint = AccentEmeraldGreen) },
-                            onClick = {
-                                showBackupDropdown = false
-                                viewModel.launchBackup(
-                                    title = "Backup de ${app.appName}",
-                                    selectedApps = listOf(
-                                        Pair(
-                                            app,
-                                            AppSelectionOptions(
-                                                includeBaseApk = backupIncludeApk,
-                                                includeSplits = backupIncludeApk && app.splitSourceDirs.isNotEmpty(),
-                                                includeData = backupIncludeInternalData || backupIncludeExternalData || backupIncludeObb,
-                                                includeInternalData = backupIncludeInternalData,
-                                                includeExternalData = backupIncludeExternalData,
-                                                includeObb = backupIncludeObb,
-                                                relatedSettings = true
-                                            )
-                                        )
-                                    ),
-                                    selectedFiles = emptyList(),
-                                    includeSms = false,
-                                    includeCalls = false,
-                                    includeDns = false,
-                                    includeWallpaper = false,
-                                    targetCloudProvider = CloudProviderType.GOOGLE_DRIVE,
-                                    destinationLabel = "Interna + Drive",
-                                    destinationType = BackupDestinationType.INTERNA_E_DRIVE
-                                )
-                                Toast.makeText(context, "Iniciando backup no dispositivo e nuvem...", Toast.LENGTH_SHORT).show()
-                            }
-                        )
-
-                        HorizontalDivider(color = DarkCardBorder)
-
-                        DropdownMenuItem(
-                            text = { Text("Compartilhar APK", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Medium) },
-                            leadingIcon = { Icon(Icons.Default.Share, contentDescription = null, tint = AccentSunsetOrange) },
-                            onClick = {
-                                showBackupDropdown = false
-                                shareAppApk()
-                            }
-                        )
-                    }
+                Button(
+                    onClick = { showSelectiveBackupSheet = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp),
+                    shape = RoundedCornerShape(50),
+                    colors = ButtonDefaults.buttonColors(containerColor = primaryAccent)
+                ) {
+                    Icon(imageVector = Icons.Default.Add, contentDescription = null, tint = Color.Black, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "BACKUP",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
                 }
             }
 
@@ -2218,6 +1977,405 @@ fun AppDetailScreen(
             titleContentColor = TextPrimary,
             textContentColor = TextSecondary
         )
+    }
+
+    // ==========================================
+    // MODAL / BOTTOM SHEET "BACKUP SELETIVO"
+    // ==========================================
+    if (showSelectiveBackupSheet) {
+        val baseApkSize = apkDetails?.files?.find { it.isBase }?.sizeBytes?.takeIf { it > 0 } ?: File(app.sourceDir).length()
+        val splitFiles = apkDetails?.files?.filter { !it.isBase } ?: emptyList()
+        val hasSplits = app.splitSourceDirs.isNotEmpty() || splitFiles.isNotEmpty()
+        val splitCount = if (splitFiles.isNotEmpty()) splitFiles.size else app.splitSourceDirs.size
+        val splitSize = if (splitFiles.isNotEmpty()) splitFiles.sumOf { it.sizeBytes } else app.splitSourceDirs.sumOf { File(it).length() }
+        val internalDataSize = storageBreakdown?.internalData?.sizeBytes?.coerceAtLeast(0L) ?: 0L
+        val externalDataSize = storageBreakdown?.externalData?.sizeBytes?.coerceAtLeast(0L) ?: 0L
+        val obbSize = storageBreakdown?.obbData?.sizeBytes?.coerceAtLeast(0L) ?: 0L
+        val mediaSize = storageBreakdown?.mediaData?.sizeBytes?.coerceAtLeast(0L) ?: 0L
+        val obbAndMediaSize = obbSize + mediaSize
+
+        val totalSelectedEstimatedBytes = (if (checkedBaseApk) baseApkSize else 0L) +
+                (if (checkedSplits && hasSplits) splitSize else 0L) +
+                (if (checkedInternalData) internalDataSize else 0L) +
+                (if (checkedExternalData) externalDataSize else 0L) +
+                (if (checkedObb) obbAndMediaSize else 0L)
+
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { showSelectiveBackupSheet = false },
+            sheetState = sheetState,
+            containerColor = DarkSurface,
+            scrimColor = Color.Black.copy(alpha = 0.65f),
+            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 8.dp)
+                    .padding(bottom = 24.dp)
+            ) {
+                // Header com ícone e nome do app
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    com.resync.app.ui.components.RealAppIcon(packageName = app.packageName, size = 46.dp)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Opções de Backup",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = "${app.appName} • v${app.versionName}",
+                            fontSize = 12.sp,
+                            color = primaryAccent,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    IconButton(
+                        onClick = { showSelectiveBackupSheet = false },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Fechar", tint = TextMuted)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 1. Escolha do Destino no topo
+                Text(
+                    text = "DESTINO DO BACKUP",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextSecondary,
+                    letterSpacing = 0.5.sp
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                val destinations = listOf(
+                    Triple(BackupDestinationType.SOMENTE_INTERNA, "Dispositivo", Icons.Default.PhoneAndroid),
+                    Triple(BackupDestinationType.SOMENTE_DRIVE, "Nuvem (Drive)", Icons.Default.CloudUpload),
+                    Triple(BackupDestinationType.INTERNA_E_DRIVE, "Ambos", Icons.Default.Sync)
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    destinations.forEach { (type, label, icon) ->
+                        val isSel = selectiveDestType == type
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(12.dp))
+                                .border(
+                                    1.5.dp,
+                                    if (isSel) primaryAccent else DarkCardBorder,
+                                    RoundedCornerShape(12.dp)
+                                )
+                                .clickable { selectiveDestType = type },
+                            color = if (isSel) primaryAccent.copy(alpha = 0.15f) else DarkSurfaceVariant,
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = null,
+                                    tint = if (isSel) primaryAccent else TextMuted,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = label,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isSel) TextPrimary else TextSecondary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                // 2. Componentes do aplicativo com Botões "Selecionar tudo / Limpar"
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "COMPONENTES DO APLICATIVO",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextSecondary,
+                        letterSpacing = 0.5.sp
+                    )
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        TextButton(
+                            onClick = {
+                                checkedBaseApk = true
+                                checkedSplits = hasSplits
+                                checkedInternalData = true
+                                checkedExternalData = true
+                                checkedObb = true
+                                checkedPermissions = true
+                            },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            modifier = Modifier.height(28.dp)
+                        ) {
+                            Text("Selecionar tudo", fontSize = 11.sp, color = primaryAccent, fontWeight = FontWeight.Bold)
+                        }
+
+                        TextButton(
+                            onClick = {
+                                checkedBaseApk = false
+                                checkedSplits = false
+                                checkedInternalData = false
+                                checkedExternalData = false
+                                checkedObb = false
+                                checkedPermissions = false
+                            },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            modifier = Modifier.height(28.dp)
+                        ) {
+                            Text("Limpar", fontSize = 11.sp, color = TextMuted)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Lista de opções granulares
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // APK Base
+                    SelectiveBackupOptionCard(
+                        title = "APK Base",
+                        subtitle = "Instalador principal • ${formatStorageSize(baseApkSize)}",
+                        checked = checkedBaseApk,
+                        onCheckedChange = { checkedBaseApk = it },
+                        icon = Icons.Default.Android,
+                        accentColor = AccentEmeraldGreen
+                    )
+
+                    // Split APKs
+                    if (hasSplits) {
+                        SelectiveBackupOptionCard(
+                            title = "Split APKs",
+                            subtitle = "$splitCount arquivo${if (splitCount > 1) "s" else ""} de split • ${formatStorageSize(splitSize)}",
+                            checked = checkedSplits,
+                            onCheckedChange = { checkedSplits = it },
+                            icon = Icons.Default.Extension,
+                            accentColor = AccentNeonBlue
+                        )
+                    }
+
+                    // Dados Internos
+                    SelectiveBackupOptionCard(
+                        title = "Dados Internos",
+                        subtitle = "/data/data/${app.packageName} e user_de • ${formatStorageSize(internalDataSize)}",
+                        checked = checkedInternalData,
+                        onCheckedChange = { checkedInternalData = it },
+                        icon = Icons.Default.Folder,
+                        accentColor = StatusWarning
+                    )
+
+                    // Dados Externos
+                    SelectiveBackupOptionCard(
+                        title = "Dados Externos",
+                        subtitle = "/sdcard/Android/data/${app.packageName} • ${formatStorageSize(externalDataSize)}",
+                        checked = checkedExternalData,
+                        onCheckedChange = { checkedExternalData = it },
+                        icon = Icons.Default.FolderShared,
+                        accentColor = AccentSunsetOrange
+                    )
+
+                    // OBB e Mídia
+                    SelectiveBackupOptionCard(
+                        title = "OBB e Mídia",
+                        subtitle = "/sdcard/Android/obb e media • ${formatStorageSize(obbAndMediaSize)}",
+                        checked = checkedObb,
+                        onCheckedChange = { checkedObb = it },
+                        icon = Icons.Default.SportsEsports,
+                        accentColor = AccentElectricCyan
+                    )
+
+                    // Permissões do aplicativo
+                    SelectiveBackupOptionCard(
+                        title = "Permissões do aplicativo",
+                        subtitle = "Permissões de sistema e configurações concedidas",
+                        checked = checkedPermissions,
+                        onCheckedChange = { checkedPermissions = it },
+                        icon = Icons.Default.Security,
+                        accentColor = AccentCyberPurple
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                // Resumo do tamanho e Botão "Iniciar Backup"
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Tamanho estimado:",
+                        fontSize = 12.sp,
+                        color = TextMuted
+                    )
+                    Text(
+                        text = formatStorageSize(totalSelectedEstimatedBytes),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = primaryAccent
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                val hasAnySelection = checkedBaseApk || (checkedSplits && hasSplits) || checkedInternalData || checkedExternalData || checkedObb || checkedPermissions
+
+                Button(
+                    onClick = {
+                        showSelectiveBackupSheet = false
+                        val destLabel = when (selectiveDestType) {
+                            BackupDestinationType.SOMENTE_INTERNA -> "Memória interna"
+                            BackupDestinationType.SOMENTE_DRIVE -> "Google Drive"
+                            BackupDestinationType.INTERNA_E_DRIVE -> "Interna + Drive"
+                        }
+                        val targetCloud = if (selectiveDestType != BackupDestinationType.SOMENTE_INTERNA) CloudProviderType.GOOGLE_DRIVE else null
+
+                        viewModel.launchBackup(
+                            title = "Backup de ${app.appName}",
+                            selectedApps = listOf(
+                                Pair(
+                                    app,
+                                    AppSelectionOptions(
+                                        includeBaseApk = checkedBaseApk,
+                                        includeSplits = checkedSplits && hasSplits,
+                                        includeData = checkedInternalData || checkedExternalData || checkedObb,
+                                        includeInternalData = checkedInternalData,
+                                        includeExternalData = checkedExternalData,
+                                        includeObb = checkedObb,
+                                        includeUserDe = checkedInternalData,
+                                        includePermissions = checkedPermissions,
+                                        relatedSettings = checkedPermissions
+                                    )
+                                )
+                            ),
+                            selectedFiles = emptyList(),
+                            includeSms = false,
+                            includeCalls = false,
+                            includeDns = false,
+                            includeWallpaper = false,
+                            targetCloudProvider = targetCloud,
+                            destinationLabel = destLabel,
+                            destinationType = selectiveDestType
+                        )
+                        Toast.makeText(context, "Iniciando backup de ${app.appName}...", Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = primaryAccent),
+                    enabled = hasAnySelection
+                ) {
+                    Icon(imageVector = Icons.Default.CloudUpload, contentDescription = null, tint = Color.Black, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Iniciar Backup",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SelectiveBackupOptionCard(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    accentColor: Color
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .border(
+                1.dp,
+                if (checked) accentColor.copy(alpha = 0.4f) else DarkCardBorder,
+                RoundedCornerShape(14.dp)
+            )
+            .clickable { onCheckedChange(!checked) },
+        colors = CardDefaults.cardColors(containerColor = DarkSurfaceVariant)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(accentColor.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = accentColor,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    fontSize = 13.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = subtitle,
+                    fontSize = 11.sp,
+                    color = TextSecondary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Checkbox(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                colors = CheckboxDefaults.colors(
+                    checkedColor = accentColor,
+                    uncheckedColor = TextMuted,
+                    checkmarkColor = Color.Black
+                )
+            )
+        }
     }
 }
 

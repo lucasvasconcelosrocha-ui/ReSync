@@ -264,23 +264,12 @@ fun DashboardScreen(
                             .clickable(onClick = onNavigateToStorageCache),
                         contentAlignment = Alignment.Center
                     ) {
-                        BadgedBox(
-                            badge = {
-                                if (totalAppCacheBytes > 0L) {
-                                    Badge(
-                                        containerColor = StatusWarning,
-                                        modifier = Modifier.size(7.dp)
-                                    )
-                                }
-                            }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CleaningServices,
-                                contentDescription = "Limpeza de Cache",
-                                tint = if (totalAppCacheBytes > 0L) StatusWarning else primaryAccent,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.CleaningServices,
+                            contentDescription = "Limpeza de Cache",
+                            tint = if (totalAppCacheBytes > 0L) StatusWarning else primaryAccent,
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
 
                     Box(
