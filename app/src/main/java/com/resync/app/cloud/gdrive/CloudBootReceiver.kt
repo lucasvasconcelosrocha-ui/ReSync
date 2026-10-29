@@ -26,6 +26,7 @@ class CloudBootReceiver : BroadcastReceiver() {
             return
         }
 
+        AppLogger.recordStartupReason("CloudBootReceiver (action=$action)")
         AppLogger.i(TAG, "Dispositivo reiniciado ou pacote atualizado (action=$action). Verificando transferências pendentes e reativando agendamentos...")
         runCatching {
             com.resync.app.engine.ScheduleManager.getInstance(context).rescheduleAll()

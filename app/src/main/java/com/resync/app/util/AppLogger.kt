@@ -93,8 +93,17 @@ object AppLogger {
     private val SMS_BODY_PATTERN = Pattern.compile("(?i)(body|sms_body|sms_content)=([^\\r\\n,;]+)")
     private val KEY_PATTERN = Pattern.compile("(?i)(passphrase|encryption_key|master_key|private_key|secret_key)=([^\\r\\n,;]+)")
 
-    fun initialize(context: Context) {
-        if (appContext != null) return
+    fun recordStartupReason(reason: String) {
+        i("AppLogger", "Razão de início/ativação do processo: $reason")
+    }
+
+    fun initialize(context: Context, startupReason: String? = null) {
+        if (appContext != null) {
+            if (!startupReason.isNullOrBlank()) {
+                recordStartupReason(startupReason)
+            }
+            return
+        }
         val app = context.applicationContext
         appContext = app
         val dir = File(app.filesDir, "app_logs").apply { mkdirs() }
@@ -103,7 +112,8 @@ object AppLogger {
         installCrashHandler(app)
         startLogWriterCoroutine()
 
-        i("AppLogger", "Sistema central de logs inicializado. Diretório: ${dir.absolutePath}")
+        val reasonSuffix = if (!startupReason.isNullOrBlank()) " [Razão: $startupReason]" else ""
+        i("AppLogger", "Sistema central de logs inicializado$reasonSuffix. Diretório: ${dir.absolutePath}")
     }
 
     private fun startLogWriterCoroutine() {
@@ -400,24 +410,55 @@ object AppLogger {
         val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             try {
-                e(
-                    tag = "CRASH",
-                    message = "Falha crítica não tratada na thread '${thread.name}' (id: ${thread.id})",
-                    throwable = throwable,
-                    extraParams = mapOf("thread" to thread.name, "thread_id" to thread.id.toString())
-                )
-                // Dump crash immediately to file synchronously
-                val crashFile = File(context.filesDir, "crash.log")
-                val report = "=== RESYNC FATAL CRASH REPORT ===\n" +
-                        "Data: ${dateFormat.format(Date())}\n" +
-                        "Thread: ${thread.name} (id ${thread.id})\n" +
-                        "Dispositivo: ${getDeviceContextString()}\n" +
-                        "Rede: ${getCurrentNetworkDescription()}\n" +
-                        "Térmico: ${getCurrentThermalDescription()}\n" +
-                        "Exceção: ${throwable.javaClass.name}: ${throwable.message}\n" +
-                        "StackTrace:\n${getStackTraceString(throwable)}\n" +
-                        "=================================\n"
-                crashFile.writeText(report)
+                val nowStr = synchronized(dateFormat) { dateFormat.format(Date()) }
+                val exSimpleName = throwable.javaClass.simpleName
+                val exMsg = throwable.message ?: "sem mensagem"
+
+                val relevantTraceLines = throwable.stackTrace
+                    .filter { it.className.contains("com.resync.app") }
+                    .take(8)
+                    .map { "    at ${it.className}.${it.methodName}(${it.fileName}:${it.lineNumber})" }
+
+                val fatalFormatted = buildString {
+                    append("[$nowStr] [FATAL] [CrashHandler] Exceção fatal na thread ${thread.name}: $exSimpleName - $exMsg\n")
+                    if (relevantTraceLines.isNotEmpty()) {
+                        append("--- STACKTRACE RELEVANTE (com.resync.app) ---\n")
+                        relevantTraceLines.forEach { append(it).append("\n") }
+                    } else {
+                        append("--- STACKTRACE GERAL ---\n")
+                        throwable.stackTrace.take(8).forEach {
+                            append("    at ${it.className}.${it.methodName}(${it.fileName}:${it.lineNumber})\n")
+                        }
+                    }
+                }
+
+                // Gravação síncrona com flush imediato no arquivo de log da aplicação (app_log_0.txt)
+                val dir = logDir ?: File(context.filesDir, "app_logs").apply { mkdirs() }
+                val activeFile = File(dir, "app_log_0.txt")
+                try {
+                    FileOutputStream(activeFile, true).use { fos ->
+                        fos.write(fatalFormatted.toByteArray(Charsets.UTF_8))
+                        fos.flush()
+                        try {
+                            fos.fd.sync()
+                        } catch (_: Throwable) {}
+                    }
+                } catch (_: Throwable) {}
+
+                // Gravação síncrona no crash.log
+                try {
+                    val crashFile = File(context.filesDir, "crash.log")
+                    val report = "=== RESYNC FATAL CRASH REPORT ===\n" +
+                            "Data: $nowStr\n" +
+                            "Thread: ${thread.name} (id ${thread.id})\n" +
+                            "Dispositivo: ${getDeviceContextString()}\n" +
+                            "Rede: ${getCurrentNetworkDescription()}\n" +
+                            "Térmico: ${getCurrentThermalDescription()}\n" +
+                            "Exceção: ${throwable.javaClass.name}: ${throwable.message}\n" +
+                            "StackTrace:\n${getStackTraceString(throwable)}\n" +
+                            "=================================\n"
+                    crashFile.writeText(report)
+                } catch (_: Throwable) {}
             } catch (_: Throwable) {
             } finally {
                 previousHandler?.uncaughtException(thread, throwable)

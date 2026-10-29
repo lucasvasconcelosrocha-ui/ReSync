@@ -39,7 +39,7 @@ object CloudNetworkMonitor {
     val networkStatus: StateFlow<NetworkStatusInfo> = _networkStatus.asStateFlow()
 
     private var connectivityManager: ConnectivityManager? = null
-    private var isRegistered = false
+    private val isInitialized = java.util.concurrent.atomic.AtomicBoolean(false)
 
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
@@ -56,7 +56,10 @@ object CloudNetworkMonitor {
     }
 
     fun initialize(context: Context) {
-        if (isRegistered) return
+        if (!isInitialized.compareAndSet(false, true)) {
+            AppLogger.d(TAG, "CloudNetworkMonitor já inicializado neste processo. Ignorando chamada duplicada.")
+            return
+        }
         val app = context.applicationContext
         connectivityManager = app.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
         val cm = connectivityManager ?: return
@@ -70,7 +73,6 @@ object CloudNetworkMonitor {
                     .build()
                 cm.registerNetworkCallback(req, networkCallback)
             }
-            isRegistered = true
             updateStatus("initialization")
             AppLogger.i(TAG, "CloudNetworkMonitor registrado com sucesso via defaultNetworkCallback.")
         } catch (e: Exception) {

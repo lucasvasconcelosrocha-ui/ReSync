@@ -152,6 +152,7 @@ class BackupForegroundService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        com.resync.app.util.AppLogger.recordStartupReason("BackupForegroundService")
         activeConcurrencyLimit.set(com.resync.app.engine.PerformanceConfig.maxWorkers)
         isServiceRunning = true
         isFinishedOrCancelled = false

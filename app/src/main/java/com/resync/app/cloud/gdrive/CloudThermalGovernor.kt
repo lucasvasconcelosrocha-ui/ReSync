@@ -22,10 +22,13 @@ object CloudThermalGovernor {
     val thermalStatus: StateFlow<Int> = _thermalStatus.asStateFlow()
 
     private val cloudParallelWorkers = AtomicInteger(3)
-    private var isListenerRegistered = false
+    private val isInitialized = java.util.concurrent.atomic.AtomicBoolean(false)
 
     fun initialize(context: Context) {
-        if (isListenerRegistered) return
+        if (!isInitialized.compareAndSet(false, true)) {
+            AppLogger.d(TAG, "CloudThermalGovernor já inicializado neste processo. Ignorando chamada duplicada.")
+            return
+        }
         val pm = context.applicationContext.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -47,7 +50,6 @@ object CloudThermalGovernor {
                         }
                     }
                 }
-                isListenerRegistered = true
                 _thermalStatus.value = pm.currentThermalStatus
             } catch (e: Throwable) {
                 AppLogger.w(TAG, "Falha ao registrar ThermalStatusListener: ${e.message}")

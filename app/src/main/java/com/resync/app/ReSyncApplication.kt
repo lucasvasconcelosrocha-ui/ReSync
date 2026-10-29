@@ -45,10 +45,27 @@ class ReSyncApplication : Application() {
         com.resync.app.engine.OperationRepository.initialize(this)
 
         // Inicializa o novo sistema de log central, monitor de rede reativo e controle térmico
-        com.resync.app.util.AppLogger.initialize(this)
+        com.resync.app.util.AppLogger.initialize(this, startupReason = "Application.onCreate")
         com.resync.app.engine.SecurityManager.initialize(this)
         com.resync.app.cloud.gdrive.CloudNetworkMonitor.initialize(this)
         com.resync.app.cloud.gdrive.CloudThermalGovernor.initialize(this)
+
+        // Registrar callbacks de ciclo de vida para registrar quando o processo é ativado pela Activity principal
+        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+            private var firstLogged = false
+            override fun onActivityCreated(activity: android.app.Activity, savedInstanceState: android.os.Bundle?) {
+                if (!firstLogged) {
+                    firstLogged = true
+                    com.resync.app.util.AppLogger.recordStartupReason("Activity principal (${activity.javaClass.simpleName})")
+                }
+            }
+            override fun onActivityStarted(activity: android.app.Activity) {}
+            override fun onActivityResumed(activity: android.app.Activity) {}
+            override fun onActivityPaused(activity: android.app.Activity) {}
+            override fun onActivityStopped(activity: android.app.Activity) {}
+            override fun onActivitySaveInstanceState(activity: android.app.Activity, outState: android.os.Bundle) {}
+            override fun onActivityDestroyed(activity: android.app.Activity) {}
+        })
 
         // Inicializa o monitor reativo de conexão de rede legado via NetworkCallback
         com.resync.app.cloud.gdrive.NetworkConnectionMonitor.initialize(this)

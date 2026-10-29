@@ -70,6 +70,7 @@ class RestoreForegroundService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        com.resync.app.util.AppLogger.recordStartupReason("RestoreForegroundService")
         isServiceRunning = true
         createNotificationChannel()
         notificationManager = getSystemService(NotificationManager::class.java)
