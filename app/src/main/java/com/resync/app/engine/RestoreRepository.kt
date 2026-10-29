@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import com.resync.app.cloud.providers.GoogleDriveProvider
 import com.resync.app.data.database.AppDatabaseHelper
+import com.resync.app.data.model.BackupPaths
 import com.resync.app.data.model.CompletedItemInfo
 import com.resync.app.service.RestoreForegroundService
 import kotlinx.coroutines.*
@@ -149,6 +150,8 @@ object RestoreRepository {
                 error = savedError
             )
         }
+
+        cleanupStaleCloudRestoreFiles(context)
     }
 
     private var lastSelectedCallKeys: Set<String>? = null
@@ -210,51 +213,115 @@ object RestoreRepository {
                 // If remote file needs downloading
                 if (fileToRestore == null || !fileToRestore.exists()) {
                     if (remoteDriveFileId != null && accountEmail != null) {
-                        appendRestoreLog("Baixando arquivo do Google Drive ($accountEmail)...")
-                        _executionState.value = RestoreExecutionState.DOWNLOADING
-                        _restoreProgress.value = RestoreProgress(
-                            stage = "Baixando do Google Drive...",
-                            currentItemName = "Conectando ao Drive ($accountEmail)...",
-                            progressPercent = 0.1f
-                        )
-                        persistState()
-
-                        val driveProvider = GoogleDriveProvider(context)
-                        currentDriveProvider = driveProvider
-                        val cacheDir = File(context.cacheDir, "restore_temp").apply { mkdirs() }
-                        val targetLocal = File(cacheDir, "cloud_restore_${System.currentTimeMillis()}.resync")
-                        tempDownloadedFile = targetLocal
-                        lastTempDownloadedFile = targetLocal
-
-                        val downloadResult = driveProvider.downloadManager.downloadBackupFile(
-                            fileId = remoteDriveFileId,
-                            destinationFile = targetLocal,
-                            totalBytesEstimated = totalBytesEstimated,
-                            accountEmail = accountEmail
-                        ) { progressInfo ->
-                            val speedBytesSec = (progressInfo.speedMBps * 1024f * 1024f).toLong().coerceAtLeast(0L)
-                            val mbDown = "%.1f MB".format(java.util.Locale.US, progressInfo.bytesDownloaded.toDouble() / (1024 * 1024))
-                            val mbTot = if (progressInfo.totalBytes > 0) "%.1f MB".format(java.util.Locale.US, progressInfo.totalBytes.toDouble() / (1024 * 1024)) else "?"
-                            val speedStr = if (progressInfo.speedMBps > 0) " • %.1f MB/s".format(java.util.Locale.US, progressInfo.speedMBps) else ""
-                            _restoreProgress.value = RestoreProgress(
-                                stage = progressInfo.stage,
-                                currentItemName = "$mbDown / $mbTot$speedStr",
-                                progressPercent = progressInfo.progressPercent,
-                                bytesProcessed = progressInfo.bytesDownloaded,
-                                totalBytesEstimated = progressInfo.totalBytes,
-                                downloadSpeedBytesPerSec = speedBytesSec,
-                                estimatedRemainingSeconds = progressInfo.estimatedRemainingSeconds
-                            )
-                            persistState()
+                        // 1. Reaproveitamento Inteligente: verificar se o arquivo original já existe localmente
+                        var foundLocal: File? = null
+                        try {
+                            val db = AppDatabaseHelper.getInstance(context)
+                            val dbRecord = db.getBackupRecordByDriveFileId(remoteDriveFileId)
+                                ?: db.getBackupRecordById(remoteDriveFileId)
+                            if (dbRecord != null && dbRecord.filePath.isNotBlank()) {
+                                val f = File(dbRecord.filePath)
+                                if (f.exists() && f.isFile && f.length() > 0L &&
+                                    (totalBytesEstimated <= 0L || f.length() == totalBytesEstimated || kotlin.math.abs(f.length() - totalBytesEstimated) < 1024L * 1024L)
+                                ) {
+                                    foundLocal = f
+                                }
+                            }
+                            if (foundLocal == null) {
+                                val mirror = BackupPaths.findLocalMirrorFile(
+                                    driveFileId = remoteDriveFileId,
+                                    expectedSizeBytes = totalBytesEstimated,
+                                    context = context
+                                )
+                                if (mirror != null && mirror.exists() && mirror.isFile && mirror.length() > 0L &&
+                                    (totalBytesEstimated <= 0L || mirror.length() == totalBytesEstimated || kotlin.math.abs(mirror.length() - totalBytesEstimated) < 1024L * 1024L)
+                                ) {
+                                    foundLocal = mirror
+                                }
+                            }
+                        } catch (e: Throwable) {
+                            com.resync.app.util.AppLogger.w("RestoreRepository", "Aviso ao verificar espelho local: ${e.message}")
                         }
 
-                        if (!downloadResult.isSuccess || !targetLocal.exists()) {
-                            val err = "Falha no download da nuvem: ${downloadResult.exceptionOrNull()?.message ?: "Erro desconhecido"}"
-                            appendRestoreLog("ERRO: $err")
-                            throw IllegalStateException(err)
+                        if (foundLocal != null) {
+                            appendRestoreLog("Container local original localizado: ${foundLocal.name} (${foundLocal.length()} bytes). Reutilizando sem baixar da nuvem (0 segundos)!")
+                            com.resync.app.util.AppLogger.i("RestoreRepository", "Container local original encontrado: ${foundLocal.absolutePath}. Reutilizando imediatamente.")
+                            fileToRestore = foundLocal
+                        } else {
+                            // 2. Não existe no armazenamento principal. Salvar/verificar na cache privada com nome determinístico baseado no fileId
+                            val safeFileId = remoteDriveFileId.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+                            val cacheDir = File(context.cacheDir, "restore_temp").apply { mkdirs() }
+                            val targetLocal = File(cacheDir, "cloud_restore_${safeFileId}.resync")
+                            tempDownloadedFile = targetLocal
+                            lastTempDownloadedFile = targetLocal
+
+                            // Se uma segunda restauração do mesmo fileId for pedida e o arquivo já existir e tiver tamanho esperado, reaproveite imediatamente!
+                            var canReuseCache = false
+                            if (targetLocal.exists() && targetLocal.length() > 0L) {
+                                if (totalBytesEstimated > 0L && targetLocal.length() == totalBytesEstimated) {
+                                    canReuseCache = true
+                                }
+                            }
+
+                            if (canReuseCache) {
+                                appendRestoreLog("Container em cache determinístico reutilizado: ${targetLocal.name} (${targetLocal.length()} bytes). Zero redownload!")
+                                com.resync.app.util.AppLogger.i("RestoreRepository", "Reaproveitando cache determinístico existente: ${targetLocal.name}")
+                                fileToRestore = targetLocal
+                            } else {
+                                // Limpeza Automática: Manter no máximo 1 arquivo cloud_restore_*.resync em cache
+                                cacheDir.listFiles()?.forEach { file ->
+                                    if (file.name.startsWith("cloud_restore_") && file.name.endsWith(".resync") && file.name != targetLocal.name) {
+                                        com.resync.app.util.AppLogger.i("RestoreRepository", "Removendo cache de restauração anterior de outro fileId: ${file.name}")
+                                        file.delete()
+                                    }
+                                    if (file.name.endsWith(".part") && file.name != "${targetLocal.name}.part") {
+                                        file.delete()
+                                    }
+                                }
+
+                                appendRestoreLog("Baixando arquivo do Google Drive ($accountEmail)...")
+                                _executionState.value = RestoreExecutionState.DOWNLOADING
+                                _restoreProgress.value = RestoreProgress(
+                                    stage = "Baixando do Google Drive...",
+                                    currentItemName = "Conectando ao Drive ($accountEmail)...",
+                                    progressPercent = 0.1f
+                                )
+                                persistState()
+
+                                val driveProvider = GoogleDriveProvider(context)
+                                currentDriveProvider = driveProvider
+
+                                val downloadResult = driveProvider.downloadManager.downloadBackupFile(
+                                    fileId = remoteDriveFileId,
+                                    destinationFile = targetLocal,
+                                    totalBytesEstimated = totalBytesEstimated,
+                                    accountEmail = accountEmail
+                                ) { progressInfo ->
+                                    val speedBytesSec = (progressInfo.speedMBps * 1024f * 1024f).toLong().coerceAtLeast(0L)
+                                    val mbDown = "%.1f MB".format(java.util.Locale.US, progressInfo.bytesDownloaded.toDouble() / (1024 * 1024))
+                                    val mbTot = if (progressInfo.totalBytes > 0) "%.1f MB".format(java.util.Locale.US, progressInfo.totalBytes.toDouble() / (1024 * 1024)) else "?"
+                                    val speedStr = if (progressInfo.speedMBps > 0) " • %.1f MB/s".format(java.util.Locale.US, progressInfo.speedMBps) else ""
+                                    _restoreProgress.value = RestoreProgress(
+                                        stage = progressInfo.stage,
+                                        currentItemName = "$mbDown / $mbTot$speedStr",
+                                        progressPercent = progressInfo.progressPercent,
+                                        bytesProcessed = progressInfo.bytesDownloaded,
+                                        totalBytesEstimated = progressInfo.totalBytes,
+                                        downloadSpeedBytesPerSec = speedBytesSec,
+                                        estimatedRemainingSeconds = progressInfo.estimatedRemainingSeconds
+                                    )
+                                    persistState()
+                                }
+
+                                if (!downloadResult.isSuccess || !targetLocal.exists()) {
+                                    val err = "Falha no download da nuvem: ${downloadResult.exceptionOrNull()?.message ?: "Erro desconhecido"}"
+                                    appendRestoreLog("ERRO: $err")
+                                    throw IllegalStateException(err)
+                                }
+                                fileToRestore = targetLocal
+                                appendRestoreLog("Download concluído (${targetLocal.length()} bytes)")
+                            }
                         }
-                        fileToRestore = targetLocal
-                        appendRestoreLog("Download concluído (${targetLocal.length()} bytes)")
                     } else {
                         val err = "Arquivo de backup local não encontrado e credenciais da nuvem ausentes."
                         appendRestoreLog("ERRO: $err")
@@ -536,11 +603,36 @@ object RestoreRepository {
 
     fun cleanupTempCache() {
         runCatching {
-            lastTempDownloadedFile?.let { if (it.exists()) it.delete() }
-            val dir = File(appContext?.cacheDir, "restore_temp")
-            if (dir.exists()) dir.deleteRecursively()
             val restoreDir = File(appContext?.cacheDir, "restore")
             if (restoreDir.exists()) restoreDir.deleteRecursively()
+            val cacheDir = File(appContext?.cacheDir, "restore_temp")
+            if (cacheDir.exists()) {
+                cacheDir.listFiles()?.forEach { file ->
+                    if (file.name.endsWith(".part") || file.name.endsWith(".tmp")) {
+                        file.delete()
+                    }
+                }
+            }
+        }
+    }
+
+    fun cleanupStaleCloudRestoreFiles(context: Context, maxAgeMs: Long = 3600_000L) {
+        runCatching {
+            val cacheDir = File(context.cacheDir, "restore_temp")
+            if (cacheDir.exists()) {
+                val now = System.currentTimeMillis()
+                cacheDir.listFiles()?.forEach { file ->
+                    if (file.name.startsWith("cloud_restore_") && file.name.endsWith(".resync")) {
+                        val age = now - file.lastModified()
+                        if (age > maxAgeMs) {
+                            com.resync.app.util.AppLogger.i("RestoreRepository", "Garbage collection: removendo cache temporário expirado (${file.name}, idade=${age / 60000}min)")
+                            file.delete()
+                        }
+                    } else if (file.name.endsWith(".part") || file.name.endsWith(".tmp")) {
+                        file.delete()
+                    }
+                }
+            }
         }
     }
 

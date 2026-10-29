@@ -351,6 +351,15 @@ class AppDatabaseHelper(private val context: Context) : SQLiteOpenHelper(
         }
     }
 
+    suspend fun getBackupRecordByDriveFileId(driveFileId: String): BackupRecord? = withContext(Dispatchers.IO) {
+        val cursor = readableDatabase.query(
+            "backup_records", null, "drive_file_id = ?", arrayOf(driveFileId), null, null, null
+        )
+        cursor.use {
+            if (it.moveToNext()) cursorToBackupRecord(it) else null
+        }
+    }
+
     suspend fun deleteBackupRecord(id: String) = withContext(Dispatchers.IO) {
         writableDatabase.delete("backup_records", "id = ? OR drive_file_id = ?", arrayOf(id, id))
         _dbChanges.tryEmit("backup_records")

@@ -161,6 +161,33 @@ class DownloadManager(private val oAuthManager: OAuthManager) {
             return@withContext Result.failure(IllegalStateException("Tamanho do arquivo inválido retornado pelo Google Drive."))
         }
 
+        // Reaproveitamento inteligente: se o arquivo de destino já existe e é válido, não redownload
+        if (destinationFile.exists() && destinationFile.length() == totalBytes) {
+            val header = ByteArray(4)
+            val headerRead = FileInputStream(destinationFile).use { it.read(header) }
+            val isHeaderValid = headerRead >= 4 && (
+                (header[0] == 0x53.toByte() && header[1] == 0x56.toByte() && header[2] == 0x42.toByte() && header[3] == 0x01.toByte()) ||
+                (header[0] == 0x50.toByte() && header[1] == 0x4B.toByte() && header[2] == 0x03.toByte() && header[3] == 0x04.toByte())
+            )
+            if (isHeaderValid) {
+                AppLogger.i(TAG, "Container já presente no destino com tamanho e cabeçalho corretos: ${destinationFile.name} ($totalBytes bytes). Reutilizando sem download!")
+                transferDao.updateState(jobId, CloudTransferState.CONCLUIDO)
+                transferDao.releaseExecutorLock(jobId, executorOwner)
+                onProgress(
+                    DownloadProgressInfo(
+                        stage = "Arquivo em cache já disponível!",
+                        bytesDownloaded = totalBytes,
+                        totalBytes = totalBytes,
+                        progressPercent = 1.0f,
+                        speedMBps = 0f,
+                        estimatedRemainingSeconds = 0L,
+                        isFinished = true
+                    )
+                )
+                return@withContext Result.success(destinationFile)
+            }
+        }
+
         // 3. Pre-allocation of the destination .part file (Requirement 3)
         if (!partFile.exists() || partFile.length() != totalBytes) {
             RandomAccessFile(partFile, "rw").use { it.setLength(totalBytes) }

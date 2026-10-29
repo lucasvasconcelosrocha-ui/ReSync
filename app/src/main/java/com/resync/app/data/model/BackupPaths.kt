@@ -193,6 +193,13 @@ object BackupPaths {
         }
         if (candidateFiles.isEmpty()) return null
 
+        // 0. Match by driveFileId
+        if (!driveFileId.isNullOrBlank()) {
+            candidateFiles.firstOrNull {
+                it.name.contains(driveFileId, ignoreCase = true) || (it.parentFile?.name?.contains(driveFileId, ignoreCase = true) == true)
+            }?.let { return it }
+        }
+
         // 1. Direct match by title or name
         if (!title.isNullOrBlank()) {
             val cleanTitle = title.trim()
