@@ -24,6 +24,8 @@ import com.resync.app.data.model.LogLevel
 import com.resync.app.data.model.ManifestItem
 import com.resync.app.data.model.ProgressRateLimiter
 import com.resync.app.data.model.SmsRecord
+import com.resync.app.util.ShellSecurityUtils.shellEscape
+import com.resync.app.util.ShellSecurityUtils.validatePackageName
 import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -753,6 +755,7 @@ class RestoreEngine(private val context: Context) {
         tempDir: File,
         appItems: List<ManifestItem>
     ): RestoreInstallResult = withContext(Dispatchers.IO) {
+        val validPkg = validatePackageName(pkgName)
         val dataItems = appItems.filter {
             it.type == BackupItemType.APP_DATA ||
             it.archiveEntryPath.endsWith(".tar", ignoreCase = true) ||
@@ -763,7 +766,7 @@ class RestoreEngine(private val context: Context) {
         // 3. am force-stop <pkg> com proteção garantida
         ProcessControlManager.safeForceStop(
             context = context,
-            targetPackage = pkgName,
+            targetPackage = validPkg,
             progressPercent = 0.5f,
             sourceTag = "RestoreEngine"
         )
@@ -772,24 +775,27 @@ class RestoreEngine(private val context: Context) {
             return@withContext RestoreInstallResult(true, 0)
         }
 
+        val escapedPkg = shellEscape(validPkg)
+        val escapedAppDataDir = shellEscape("/data/data/$validPkg")
+
         // 4. Read CURRENT UID after installation: stat -c %u /data/data/<pkg>
-        val uidCmd = Shell.cmd("stat -c %u /data/data/$pkgName").exec()
+        val uidCmd = Shell.cmd("stat -c %u $escapedAppDataDir").exec()
         var currentUid = uidCmd.out.firstOrNull()?.trim()?.toIntOrNull()
 
         if (currentUid == null || currentUid <= 0) {
-            val dumpCmd = Shell.cmd("dumpsys package $pkgName | grep -E 'userId=[0-9]+' | head -n1").exec()
+            val dumpCmd = Shell.cmd("dumpsys package $validPkg | grep -E 'userId=[0-9]+' | head -n1").exec()
             val match = Regex("userId=(\\d+)").find(dumpCmd.out.joinToString(" "))
             currentUid = match?.groupValues?.get(1)?.toIntOrNull()
         }
 
         if (currentUid == null || currentUid <= 0) {
-            val err = "Não foi possível obter o UID atual do app $pkgName após instalação. stat retornou: ${uidCmd.out.joinToString()}"
+            val err = "Não foi possível obter o UID atual do app $validPkg após instalação. stat retornou: ${uidCmd.out.joinToString()}"
             dbHelper.insertLog(LogLevel.ERROR, "RestoreEngine", err)
             return@withContext RestoreInstallResult(false, -1, err)
         }
-        dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "UID atual de $pkgName: $currentUid")
+        dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "UID atual de $validPkg: $currentUid")
 
-        val appDirInTemp = File(tempDir, "apps/$pkgName")
+        val appDirInTemp = File(tempDir, "apps/$validPkg")
         val dataTar = File(appDirInTemp, "data.tar").takeIf { it.exists() }
             ?: File(appDirInTemp, "data.tar.gz").takeIf { it.exists() }
             ?: dataItems.find { it.archiveEntryPath.endsWith("data.tar") || it.archiveEntryPath.endsWith("data.tar.gz") }?.let { File(tempDir, it.archiveEntryPath) }?.takeIf { it.exists() }
@@ -808,13 +814,14 @@ class RestoreEngine(private val context: Context) {
 
         // 5. Clean current data folder without deleting root folder
         if (dataTar != null) {
-            val cleanCmd = Shell.cmd("find /data/data/$pkgName -mindepth 1 -delete").exec()
+            val cleanCmd = Shell.cmd("find $escapedAppDataDir -mindepth 1 -delete").exec()
             if (!cleanCmd.isSuccess) {
-                Shell.cmd("rm -rf /data/data/$pkgName/* /data/data/$pkgName/.[!.]* 2>/dev/null").exec()
+                Shell.cmd("rm -rf $escapedAppDataDir/* $escapedAppDataDir/.[!.]* 2>/dev/null").exec()
             }
 
             // 6. Extract tar in /data/data/<pkg> (tar -xf works for both uncompressed tar and gzip tar.gz)
-            var extractCmd = Shell.cmd("nice -n 19 ionice -c 3 tar -xf \"${dataTar.absolutePath}\" -C \"/data/data/$pkgName\"").exec()
+            val escapedDataTar = shellEscape(dataTar.absolutePath)
+            var extractCmd = Shell.cmd("nice -n 19 ionice -c 3 tar -xf $escapedDataTar -C $escapedAppDataDir").exec()
             var extractSuccess = extractCmd.isSuccess
             var extractErr = (extractCmd.out + extractCmd.err).filter { it.isNotBlank() }.joinToString(" ")
             var exitCode = extractCmd.code
@@ -822,7 +829,7 @@ class RestoreEngine(private val context: Context) {
             // Se falhar, tenta com mount master ("su -mm" no KernelSU / Magisk)
             if (!extractSuccess) {
                 try {
-                    val pMm = Runtime.getRuntime().exec(arrayOf("su", "-mm", "-c", "tar -xf \"${dataTar.absolutePath}\" -C \"/data/data/$pkgName\""))
+                    val pMm = Runtime.getRuntime().exec(arrayOf("su", "-mm", "-c", "tar -xf $escapedDataTar -C $escapedAppDataDir"))
                     val mmErr = pMm.errorStream.bufferedReader().use { it.readText() }
                     val mmExit = pMm.waitFor()
                     if (mmExit == 0) {
@@ -837,55 +844,63 @@ class RestoreEngine(private val context: Context) {
             }
 
             if (!extractSuccess) {
-                val err = "Falha ao extrair tar de dados em /data/data/$pkgName: $extractErr"
-                dbHelper.insertLog(LogLevel.ERROR, "RestoreEngine", "App $pkgName: modo=Root, caminho=/data/data/$pkgName, bytes=${dataTar.length()}, saída=$exitCode, erro=$extractErr")
+                val err = "Falha ao extrair tar de dados em /data/data/$validPkg: $extractErr"
+                dbHelper.insertLog(LogLevel.ERROR, "RestoreEngine", "App $validPkg: modo=Root, caminho=/data/data/$validPkg, bytes=${dataTar.length()}, saída=$exitCode, erro=$extractErr")
                 return@withContext RestoreInstallResult(false, -1, err)
             } else {
-                dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "App $pkgName: modo=Root, caminho=/data/data/$pkgName, bytes=${dataTar.length()}, saída=0, erro=Nenhum")
+                dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "App $validPkg: modo=Root, caminho=/data/data/$validPkg, bytes=${dataTar.length()}, saída=0, erro=Nenhum")
             }
         }
 
         // 7. Repeat for user_de, Android/data and obb if present and batch permissions / restorecon
         val batchCommands = mutableListOf<String>()
+        val escapedUserDe = shellEscape("/data/user_de/0/$validPkg")
+        val escapedExtData = shellEscape("/sdcard/Android/data/$validPkg")
+        val escapedObb = shellEscape("/sdcard/Android/obb/$validPkg")
+
         if (userDeTar != null) {
-            batchCommands.add("mkdir -p /data/user_de/0/$pkgName && find /data/user_de/0/$pkgName -mindepth 1 -delete && nice -n 19 ionice -c 3 tar -xf \"${userDeTar.absolutePath}\" -C \"/data/user_de/0/$pkgName\"")
+            val escapedUserDeTar = shellEscape(userDeTar.absolutePath)
+            batchCommands.add("mkdir -p $escapedUserDe && find $escapedUserDe -mindepth 1 -delete && nice -n 19 ionice -c 3 tar -xf $escapedUserDeTar -C $escapedUserDe")
         }
         if (extDataTar != null) {
-            batchCommands.add("mkdir -p /sdcard/Android/data/$pkgName && find /sdcard/Android/data/$pkgName -mindepth 1 -delete && nice -n 19 ionice -c 3 tar -xf \"${extDataTar.absolutePath}\" -C \"/sdcard/Android/data/$pkgName\"")
+            val escapedExtDataTar = shellEscape(extDataTar.absolutePath)
+            batchCommands.add("mkdir -p $escapedExtData && find $escapedExtData -mindepth 1 -delete && nice -n 19 ionice -c 3 tar -xf $escapedExtDataTar -C $escapedExtData")
         }
         if (obbTar != null) {
-            batchCommands.add("mkdir -p /sdcard/Android/obb/$pkgName && find /sdcard/Android/obb/$pkgName -mindepth 1 -delete && nice -n 19 ionice -c 3 tar -xf \"${obbTar.absolutePath}\" -C \"/sdcard/Android/obb/$pkgName\"")
+            val escapedObbTar = shellEscape(obbTar.absolutePath)
+            batchCommands.add("mkdir -p $escapedObb && find $escapedObb -mindepth 1 -delete && nice -n 19 ionice -c 3 tar -xf $escapedObbTar -C $escapedObb")
         }
 
         // 8. Batch apply chown and restorecon
-        batchCommands.add("chown -R $currentUid:$currentUid /data/data/$pkgName")
-        batchCommands.add("chown -R $currentUid:$currentUid /data/user/0/$pkgName 2>/dev/null")
-        if (userDeTar != null) batchCommands.add("chown -R $currentUid:$currentUid /data/user_de/0/$pkgName")
-        if (extDataTar != null) batchCommands.add("chown -R $currentUid:$currentUid /sdcard/Android/data/$pkgName 2>/dev/null")
-        if (obbTar != null) batchCommands.add("chown -R $currentUid:$currentUid /sdcard/Android/obb/$pkgName 2>/dev/null")
-        batchCommands.add("restorecon -R /data/data/$pkgName")
-        batchCommands.add("restorecon -R /data/user/0/$pkgName 2>/dev/null")
-        if (userDeTar != null) batchCommands.add("restorecon -R /data/user_de/0/$pkgName")
+        val escapedUserData = shellEscape("/data/user/0/$validPkg")
+        batchCommands.add("chown -R $currentUid:$currentUid $escapedAppDataDir")
+        batchCommands.add("chown -R $currentUid:$currentUid $escapedUserData 2>/dev/null")
+        if (userDeTar != null) batchCommands.add("chown -R $currentUid:$currentUid $escapedUserDe")
+        if (extDataTar != null) batchCommands.add("chown -R $currentUid:$currentUid $escapedExtData 2>/dev/null")
+        if (obbTar != null) batchCommands.add("chown -R $currentUid:$currentUid $escapedObb 2>/dev/null")
+        batchCommands.add("restorecon -R $escapedAppDataDir")
+        batchCommands.add("restorecon -R $escapedUserData 2>/dev/null")
+        if (userDeTar != null) batchCommands.add("restorecon -R $escapedUserDe")
 
         if (batchCommands.isNotEmpty()) {
             Shell.cmd(*batchCommands.toTypedArray()).exec()
         }
         ProcessControlManager.safeForceStop(
             context = context,
-            targetPackage = pkgName,
+            targetPackage = validPkg,
             progressPercent = 0.9f,
             sourceTag = "RestoreEngine"
         )
 
         // 10. Verify result
-        val verifyCmd = Shell.cmd("ls /data/data/$pkgName").exec()
+        val verifyCmd = Shell.cmd("ls $escapedAppDataDir").exec()
         if (dataTar != null && verifyCmd.out.isEmpty()) {
-            val err = "Diretório /data/data/$pkgName ficou vazio após extração do backup."
+            val err = "Diretório /data/data/$validPkg ficou vazio após extração do backup."
             dbHelper.insertLog(LogLevel.ERROR, "RestoreEngine", err)
             return@withContext RestoreInstallResult(false, -1, err)
         }
 
-        dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "Dados de $pkgName restaurados com sucesso com UID $currentUid e SELinux redefinido.")
+        dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "Dados de $validPkg restaurados com sucesso com UID $currentUid e SELinux redefinido.")
         RestoreInstallResult(true, 0)
     }
 
@@ -1010,22 +1025,28 @@ class RestoreEngine(private val context: Context) {
 
             if (isOutsideInternal && hasRoot) {
                 destination.parentFile?.mkdirs()
-                val mkdirCmd = "mkdir -p \"${destination.parentFile?.absolutePath}\""
-                val cpCmd = "cp -a \"${extractedFile.absolutePath}\" \"${destination.absolutePath}\""
+                val escapedParent = shellEscape(destination.parentFile?.absolutePath ?: destination.absolutePath)
+                val escapedExtracted = shellEscape(extractedFile.absolutePath)
+                val escapedDest = shellEscape(destination.absolutePath)
+                val mkdirCmd = "mkdir -p $escapedParent"
+                val cpCmd = "cp -a $escapedExtracted $escapedDest"
                 Shell.cmd(mkdirCmd, cpCmd).exec()
                 val selinuxCtx = metadata?.get("selinux")
                 if (!selinuxCtx.isNullOrBlank()) {
-                    Shell.cmd("chcon \"$selinuxCtx\" \"${destination.absolutePath}\" 2>/dev/null").exec()
+                    val escapedCtx = shellEscape(selinuxCtx)
+                    Shell.cmd("chcon $escapedCtx $escapedDest 2>/dev/null").exec()
                 } else {
-                    Shell.cmd("restorecon -R \"${destination.absolutePath}\" 2>/dev/null").exec()
+                    Shell.cmd("restorecon -R $escapedDest 2>/dev/null").exec()
                 }
                 val mode = metadata?.get("mode")
                 if (!mode.isNullOrBlank()) {
-                    Shell.cmd("chmod $mode \"${destination.absolutePath}\" 2>/dev/null").exec()
+                    val escapedMode = shellEscape(mode)
+                    Shell.cmd("chmod $escapedMode $escapedDest 2>/dev/null").exec()
                 }
                 val owner = metadata?.get("owner")
                 if (!owner.isNullOrBlank()) {
-                    Shell.cmd("chown $owner \"${destination.absolutePath}\" 2>/dev/null").exec()
+                    val escapedOwner = shellEscape(owner)
+                    Shell.cmd("chown $escapedOwner $escapedDest 2>/dev/null").exec()
                 }
             } else {
                 try {
@@ -1033,10 +1054,13 @@ class RestoreEngine(private val context: Context) {
                     extractedFile.copyTo(destination, overwrite = true)
                 } catch (writeEx: Exception) {
                     if (hasRoot) {
-                        val mkdirCmd = "mkdir -p \"${destination.parentFile?.absolutePath}\""
-                        val cpCmd = "cp -a \"${extractedFile.absolutePath}\" \"${destination.absolutePath}\""
+                        val escapedParent = shellEscape(destination.parentFile?.absolutePath ?: destination.absolutePath)
+                        val escapedExtracted = shellEscape(extractedFile.absolutePath)
+                        val escapedDest = shellEscape(destination.absolutePath)
+                        val mkdirCmd = "mkdir -p $escapedParent"
+                        val cpCmd = "cp -a $escapedExtracted $escapedDest"
                         Shell.cmd(mkdirCmd, cpCmd).exec()
-                        Shell.cmd("restorecon -R \"${destination.absolutePath}\" 2>/dev/null").exec()
+                        Shell.cmd("restorecon -R $escapedDest 2>/dev/null").exec()
                     } else throw writeEx
                 }
             }
@@ -1094,7 +1118,8 @@ class RestoreEngine(private val context: Context) {
 
             if (!destinationFolder.exists()) {
                 if (!destinationFolder.mkdirs() && Shell.isAppGrantedRoot() == true) {
-                    Shell.cmd("mkdir -p \"${destinationFolder.absolutePath}\"").exec()
+                    val escapedDest = shellEscape(destinationFolder.absolutePath)
+                    Shell.cmd("mkdir -p $escapedDest").exec()
                 }
             }
 
@@ -1102,6 +1127,12 @@ class RestoreEngine(private val context: Context) {
                 extractedFolder.walkTopDown().filter { it.isFile }.forEach { file ->
                     val relPath = file.relativeTo(extractedFolder).path
                     val destFile = File(destinationFolder, relPath)
+                    // Proteção contra Path Traversal (Zip Slip)
+                    val destCanonical = destFile.canonicalPath
+                    val targetCanonical = destinationFolder.canonicalPath
+                    if (!destCanonical.startsWith(targetCanonical + File.separator) && destCanonical != targetCanonical) {
+                        throw SecurityException("Tentativa de Path Traversal bloqueada: $relPath fora de $targetCanonical")
+                    }
                     val matchingChildItem = childItems.firstOrNull { it.archiveEntryPath.endsWith(relPath) }
                     val ok = writeRestoredFile(file, destFile, matchingChildItem?.metadata)
                     if (ok) {
@@ -1116,6 +1147,12 @@ class RestoreEngine(private val context: Context) {
                     val src = File(tempDir, child.archiveEntryPath)
                     if (src.exists() && src.isFile) {
                         val dest = File(child.originalPath.ifBlank { File(destinationFolder, src.name).absolutePath })
+                        // Proteção contra Path Traversal (Zip Slip)
+                        val destCanonical = dest.canonicalPath
+                        val targetCanonical = destinationFolder.canonicalPath
+                        if (!destCanonical.startsWith(targetCanonical + File.separator) && destCanonical != targetCanonical) {
+                            throw SecurityException("Tentativa de Path Traversal bloqueada: ${child.name} fora de $targetCanonical")
+                        }
                         val ok = writeRestoredFile(src, dest, child.metadata)
                         if (ok) {
                             filesRestored++

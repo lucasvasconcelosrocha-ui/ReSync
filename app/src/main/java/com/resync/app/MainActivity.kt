@@ -99,6 +99,10 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // Blindagem Cibernética Anti-Overlay / Anti-Tapjacking
+        window.decorView.filterTouchesWhenObscured = true
+        findViewById<android.view.View>(android.R.id.content)?.filterTouchesWhenObscured = true
+
         val prefs = getSharedPreferences("resync_prefs", Context.MODE_PRIVATE)
         val legacyPrefs = getSharedPreferences("odin_prefs", Context.MODE_PRIVATE)
         val isSetupDone = prefs.getBoolean("setup_completed", false) || legacyPrefs.getBoolean("setup_completed", false)

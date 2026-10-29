@@ -5,6 +5,8 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Environment
 import android.util.Log
+import com.resync.app.util.ShellSecurityUtils.shellEscape
+import com.resync.app.util.ShellSecurityUtils.validatePackageName
 import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -102,22 +104,23 @@ class RootBackupEngine(
             var successCount = 0
             for (pkg in packagesToProcess) {
                 try {
-                    val appInfo = pm.getApplicationInfo(pkg, 0)
+                    val validPkg = validatePackageName(pkg)
+                    val appInfo = pm.getApplicationInfo(validPkg, 0)
                     val baseApkPath = appInfo.sourceDir
                     if (baseApkPath.isNullOrBlank()) continue
 
-                    val pkgFolder = File(apksDir, pkg).apply { mkdirs() }
-                    val escapedBase = baseApkPath.replace("\"", "\\\"")
-                    val escapedDest = pkgFolder.absolutePath.replace("\"", "\\\"")
+                    val pkgFolder = File(apksDir, validPkg).apply { mkdirs() }
+                    val escapedBase = shellEscape(baseApkPath)
+                    val escapedDest = shellEscape(pkgFolder.absolutePath)
 
                     // Copiar APK base via shell root
-                    Shell.cmd("cp \"$escapedBase\" \"$escapedDest/base.apk\"").exec()
+                    Shell.cmd("cp $escapedBase $escapedDest/base.apk").exec()
 
                     // Copiar APKs divididos (splits) se existirem
                     val parentDir = File(baseApkPath).parentFile
                     if (parentDir != null) {
-                        val escapedParent = parentDir.absolutePath.replace("\"", "\\\"")
-                        Shell.cmd("cp \"$escapedParent\"/split_*.apk \"$escapedDest/\" 2>/dev/null").exec()
+                        val escapedParent = shellEscape(parentDir.absolutePath)
+                        Shell.cmd("cp $escapedParent/split_*.apk $escapedDest/ 2>/dev/null").exec()
                     }
 
                     successCount++
@@ -151,31 +154,33 @@ class RootBackupEngine(
 
             var successCount = 0
             for (pkg in packagesToProcess) {
-                val appDataPath = "/data/data/$pkg"
-                val checkDir = Shell.cmd("[ -d \"$appDataPath\" ]").exec()
+                val validPkg = validatePackageName(pkg)
+                val appDataPath = "/data/data/$validPkg"
+                val escapedAppData = shellEscape(appDataPath)
+                val checkDir = Shell.cmd("[ -d $escapedAppData ]").exec()
                 if (!checkDir.isSuccess) {
                     Log.w(TAG, "Diretório $appDataPath não existe ou está inacessível.")
                     continue
                 }
 
-                val tarArchive = File(dataDir, "${pkg}_data.tar.gz")
-                val escapedArchive = tarArchive.absolutePath.replace("\"", "\\\"")
+                val tarArchive = File(dataDir, "${validPkg}_data.tar.gz")
+                val escapedArchive = shellEscape(tarArchive.absolutePath)
 
                 // Pausar momentaneamente o processo para consistência das bases de dados SQLite
-                Shell.cmd("am kill \"$pkg\" 2>/dev/null").exec()
+                Shell.cmd("am kill $validPkg 2>/dev/null").exec()
 
                 // Compactação de /data/data/[pacote] excluindo cache volátil
-                val tarCmd = "cd \"$appDataPath\" && tar -czf \"$escapedArchive\" " +
-                        "--exclude=\"cache\" " +
-                        "--exclude=\"code_cache\" " +
-                        "--exclude=\"no_backup\" " +
-                        ". 2>/dev/null || tar -czf \"$escapedArchive\" ."
+                val tarCmd = "cd $escapedAppData && tar -czf $escapedArchive " +
+                        "--exclude='cache' " +
+                        "--exclude='code_cache' " +
+                        "--exclude='no_backup' " +
+                        ". 2>/dev/null || tar -czf $escapedArchive ."
 
                 val tarResult = Shell.cmd(tarCmd).exec()
                 if (tarResult.isSuccess && tarArchive.exists() && tarArchive.length() > 0) {
                     successCount++
                 } else {
-                    Log.w(TAG, "Falha na criação do arquivo tar para $pkg: ${tarResult.err.joinToString("\n")}")
+                    Log.w(TAG, "Falha na criação do arquivo tar para $validPkg: ${tarResult.err.joinToString("\n")}")
                 }
             }
             successCount > 0
@@ -209,8 +214,10 @@ class RootBackupEngine(
             }
 
             for (tarFile in archivesToProcess) {
-                val pkg = tarFile.name.removeSuffix("_data.tar.gz")
+                val rawPkg = tarFile.name.removeSuffix("_data.tar.gz")
+                val pkg = validatePackageName(rawPkg)
                 val appDataDir = "/data/data/$pkg"
+                val escapedAppDataDir = shellEscape(appDataDir)
 
                 // 1. Obter UID numérico atribuído pelo Android ao aplicativo
                 val uid = try {
@@ -222,22 +229,22 @@ class RootBackupEngine(
                 }
 
                 // 2. Encerrar forçadamente a aplicação antes de gravar dados
-                Shell.cmd("am force-stop \"$pkg\"").exec()
+                Shell.cmd("am force-stop $pkg").exec()
 
                 // 3. Limpar conteúdo antigo preservando a pasta raiz
-                Shell.cmd("rm -rf \"$appDataDir\"/*").exec()
+                Shell.cmd("rm -rf $escapedAppDataDir/*").exec()
 
                 // 4. Descompactar arquivo de dados dentro de /data/data/[pacote]
-                val escapedArchive = tarFile.absolutePath.replace("\"", "\\\"")
-                val untarResult = Shell.cmd("cd \"$appDataDir\" && tar -xzf \"$escapedArchive\"").exec()
+                val escapedArchive = shellEscape(tarFile.absolutePath)
+                val untarResult = Shell.cmd("cd $escapedAppDataDir && tar -xzf $escapedArchive").exec()
                 if (!untarResult.isSuccess) {
                     Log.w(TAG, "Erro ao descompactar dados de $pkg: ${untarResult.err.joinToString("\n")}")
                     continue
                 }
 
                 // 5. CRÍTICO: Reatribuir a propriedade dos arquivos ao UID do app e restaurar o contexto SELinux
-                Shell.cmd("chown -R $uid:$uid \"$appDataDir\"").exec()
-                Shell.cmd("restorecon -R \"$appDataDir\"").exec()
+                Shell.cmd("chown -R $uid:$uid $escapedAppDataDir").exec()
+                Shell.cmd("restorecon -R $escapedAppDataDir").exec()
 
                 restoredCount++
             }
