@@ -1098,9 +1098,9 @@ fun CloudSyncCenterScreen(
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(16.dp))
-                                .border(1.dp, DarkCardBorder, RoundedCornerShape(16.dp)),
-                            colors = CardDefaults.cardColors(containerColor = DarkSurfaceVariant)
+                                .clip(BentoCardShape)
+                                .border(1.dp, BentoBorder, BentoCardShape),
+                            colors = CardDefaults.cardColors(containerColor = BentoSurface)
                         ) {
                             Column(modifier = Modifier.padding(18.dp)) {
                                 Row(
@@ -1112,8 +1112,16 @@ fun CloudSyncCenterScreen(
                                         modifier = Modifier.weight(1f),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Icon(Icons.Default.Label, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(20.dp))
-                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .size(32.dp)
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .background(primaryAccent.copy(alpha = 0.16f)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(Icons.Default.Label, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(18.dp))
+                                        }
+                                        Spacer(modifier = Modifier.width(10.dp))
                                         Text(
                                             text = "Etiqueta do backup na nuvem",
                                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
@@ -1123,16 +1131,23 @@ fun CloudSyncCenterScreen(
                                         )
                                     }
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    TextButton(
-                                        onClick = { showLabelManagerModal = true },
-                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = primaryAccent.copy(alpha = 0.14f),
+                                        border = BorderStroke(1.dp, primaryAccent.copy(alpha = 0.35f)),
+                                        modifier = Modifier.clickable { showLabelManagerModal = true }
                                     ) {
-                                        Icon(Icons.Default.Tune, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(15.dp))
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Gerenciar", fontSize = 12.sp, color = primaryAccent, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(Icons.Default.Tune, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(13.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Gerenciar", fontSize = 11.5.sp, color = primaryAccent, fontWeight = FontWeight.Bold)
+                                        }
                                     }
                                 }
-                                Spacer(modifier = Modifier.height(4.dp))
+                                Spacer(modifier = Modifier.height(6.dp))
                                 Text(
                                     text = "A etiqueta identifica seu aparelho no Google Drive para agrupar e gerenciar backups. Toque para alternar ou criar etiquetas.",
                                     fontSize = 12.sp,
@@ -1142,9 +1157,9 @@ fun CloudSyncCenterScreen(
 
                                 Spacer(modifier = Modifier.height(12.dp))
                                 Surface(
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = DarkBg,
-                                    border = BorderStroke(1.dp, if (effectiveViewLabel == customDeviceLabel) primaryAccent.copy(alpha = 0.5f) else DarkCardBorder),
+                                    shape = BentoSubCardShape,
+                                    color = BentoSurfaceSubtle,
+                                    border = BorderStroke(1.dp, if (effectiveViewLabel == customDeviceLabel) primaryAccent.copy(alpha = 0.5f) else BentoBorder),
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable { showLabelManagerModal = true }
@@ -1217,13 +1232,13 @@ fun CloudSyncCenterScreen(
                                     )
                                     Text(
                                         text = "Toque para ver/restaurar",
-                                        fontSize = 10.sp,
+                                        fontSize = 10.5.sp,
                                         color = primaryAccent
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
 
-                                // 4 colunas x 2 linhas (Clicáveis)
+                                // 4 colunas x 2 linhas (Bento Grid Clicáveis)
                                 Column(
                                     modifier = Modifier.fillMaxWidth(),
                                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -1236,52 +1251,52 @@ fun CloudSyncCenterScreen(
                                         Card(
                                             modifier = Modifier
                                                 .weight(1f)
-                                                .clip(RoundedCornerShape(10.dp))
-                                                .border(0.5.dp, if (remoteAppsCount > 0) primaryAccent.copy(alpha = 0.4f) else DarkCardBorder, RoundedCornerShape(10.dp))
+                                                .clip(BentoSubCardShape)
+                                                .border(1.dp, if (remoteAppsCount > 0) primaryAccent.copy(alpha = 0.4f) else BentoBorder, BentoSubCardShape)
                                                 .clickable { onOpenCategoryRestore("Aplicativos") },
-                                            colors = CardDefaults.cardColors(containerColor = DarkBg)
+                                            colors = CardDefaults.cardColors(containerColor = BentoSurfaceSubtle)
                                         ) {
                                             Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Text("$remoteAppsCount", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = primaryAccent)
+                                                Text("$remoteAppsCount", style = TabularNumberStyle.copy(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = primaryAccent))
                                                 Text("Aplicativos", fontSize = 9.5.sp, color = TextSecondary, maxLines = 1)
                                             }
                                         }
                                         Card(
                                             modifier = Modifier
                                                 .weight(1f)
-                                                .clip(RoundedCornerShape(10.dp))
-                                                .border(0.5.dp, if (remoteSmsCount > 0) AccentElectricCyan.copy(alpha = 0.4f) else DarkCardBorder, RoundedCornerShape(10.dp))
+                                                .clip(BentoSubCardShape)
+                                                .border(1.dp, if (remoteSmsCount > 0) AccentElectricCyan.copy(alpha = 0.4f) else BentoBorder, BentoSubCardShape)
                                                 .clickable { onOpenCategoryRestore("Mensagens") },
-                                            colors = CardDefaults.cardColors(containerColor = DarkBg)
+                                            colors = CardDefaults.cardColors(containerColor = BentoSurfaceSubtle)
                                         ) {
                                             Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Text("$remoteSmsCount", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = AccentElectricCyan)
+                                                Text("$remoteSmsCount", style = TabularNumberStyle.copy(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = AccentElectricCyan))
                                                 Text("Mensagens", fontSize = 9.5.sp, color = TextSecondary, maxLines = 1)
                                             }
                                         }
                                         Card(
                                             modifier = Modifier
                                                 .weight(1f)
-                                                .clip(RoundedCornerShape(10.dp))
-                                                .border(0.5.dp, if (remoteCallsCount > 0) AccentEmeraldGreen.copy(alpha = 0.4f) else DarkCardBorder, RoundedCornerShape(10.dp))
+                                                .clip(BentoSubCardShape)
+                                                .border(1.dp, if (remoteCallsCount > 0) AccentEmeraldGreen.copy(alpha = 0.4f) else BentoBorder, BentoSubCardShape)
                                                 .clickable { onOpenCategoryRestore("Chamadas") },
-                                            colors = CardDefaults.cardColors(containerColor = DarkBg)
+                                            colors = CardDefaults.cardColors(containerColor = BentoSurfaceSubtle)
                                         ) {
                                             Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Text("$remoteCallsCount", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = AccentEmeraldGreen)
+                                                Text("$remoteCallsCount", style = TabularNumberStyle.copy(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = AccentEmeraldGreen))
                                                 Text("Chamadas", fontSize = 9.5.sp, color = TextSecondary, maxLines = 1)
                                             }
                                         }
                                         Card(
                                             modifier = Modifier
                                                 .weight(1f)
-                                                .clip(RoundedCornerShape(10.dp))
-                                                .border(0.5.dp, if (remoteFoldersCount > 0) AccentNeonPurple.copy(alpha = 0.4f) else DarkCardBorder, RoundedCornerShape(10.dp))
+                                                .clip(BentoSubCardShape)
+                                                .border(1.dp, if (remoteFoldersCount > 0) AccentNeonPurple.copy(alpha = 0.4f) else BentoBorder, BentoSubCardShape)
                                                 .clickable { onOpenCategoryRestore("Pastas") },
-                                            colors = CardDefaults.cardColors(containerColor = DarkBg)
+                                            colors = CardDefaults.cardColors(containerColor = BentoSurfaceSubtle)
                                         ) {
                                             Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Text("$remoteFoldersCount", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = AccentNeonPurple)
+                                                Text("$remoteFoldersCount", style = TabularNumberStyle.copy(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = AccentNeonPurple))
                                                 Text("Pastas", fontSize = 9.5.sp, color = TextSecondary, maxLines = 1)
                                             }
                                         }
@@ -1295,52 +1310,52 @@ fun CloudSyncCenterScreen(
                                         Card(
                                             modifier = Modifier
                                                 .weight(1f)
-                                                .clip(RoundedCornerShape(10.dp))
-                                                .border(0.5.dp, if (remoteBluetoothCount > 0) AccentNeonBlue.copy(alpha = 0.4f) else DarkCardBorder, RoundedCornerShape(10.dp))
+                                                .clip(BentoSubCardShape)
+                                                .border(1.dp, if (remoteBluetoothCount > 0) AccentNeonBlue.copy(alpha = 0.4f) else BentoBorder, BentoSubCardShape)
                                                 .clickable { onOpenCategoryRestore("Bluetooth") },
-                                            colors = CardDefaults.cardColors(containerColor = DarkBg)
+                                            colors = CardDefaults.cardColors(containerColor = BentoSurfaceSubtle)
                                         ) {
                                             Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Text("$remoteBluetoothCount", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = AccentNeonBlue)
+                                                Text("$remoteBluetoothCount", style = TabularNumberStyle.copy(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = AccentNeonBlue))
                                                 Text("Bluetooth", fontSize = 9.5.sp, color = TextSecondary, maxLines = 1)
                                             }
                                         }
                                         Card(
                                             modifier = Modifier
                                                 .weight(1f)
-                                                .clip(RoundedCornerShape(10.dp))
-                                                .border(0.5.dp, if (remoteDnsCount > 0) AccentCyberPurple.copy(alpha = 0.4f) else DarkCardBorder, RoundedCornerShape(10.dp))
+                                                .clip(BentoSubCardShape)
+                                                .border(1.dp, if (remoteDnsCount > 0) AccentCyberPurple.copy(alpha = 0.4f) else BentoBorder, BentoSubCardShape)
                                                 .clickable { onOpenCategoryRestore("DNS") },
-                                            colors = CardDefaults.cardColors(containerColor = DarkBg)
+                                            colors = CardDefaults.cardColors(containerColor = BentoSurfaceSubtle)
                                         ) {
                                             Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Text("$remoteDnsCount", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = AccentCyberPurple)
+                                                Text("$remoteDnsCount", style = TabularNumberStyle.copy(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = AccentCyberPurple))
                                                 Text("DNS", fontSize = 9.5.sp, color = TextSecondary, maxLines = 1)
                                             }
                                         }
                                         Card(
                                             modifier = Modifier
                                                 .weight(1f)
-                                                .clip(RoundedCornerShape(10.dp))
-                                                .border(0.5.dp, if (remoteWifiCount > 0) StatusWarning.copy(alpha = 0.4f) else DarkCardBorder, RoundedCornerShape(10.dp))
+                                                .clip(BentoSubCardShape)
+                                                .border(1.dp, if (remoteWifiCount > 0) StatusWarning.copy(alpha = 0.4f) else BentoBorder, BentoSubCardShape)
                                                 .clickable { onOpenCategoryRestore("Wi-Fi") },
-                                            colors = CardDefaults.cardColors(containerColor = DarkBg)
+                                            colors = CardDefaults.cardColors(containerColor = BentoSurfaceSubtle)
                                         ) {
                                             Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Text("$remoteWifiCount", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = StatusWarning)
+                                                Text("$remoteWifiCount", style = TabularNumberStyle.copy(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = StatusWarning))
                                                 Text("Wi-Fi", fontSize = 9.5.sp, color = TextSecondary, maxLines = 1)
                                             }
                                         }
                                         Card(
                                             modifier = Modifier
                                                 .weight(1f)
-                                                .clip(RoundedCornerShape(10.dp))
-                                                .border(0.5.dp, if (remoteContactsCount > 0) AccentSunsetOrange.copy(alpha = 0.4f) else DarkCardBorder, RoundedCornerShape(10.dp))
+                                                .clip(BentoSubCardShape)
+                                                .border(1.dp, if (remoteContactsCount > 0) AccentSunsetOrange.copy(alpha = 0.4f) else BentoBorder, BentoSubCardShape)
                                                 .clickable { onOpenCategoryRestore("Contatos") },
-                                            colors = CardDefaults.cardColors(containerColor = DarkBg)
+                                            colors = CardDefaults.cardColors(containerColor = BentoSurfaceSubtle)
                                         ) {
                                             Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Text("$remoteContactsCount", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = AccentSunsetOrange)
+                                                Text("$remoteContactsCount", style = TabularNumberStyle.copy(fontWeight = FontWeight.Bold, fontSize = 15.sp, color = AccentSunsetOrange))
                                                 Text("Contatos", fontSize = 9.5.sp, color = TextSecondary, maxLines = 1)
                                             }
                                         }

@@ -47,10 +47,12 @@ import com.resync.app.ui.viewmodel.DriveQuotaState
 import com.resync.app.ui.viewmodel.GoogleDriveState
 import com.resync.app.ui.viewmodel.RemoteBackupsState
 import com.resync.app.engine.CapabilityManager
+import com.resync.app.engine.DeviceCategoryInspector
 import com.resync.app.ui.components.GoogleDriveAccountsBottomSheet
 import com.resync.app.ui.components.cards.InfoRow
 import com.resync.app.ui.components.cards.InteractiveGlassCard
 import com.resync.app.ui.components.cards.DashboardActionButton
+import com.resync.app.ui.components.cards.BentoCategoryTile
 import com.resync.app.ui.components.SmoothCurrentItemText
 import com.resync.app.ui.components.SmoothLinearProgressBar
 import com.resync.app.ui.components.SmoothPercentText
@@ -175,6 +177,30 @@ fun DashboardScreen(
 
     var showAccountsBottomSheet by remember { mutableStateOf(false) }
 
+    val installedAppsList by viewModel.installedApps.collectAsStateWithLifecycle()
+    var smsCount by remember { mutableStateOf<Int?>(null) }
+    var callCount by remember { mutableStateOf<Int?>(null) }
+    var contactsCount by remember { mutableStateOf<Int?>(null) }
+    var wifiCount by remember { mutableStateOf<Int?>(null) }
+    var btCount by remember { mutableStateOf<Int?>(null) }
+    var wallpaperCount by remember { mutableStateOf<Int?>(null) }
+    var dnsInfoStr by remember { mutableStateOf("Ativo") }
+
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { smsCount = DeviceCategoryInspector.getSmsConversations(context).size }
+            runCatching { callCount = DeviceCategoryInspector.getCallLogs(context).size }
+            runCatching { contactsCount = DeviceCategoryInspector.getContacts(context).size }
+            runCatching { wifiCount = DeviceCategoryInspector.getSavedWifiNetworks(context).size }
+            runCatching { btCount = DeviceCategoryInspector.getBluetoothDevices(context).size }
+            runCatching { wallpaperCount = DeviceCategoryInspector.getWallpapers(context).size }
+            runCatching {
+                val dns = DeviceCategoryInspector.getDnsInfo(context)
+                dnsInfoStr = if (dns.isPrivateDnsActive) "Privado" else "Padrão"
+            }
+        }
+    }
+
     val scrollState = rememberScrollState()
     var isPullRefreshing by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
@@ -211,19 +237,19 @@ fun DashboardScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                // Esquerda: FOTO DE PERFIL REAL da conta ativa do Google Drive (~44dp)
+                // Esquerda: Avatar do perfil com anel sutil
                 UserAvatar(
                     photoUrl = activeAccount?.photoUrl,
                     displayName = activeAccount?.name,
                     email = activeAccount?.email,
-                    size = 44.dp,
-                    borderColor = primaryAccent,
+                    size = 42.dp,
+                    borderColor = primaryAccent.copy(alpha = 0.5f),
                     borderWidth = 1.5.dp,
                     accentColor = primaryAccent,
                     onClick = { showAccountsBottomSheet = true }
                 )
 
-                // Centro: Logo + Nome "ReSync"
+                // Centro: Logo + Nome "ReSync" e badge minimalista "AES-256-GCM"
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center,
@@ -232,61 +258,75 @@ fun DashboardScreen(
                     Image(
                         painter = painterResource(id = R.drawable.logo_resync),
                         contentDescription = "ReSync",
-                        modifier = Modifier.size(34.dp),
+                        modifier = Modifier.size(30.dp),
                         contentScale = ContentScale.Fit
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = "ReSync",
                         style = MaterialTheme.typography.titleLarge.copy(
                             fontWeight = FontWeight.ExtraBold,
-                            letterSpacing = 0.5.sp
+                            letterSpacing = 0.3.sp
                         ),
                         color = TextPrimary
                     )
-                }
-
-                // Direita: Vassoura (Limpeza de Cache) e Terminal / Logs
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(if (totalAppCacheBytes > 0L) StatusWarning.copy(alpha = 0.15f) else DarkSurfaceVariant)
-                            .border(
-                                1.dp,
-                                if (totalAppCacheBytes > 0L) StatusWarning.copy(alpha = 0.6f) else DarkCardBorder,
-                                RoundedCornerShape(12.dp)
-                            )
-                            .clickable(onClick = onNavigateToStorageCache),
-                        contentAlignment = Alignment.Center
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = StatusSuccess.copy(alpha = 0.12f),
+                        border = BorderStroke(1.dp, StatusSuccess.copy(alpha = 0.35f))
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.CleaningServices,
-                            contentDescription = "Limpeza de Cache",
-                            tint = if (totalAppCacheBytes > 0L) StatusWarning else primaryAccent,
-                            modifier = Modifier.size(20.dp)
+                        Text(
+                            text = "AES-256-GCM",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = StatusSuccess,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.5.dp)
                         )
                     }
+                }
 
-                    Box(
+                // Direita: Dois botões em pílula perfeitamente alinhados (Vassoura de Cache e Console >_)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Surface(
                         modifier = Modifier
-                            .size(42.dp)
+                            .size(38.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(DarkSurfaceVariant)
-                            .border(1.dp, DarkCardBorder, RoundedCornerShape(12.dp))
-                            .clickable(onClick = onNavigateToLogs),
-                        contentAlignment = Alignment.Center
+                            .clickable(onClick = onNavigateToStorageCache),
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (totalAppCacheBytes > 0L) StatusWarning.copy(alpha = 0.15f) else BentoSurface,
+                        border = BorderStroke(1.dp, if (totalAppCacheBytes > 0L) StatusWarning.copy(alpha = 0.6f) else BentoBorder)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Terminal,
-                            contentDescription = "Logs",
-                            tint = primaryAccent,
-                            modifier = Modifier.size(20.dp)
-                        )
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.CleaningServices,
+                                contentDescription = "Limpeza de Cache",
+                                tint = if (totalAppCacheBytes > 0L) StatusWarning else TextSecondary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+
+                    Surface(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable(onClick = onNavigateToLogs),
+                        shape = RoundedCornerShape(12.dp),
+                        color = BentoSurface,
+                        border = BorderStroke(1.dp, BentoBorder)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Terminal,
+                                contentDescription = "Console",
+                                tint = TextSecondary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -455,16 +495,16 @@ fun DashboardScreen(
                 else -> "—"
             }
 
-            // CARD UNIFICADO: GOOGLE DRIVE + ARMAZENAMENTO INTERNO
+            // CARD HERO UNIFICADO: GOOGLE DRIVE + ARMAZENAMENTO INTERNO (BENTO GRID)
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(StandardCardShape)
-                    .border(1.dp, StandardCardBorder, StandardCardShape),
-                colors = CardDefaults.cardColors(containerColor = StandardCardBg)
+                    .clip(BentoCardShape)
+                    .border(1.dp, BentoBorder, BentoCardShape),
+                colors = CardDefaults.cardColors(containerColor = BentoSurface)
             ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    // PARTE 1: GOOGLE DRIVE
+                Column(modifier = Modifier.padding(16.dp)) {
+                    // PARTE 1: GOOGLE DRIVE (Metade Superior em Ciano)
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -479,29 +519,34 @@ fun DashboardScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier.weight(1f)
                             ) {
-                                UserAvatar(
-                                    photoUrl = activeAccount?.photoUrl,
-                                    displayName = activeAccount?.name,
-                                    email = activeAccount?.email,
-                                    size = 26.dp,
-                                    borderColor = AccentElectricCyan,
-                                    borderWidth = 1.dp,
-                                    accentColor = AccentElectricCyan
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(StatusInfo.copy(alpha = 0.16f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CloudQueue,
+                                        contentDescription = "Google Drive",
+                                        tint = StatusInfo,
+                                        modifier = Modifier.size(19.dp)
+                                    )
+                                }
 
-                                Spacer(modifier = Modifier.width(8.dp))
+                                Spacer(modifier = Modifier.width(10.dp))
 
                                 Column {
                                     Text(
                                         text = "Google Drive",
-                                        fontSize = 11.sp,
-                                        color = TextSecondary,
-                                        fontWeight = FontWeight.Medium
+                                        fontSize = 12.sp,
+                                        color = StatusInfo,
+                                        fontWeight = FontWeight.Bold
                                     )
                                     Text(
-                                        text = activeAccount?.email ?: "Nenhuma conta ativa",
-                                        fontSize = 12.5.sp,
-                                        fontWeight = FontWeight.Bold,
+                                        text = activeAccount?.email ?: "Nenhuma conta vinculada",
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
                                         color = TextPrimary,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
@@ -514,42 +559,42 @@ fun DashboardScreen(
                                     Text(
                                         text = "Atualizando…",
                                         fontSize = 11.sp,
-                                        color = AccentElectricCyan,
+                                        color = StatusInfo,
                                         fontWeight = FontWeight.Medium
                                     )
                                 } else if (isDriveOffline) {
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(StatusWarning.copy(alpha = 0.2f))
-                                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = StatusWarning.copy(alpha = 0.18f),
+                                        border = BorderStroke(1.dp, StatusWarning.copy(alpha = 0.4f))
                                     ) {
                                         Text(
                                             text = "Sem conexão",
                                             fontSize = 10.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = StatusWarning
+                                            color = StatusWarning,
+                                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
                                         )
                                     }
                                 } else if (isDriveSessionExpired) {
-                                    Box(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(AccentSunsetOrange.copy(alpha = 0.2f))
-                                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = AccentSunsetOrange.copy(alpha = 0.18f),
+                                        border = BorderStroke(1.dp, AccentSunsetOrange.copy(alpha = 0.4f))
                                     ) {
                                         Text(
                                             text = "Reconectar",
                                             fontSize = 10.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = AccentSunsetOrange
+                                            color = AccentSunsetOrange,
+                                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
                                         )
                                     }
                                 }
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
                         if (activeAccount != null) {
                             val quotaText = if (quotaLimit > 0) {
@@ -566,26 +611,30 @@ fun DashboardScreen(
                             ) {
                                 Text(
                                     text = quotaText,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = TextPrimary
+                                    style = TabularNumberStyle.copy(
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = TextPrimary
+                                    )
                                 )
                                 Text(
                                     text = String.format(Locale("pt", "BR"), "%.1f%% usado", driveUsedPercent),
-                                    fontSize = 11.5.sp,
-                                    color = TextSecondary
+                                    style = TabularNumberStyle.copy(
+                                        fontSize = 11.5.sp,
+                                        color = TextSecondary
+                                    )
                                 )
                             }
 
                             if (quotaLimit > 0) {
-                                Spacer(modifier = Modifier.height(6.dp))
+                                Spacer(modifier = Modifier.height(7.dp))
                                 LinearProgressIndicator(
                                     progress = { driveProgress },
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(6.dp)
                                         .clip(RoundedCornerShape(3.dp)),
-                                    color = AccentElectricCyan,
+                                    color = StatusInfo,
                                     trackColor = DarkBg
                                 )
                             }
@@ -597,7 +646,7 @@ fun DashboardScreen(
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(9.dp))
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -618,16 +667,16 @@ fun DashboardScreen(
                                 color = TextSecondary,
                                 maxLines = 1,
                                 softWrap = false,
-                                textAlign = androidx.compose.ui.text.style.TextAlign.End
+                                textAlign = TextAlign.End
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(10.dp))
-                    HorizontalDivider(color = DarkCardBorder.copy(alpha = 0.5f), thickness = 0.8.dp)
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    HorizontalDivider(color = BentoHairline, thickness = 1.dp)
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                    // PARTE 2: ARMAZENAMENTO INTERNO
+                    // PARTE 2: ARMAZENAMENTO LOCAL (Metade Inferior)
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -641,44 +690,66 @@ fun DashboardScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box(
                                     modifier = Modifier
-                                        .size(26.dp)
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(primaryAccent.copy(alpha = 0.15f)),
+                                        .size(32.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(primaryAccent.copy(alpha = 0.16f)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.PhoneAndroid,
                                         contentDescription = null,
                                         tint = primaryAccent,
-                                        modifier = Modifier.size(15.dp)
+                                        modifier = Modifier.size(19.dp)
                                     )
                                 }
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "Armazenamento interno",
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimary
-                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = "Armazenamento Interno",
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = TextPrimary
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Surface(
+                                            shape = RoundedCornerShape(4.dp),
+                                            color = Color.White.copy(alpha = 0.08f),
+                                            border = BorderStroke(0.5.dp, BentoHairline)
+                                        ) {
+                                            Text(
+                                                text = "UFS / NVMe",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = TextSecondary,
+                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.5.dp)
+                                            )
+                                        }
+                                    }
+                                }
                             }
 
                             Text(
                                 text = internalUsedText,
-                                fontSize = 11.5.sp,
-                                color = TextSecondary
+                                style = TabularNumberStyle.copy(
+                                    fontSize = 11.5.sp,
+                                    color = TextSecondary
+                                )
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
                         Text(
                             text = internalStorageText,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = TextPrimary
+                            style = TabularNumberStyle.copy(
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = TextPrimary
+                            )
                         )
 
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(7.dp))
 
                         LinearProgressIndicator(
                             progress = { internalProgress },
@@ -693,10 +764,10 @@ fun DashboardScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             // ==========================================
-            // SEÇÃO CATEGORIAS (Subida para logo abaixo do card unificado)
+            // SEÇÃO BENTO GRID DE CATEGORIAS (3x3)
             // ==========================================
             Text(
                 text = "CATEGORIAS",
@@ -707,103 +778,122 @@ fun DashboardScreen(
                 modifier = Modifier.padding(start = 2.dp, bottom = 8.dp)
             )
 
-            // Linha 1 de chips: Aplicativos, Mensagens, Chamadas
+            val appsCountText = if (installedAppsList.isNotEmpty()) "${installedAppsList.size}" else "Apps"
+            val smsCountText = smsCount?.let { "$it msgs" } ?: "SMS"
+            val callCountText = callCount?.let { "$it reg." } ?: "Chamadas"
+            val contactsCountText = contactsCount?.let { "$it cont." } ?: "Contatos"
+            val foldersCountText = "Pastas"
+            val wifiCountText = wifiCount?.let { "$it redes" } ?: "Wi-Fi"
+            val btCountText = btCount?.let { "$it disp." } ?: "Bluetooth"
+            val wallpaperCountText = wallpaperCount?.let { "$it itens" } ?: "Papéis"
+            val dnsStatusText = dnsInfoStr
+
+            // Linha 1 de Bento Tiles: Aplicativos, Mensagens, Chamadas
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                CategoryChip(
+                BentoCategoryTile(
                     title = "Aplicativos",
+                    countText = appsCountText,
                     icon = Icons.Default.Apps,
-                    primaryAccent = primaryAccent,
+                    iconTint = StatusInfo,
                     modifier = Modifier.weight(1f),
                     onClick = { onNavigateToCategory("apps") }
                 )
-                CategoryChip(
+                BentoCategoryTile(
                     title = "Mensagens",
+                    countText = smsCountText,
                     icon = Icons.Default.Message,
-                    primaryAccent = primaryAccent,
+                    iconTint = BrandAccent,
                     modifier = Modifier.weight(1f),
                     onClick = { onNavigateToCategory("messages") }
                 )
-                CategoryChip(
+                BentoCategoryTile(
                     title = "Chamadas",
+                    countText = callCountText,
                     icon = Icons.Default.Call,
-                    primaryAccent = primaryAccent,
+                    iconTint = StatusSuccess,
                     modifier = Modifier.weight(1f),
                     onClick = { onNavigateToCategory("calls") }
                 )
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // Linha 2 de chips: Contatos, Pastas, Wi-Fi
+            // Linha 2 de Bento Tiles: Contatos, Pastas, Wi-Fi
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                CategoryChip(
+                BentoCategoryTile(
                     title = "Contatos",
+                    countText = contactsCountText,
                     icon = Icons.Default.Contacts,
-                    primaryAccent = primaryAccent,
+                    iconTint = AccentNeonBlue,
                     modifier = Modifier.weight(1f),
                     onClick = { onNavigateToCategory("contacts") }
                 )
-                CategoryChip(
+                BentoCategoryTile(
                     title = "Pastas",
+                    countText = foldersCountText,
                     icon = Icons.Default.Folder,
-                    primaryAccent = primaryAccent,
+                    iconTint = StatusWarning,
                     modifier = Modifier.weight(1f),
                     onClick = onNavigateToFolders
                 )
-                CategoryChip(
+                BentoCategoryTile(
                     title = "Wi-Fi",
+                    countText = wifiCountText,
                     icon = Icons.Default.Wifi,
-                    primaryAccent = primaryAccent,
+                    iconTint = StatusInfo,
                     modifier = Modifier.weight(1f),
                     onClick = { onNavigateToCategory("wifi") }
                 )
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
-            // Linha 3 de chips: Bluetooth, Papéis de parede, DNS
+            // Linha 3 de Bento Tiles: Bluetooth, Wallpapers, DNS
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                CategoryChip(
+                BentoCategoryTile(
                     title = "Bluetooth",
+                    countText = btCountText,
                     icon = Icons.Default.Bluetooth,
-                    primaryAccent = primaryAccent,
+                    iconTint = AccentNeonBlue,
                     modifier = Modifier.weight(1f),
                     onClick = { onNavigateToCategory("bluetooth") }
                 )
-                CategoryChip(
+                BentoCategoryTile(
                     title = "Papéis de parede",
+                    countText = wallpaperCountText,
                     icon = Icons.Default.Wallpaper,
-                    primaryAccent = primaryAccent,
-                    modifier = Modifier.weight(1.35f),
+                    iconTint = AccentCyberPurple,
+                    modifier = Modifier.weight(1f),
                     onClick = { onNavigateToCategory("wallpaper") }
                 )
-                CategoryChip(
+                BentoCategoryTile(
                     title = "DNS",
+                    countText = dnsStatusText,
                     icon = Icons.Default.Dns,
-                    primaryAccent = primaryAccent,
-                    modifier = Modifier.weight(0.75f),
+                    iconTint = StatusSuccess,
+                    modifier = Modifier.weight(1f),
                     onClick = { onNavigateToCategory("dns") }
                 )
             }
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // c) STATUS DO ROOT (Estilo Swift Backup)
+            // STATUS DO ROOT (Bento Card)
             val isRootGranted = permissionsState.isRootGranted
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(StandardCardShape)
-                    .border(1.dp, StandardCardBorder, StandardCardShape)
+                    .clip(BentoSubCardShape)
+                    .border(1.dp, BentoBorder, BentoSubCardShape)
                     .clickable {
                         if (rootStatus == CapabilityManager.RootStatus.PERMISSION_NEEDED) {
                             viewModel.requestRootPermission()
@@ -811,7 +901,7 @@ fun DashboardScreen(
                             onNavigateToPermissions()
                         }
                     },
-                colors = CardDefaults.cardColors(containerColor = StandardCardBg)
+                colors = CardDefaults.cardColors(containerColor = BentoSurface)
             ) {
                 Row(
                     modifier = Modifier
@@ -820,73 +910,100 @@ fun DashboardScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(
-                        text = "STATUS DO ROOT",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = TextSecondary,
-                        letterSpacing = 0.5.sp
-                    )
-
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (isRootGranted) {
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isRootGranted) StatusSuccess.copy(alpha = 0.16f) else StatusWarning.copy(alpha = 0.16f)),
+                            contentAlignment = Alignment.Center
+                        ) {
                             Icon(
-                                imageVector = Icons.Default.CheckCircle,
-                                contentDescription = "Root Concedido",
-                                tint = StatusSuccess,
-                                modifier = Modifier.size(18.dp)
+                                imageVector = if (isRootGranted) Icons.Default.Security else Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = if (isRootGranted) StatusSuccess else StatusWarning,
+                                modifier = Modifier.size(16.dp)
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Concedido",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = StatusSuccess
-                            )
-                        } else {
-                            val isPending = rootStatus == CapabilityManager.RootStatus.PERMISSION_NEEDED
-                            Icon(
-                                imageVector = if (isPending) Icons.Default.Warning else Icons.Default.Cancel,
-                                contentDescription = "Root Negado",
-                                tint = if (isPending) StatusWarning else TextMuted,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (isPending) "Permissão pendente" else "Negado",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isPending) StatusWarning else TextMuted
-                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "STATUS DO ROOT",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextSecondary,
+                            letterSpacing = 0.5.sp
+                        )
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (isRootGranted) StatusSuccess.copy(alpha = 0.15f) else StatusWarning.copy(alpha = 0.15f),
+                        border = BorderStroke(1.dp, if (isRootGranted) StatusSuccess.copy(alpha = 0.4f) else StatusWarning.copy(alpha = 0.4f))
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            if (isRootGranted) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = "Root Concedido",
+                                    tint = StatusSuccess,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = "Superusuário Concedido",
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = StatusSuccess
+                                )
+                            } else {
+                                val isPending = rootStatus == CapabilityManager.RootStatus.PERMISSION_NEEDED
+                                Icon(
+                                    imageVector = if (isPending) Icons.Default.Warning else Icons.Default.Cancel,
+                                    contentDescription = "Root Negado",
+                                    tint = if (isPending) StatusWarning else TextMuted,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = if (isPending) "Permissão Pendente" else "Negado",
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isPending) StatusWarning else TextMuted
+                                )
+                            }
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             // ==========================================
-            // 3) RESTANTE DO INÍCIO: BOTÕES PADRONIZADOS
+            // BOTÕES DE AÇÃO RÁPIDA
             // ==========================================
 
-            // AÇÃO 1: [ NOVO BACKUP ]
+            // AÇÃO 1: [ NOVO BACKUP ] (Destaque BrandAccent)
             DashboardActionButton(
                 text = "NOVO BACKUP",
-                onClick = onNavigateToCustomWizard
+                onClick = onNavigateToCustomWizard,
+                isPrimary = true
             ) {
                 Image(
                     painter = painterResource(id = R.drawable.ic_novo_backup),
                     contentDescription = null,
-                    modifier = Modifier.size(18.dp),
+                    modifier = Modifier.size(19.dp),
                     contentScale = ContentScale.Fit
                 )
             }
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // AÇÃO 2: [ BACKUPS AGENDADOS ]
+            // AÇÃO 2: [ ROTINAS / BACKUPS AGENDADOS ]
             DashboardActionButton(
-                text = "BACKUPS AGENDADOS",
+                text = "ROTINAS DE BACKUP",
                 onClick = onNavigateToScheduledBackups
             ) {
                 Icon(
@@ -907,7 +1024,7 @@ fun DashboardScreen(
                 Icon(
                     imageVector = Icons.Default.Restore,
                     contentDescription = null,
-                    tint = AccentEmeraldGreen,
+                    tint = StatusSuccess,
                     modifier = Modifier.size(18.dp)
                 )
             }

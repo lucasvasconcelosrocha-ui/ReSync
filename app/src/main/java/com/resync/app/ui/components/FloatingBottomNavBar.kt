@@ -29,9 +29,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.resync.app.ui.navigation.Screen
-import com.resync.app.ui.theme.DarkCardBorder
-import com.resync.app.ui.theme.DarkSurfaceVariant
-import com.resync.app.ui.theme.TextMuted
+import com.resync.app.ui.theme.*
 
 private data class NavItemData(
     val route: String,
@@ -98,19 +96,19 @@ fun FloatingBottomNavBar(
                 .fillMaxWidth()
                 .height(64.dp)
                 .shadow(
-                    elevation = 8.dp,
+                    elevation = 12.dp,
                     shape = RoundedCornerShape(24.dp),
-                    ambientColor = Color.Black.copy(alpha = 0.5f),
+                    ambientColor = Color.Black.copy(alpha = 0.6f),
                     spotColor = primaryAccent.copy(alpha = 0.25f)
                 ),
             shape = RoundedCornerShape(24.dp),
-            color = DarkSurfaceVariant,
-            border = BorderStroke(1.dp, DarkCardBorder)
+            color = BentoSurface.copy(alpha = 0.96f),
+            border = BorderStroke(1.dp, BentoBorder)
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 4.dp, vertical = 4.dp),
+                    .padding(horizontal = 6.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 items.forEach { item ->

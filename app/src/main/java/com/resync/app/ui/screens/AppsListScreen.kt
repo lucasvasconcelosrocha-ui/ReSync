@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -295,7 +296,7 @@ fun AppsListScreen(
 
                 Spacer(modifier = Modifier.height(6.dp))
 
-                // Search Bar
+                // Search Bar Bento Style
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
@@ -309,21 +310,70 @@ fun AppsListScreen(
                             }
                         }
                     },
-                    shape = RoundedCornerShape(12.dp),
+                    shape = BentoSubCardShape,
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = DarkSurfaceVariant,
-                        unfocusedContainerColor = DarkSurfaceVariant,
+                        focusedContainerColor = BentoSurface,
+                        unfocusedContainerColor = BentoSurface,
                         focusedBorderColor = primaryAccent,
-                        unfocusedBorderColor = DarkCardBorder,
+                        unfocusedBorderColor = BentoBorder,
                         focusedTextColor = TextPrimary,
                         unfocusedTextColor = TextPrimary
                     ),
                     singleLine = true
                 )
 
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Global Occupation Metrics Bar
+                val totalOccupiedSize = remember(allDisplayApps) { allDisplayApps.sumOf { it.sizeBytes } }
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    color = BentoSurface,
+                    border = BorderStroke(1.dp, BentoBorder)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 7.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(7.dp)
+                                    .clip(CircleShape)
+                                    .background(StatusInfo)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "${apps.size} instalados",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = TextPrimary
+                            )
+                            Text(
+                                text = " • ${userApps.size} usuário / ${systemApps.size} sistema",
+                                fontSize = 11.sp,
+                                color = TextMuted
+                            )
+                        }
+
+                        Text(
+                            text = formatAppSize(totalOccupiedSize),
+                            style = TabularNumberStyle.copy(
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextSecondary
+                            )
+                        )
+                    }
+                }
+
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Filter Chips Row (Scrollable horizontally to prevent compression and vertical character wrapping)
+                // Filter Chips Row (Horizontal Bento Pills)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -335,16 +385,16 @@ fun AppsListScreen(
                         val isSelected = f == selectedFilter
                         Box(
                             modifier = Modifier
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(if (isSelected) primaryAccent.copy(alpha = 0.2f) else DarkSurfaceVariant)
-                                .border(1.dp, if (isSelected) primaryAccent else DarkCardBorder, RoundedCornerShape(8.dp))
+                                .clip(BentoPillShape)
+                                .background(if (isSelected) primaryAccent.copy(alpha = 0.18f) else BentoSurface)
+                                .border(1.dp, if (isSelected) primaryAccent else BentoBorder, BentoPillShape)
                                 .clickable { selectedFilter = f }
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                                .padding(horizontal = 14.dp, vertical = 6.dp)
                         ) {
                             Text(
                                 text = f,
                                 fontSize = 12.sp,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                                 color = if (isSelected) primaryAccent else TextSecondary,
                                 maxLines = 1,
                                 softWrap = false
@@ -1503,11 +1553,11 @@ fun AppListItemCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(BentoSubCardShape)
             .border(
                 1.dp,
-                if (isSelected) accentColor else if (!app.isInstalled) AccentSunsetOrange.copy(alpha = 0.4f) else DarkCardBorder,
-                RoundedCornerShape(14.dp)
+                if (isSelected) accentColor else if (!app.isInstalled) AccentSunsetOrange.copy(alpha = 0.5f) else BentoBorder,
+                BentoSubCardShape
             )
             .combinedClickable(
                 onClick = {
@@ -1524,7 +1574,7 @@ fun AppListItemCard(
                 }
             ),
         colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) DarkSurfaceVariant else DarkSurfaceVariant.copy(alpha = 0.5f)
+            containerColor = if (isSelected) DarkSurfaceVariant else BentoSurface
         )
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
@@ -1547,7 +1597,7 @@ fun AppListItemCard(
                 // Real Icon Display with uninstalled APK extractor fallback
                 RealAppIcon(
                     packageName = app.packageName,
-                    size = 52.dp,
+                    size = 50.dp,
                     shapeRadius = 12.dp,
                     containerFile = effectiveContainerFile,
                     remoteIconFetcher = remoteIconFetcher
@@ -1572,8 +1622,11 @@ fun AppListItemCard(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = formatAppSize(app.sizeBytes),
-                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                            color = TextPrimary,
+                            style = TabularNumberStyle.copy(
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            ),
                             maxLines = 1,
                             softWrap = false
                         )
@@ -1588,38 +1641,36 @@ fun AppListItemCard(
                     )
 
                     if (!app.isInstalled) {
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(3.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(AccentSunsetOrange.copy(alpha = 0.2f))
-                                    .border(1.dp, AccentSunsetOrange.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = AccentSunsetOrange.copy(alpha = 0.15f),
+                                border = BorderStroke(1.dp, AccentSunsetOrange.copy(alpha = 0.4f))
                             ) {
                                 Text(
-                                    text = "NÃO INSTALADO • APENAS BACKUP",
+                                    text = "NÃO INSTALADO",
                                     fontSize = 9.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = AccentSunsetOrange
+                                    color = AccentSunsetOrange,
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp)
                                 )
                             }
                         }
                     } else if (app.isSystemApp) {
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(3.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(DarkSurface)
-                                    .border(1.dp, DarkCardBorder, RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            Surface(
+                                shape = RoundedCornerShape(4.dp),
+                                color = Color.White.copy(alpha = 0.06f),
+                                border = BorderStroke(0.5.dp, BentoHairline)
                             ) {
                                 Text(
                                     text = "SISTEMA",
                                     fontSize = 9.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = TextSecondary
+                                    color = TextSecondary,
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp)
                                 )
                             }
                         }
@@ -1627,6 +1678,7 @@ fun AppListItemCard(
 
                     Spacer(modifier = Modifier.height(6.dp))
 
+                    // Tags de rodapé e Ações Rápidas
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1635,67 +1687,99 @@ fun AppListItemCard(
                         val hasBackup = backupStatus.hasBackup
                         val backupTextColor = if (!app.isInstalled) AccentSunsetOrange else if (hasBackup) StatusSuccess else TextMuted
 
-                        Row(
-                            modifier = Modifier.weight(1f, fill = false),
-                            verticalAlignment = Alignment.CenterVertically
+                        // Tag de localização / sincronização em linha única
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color.White.copy(alpha = 0.04f),
+                            border = BorderStroke(0.5.dp, BentoHairline)
                         ) {
-                            if (hasBackup) {
-                                val locIcon = when {
-                                    backupStatus.hasLocal && backupStatus.hasDrive -> Icons.Default.CloudDone
-                                    backupStatus.hasDrive -> Icons.Default.Cloud
-                                    else -> Icons.Default.Smartphone
-                                }
-                                Icon(
-                                    imageVector = locIcon,
-                                    contentDescription = null,
-                                    tint = if (!app.isInstalled) AccentSunsetOrange else StatusSuccess,
-                                    modifier = Modifier.size(13.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                            }
-                            Text(
-                                text = if (hasBackup) backupStatus.formattedText else "Sem backup",
-                                fontSize = 11.sp,
-                                color = backupTextColor,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        val statusBadgeText = if (!app.isInstalled) "Restaurar" else if (hasBackup) "Com backup" else "Sem backup"
-                        val statusBadgeColor = if (!app.isInstalled) AccentSunsetOrange else if (hasBackup) StatusSuccess else TextMuted
-
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(statusBadgeColor.copy(alpha = 0.15f))
-                                .then(
-                                    if (hasBackup || !app.isInstalled) {
-                                        Modifier.clickable { onRestoreAppClick() }
-                                    } else Modifier
-                                )
-                                .padding(horizontal = 7.dp, vertical = 3.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                if (hasBackup || !app.isInstalled) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.5.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (hasBackup) {
+                                    val locIcon = when {
+                                        backupStatus.hasLocal && backupStatus.hasDrive -> Icons.Default.CloudDone
+                                        backupStatus.hasDrive -> Icons.Default.Cloud
+                                        else -> Icons.Default.Smartphone
+                                    }
                                     Icon(
-                                        Icons.Default.Restore,
-                                        contentDescription = "Restaurar",
-                                        tint = statusBadgeColor,
+                                        imageVector = locIcon,
+                                        contentDescription = null,
+                                        tint = if (!app.isInstalled) AccentSunsetOrange else StatusSuccess,
                                         modifier = Modifier.size(12.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Spacer(modifier = Modifier.width(3.5.dp))
                                 }
                                 Text(
-                                    text = statusBadgeText,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = statusBadgeColor,
+                                    text = if (hasBackup) backupStatus.formattedText else "Sem backup",
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = backupTextColor,
                                     maxLines = 1,
-                                    softWrap = false
+                                    overflow = TextOverflow.Ellipsis
                                 )
+                            }
+                        }
+
+                        // Botões de ação rápida estilizados (Backup, Restaurar, Opções)
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (hasBackup || !app.isInstalled) {
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = StatusSuccess.copy(alpha = 0.15f),
+                                    border = BorderStroke(1.dp, StatusSuccess.copy(alpha = 0.35f)),
+                                    modifier = Modifier.clickable { onRestoreAppClick() }
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                    ) {
+                                        Icon(Icons.Default.Restore, contentDescription = "Restaurar", tint = StatusSuccess, modifier = Modifier.size(11.dp))
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Text("Restaurar", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = StatusSuccess)
+                                    }
+                                }
+                            }
+
+                            if (app.isInstalled) {
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = accentColor.copy(alpha = 0.15f),
+                                    border = BorderStroke(1.dp, accentColor.copy(alpha = 0.35f)),
+                                    modifier = Modifier.clickable {
+                                        viewModel?.launchQuickBackupForApps(listOf(app.packageName))
+                                        Toast.makeText(context, "Iniciando backup de ${app.appName}...", Toast.LENGTH_SHORT).show()
+                                    }
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                    ) {
+                                        Icon(Icons.Default.Bolt, contentDescription = "Backup", tint = accentColor, modifier = Modifier.size(11.dp))
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                        Text("Backup", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = accentColor)
+                                    }
+                                }
+                            }
+
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = Color.White.copy(alpha = 0.05f),
+                                border = BorderStroke(0.5.dp, BentoHairline),
+                                modifier = Modifier.clickable { onClick() }
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                ) {
+                                    Icon(Icons.Default.Tune, contentDescription = "Opções", tint = TextSecondary, modifier = Modifier.size(11.dp))
+                                    Spacer(modifier = Modifier.width(2.5.dp))
+                                    Text("Opções", fontSize = 10.sp, fontWeight = FontWeight.Medium, color = TextSecondary)
+                                }
                             }
                         }
                     }

@@ -8,6 +8,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,6 +19,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -44,11 +46,11 @@ fun InteractiveGlassCard(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .clip(StandardCardShape)
-            .border(1.dp, StandardCardBorder, StandardCardShape)
+            .clip(BentoCardShape)
+            .border(1.dp, BentoBorder, BentoCardShape)
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(
-            containerColor = StandardCardBg
+            containerColor = BentoSurface
         )
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -71,7 +73,7 @@ fun InteractiveGlassCard(
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = TextPrimary,
                     maxLines = 1,
-                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
                 Spacer(modifier = Modifier.width(8.dp))
@@ -81,19 +83,19 @@ fun InteractiveGlassCard(
                     modifier = Modifier.wrapContentWidth()
                 ) {
                     if (badgeText != null) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(badgeColor.copy(alpha = 0.2f))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = badgeColor.copy(alpha = 0.15f),
+                            border = BorderStroke(1.dp, badgeColor.copy(alpha = 0.35f))
                         ) {
                             Text(
                                 text = badgeText,
-                                fontSize = 11.sp,
+                                fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = badgeColor,
                                 maxLines = 1,
-                                softWrap = false
+                                softWrap = false,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                             )
                         }
                     }
@@ -196,52 +198,156 @@ fun InfoRow(
 
 /**
  * Componente unificado para os botões de ação da tela inicial:
- * - Mesmo fundo escuro translúcido / outline
- * - Mesma borda (DarkCardBorder)
- * - Mesmo raio de canto (14.dp)
- * - Mesma altura (48.dp)
- * - Mesmo alinhamento e espaçamento de ícone (18.dp com 8.dp de espaçamento)
- * - Mesmo estilo de texto (TextPrimary, 13.sp, Bold)
+ * - Estilo Bento Moderno (20.dp / 14.dp)
+ * - Fundo escuro translúcido com borda BentoBorder
  */
 @Composable
 fun DashboardActionButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    isPrimary: Boolean = false,
     icon: @Composable () -> Unit
 ) {
-    OutlinedButton(
-        onClick = onClick,
-        modifier = modifier
-            .fillMaxWidth()
-            .height(48.dp),
-        shape = StandardCardShape,
-        border = BorderStroke(1.dp, StandardCardBorder),
-        colors = ButtonDefaults.outlinedButtonColors(
-            containerColor = StandardCardBg,
-            contentColor = TextPrimary
-        ),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
+    if (isPrimary) {
+        Button(
+            onClick = onClick,
+            modifier = modifier
+                .fillMaxWidth()
+                .height(50.dp),
+            shape = BentoSubCardShape,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = BrandAccent,
+                contentColor = Color.White
+            ),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
         ) {
-            Box(
-                modifier = Modifier.size(18.dp),
-                contentAlignment = Alignment.Center
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                icon()
+                Box(
+                    modifier = Modifier.size(19.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    icon()
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = text,
+                    color = Color.White,
+                    fontSize = 13.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.4.sp
+                )
             }
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = text,
-                color = TextPrimary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold
-            )
+        }
+    } else {
+        OutlinedButton(
+            onClick = onClick,
+            modifier = modifier
+                .fillMaxWidth()
+                .height(48.dp),
+            shape = BentoSubCardShape,
+            border = BorderStroke(1.dp, BentoBorder),
+            colors = ButtonDefaults.outlinedButtonColors(
+                containerColor = BentoSurface,
+                contentColor = TextPrimary
+            ),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier.size(18.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    icon()
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = text,
+                    color = TextPrimary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.3.sp
+                )
+            }
         }
     }
 }
 
+/**
+ * Bento Grid Modular Category Tile
+ */
+@Composable
+fun BentoCategoryTile(
+    title: String,
+    countText: String,
+    icon: ImageVector,
+    iconTint: Color,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = modifier
+            .clip(BentoSubCardShape)
+            .border(1.dp, BentoBorder, BentoSubCardShape)
+            .clickable(onClick = onClick),
+        shape = BentoSubCardShape,
+        color = BentoSurface
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp, horizontal = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(iconTint.copy(alpha = 0.14f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = title,
+                    tint = iconTint,
+                    modifier = Modifier.size(19.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(7.dp))
+
+            Text(
+                text = title,
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(2.dp))
+
+            Text(
+                text = countText,
+                style = TabularNumberStyle.copy(
+                    fontSize = 10.5.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = TextSecondary
+                ),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
