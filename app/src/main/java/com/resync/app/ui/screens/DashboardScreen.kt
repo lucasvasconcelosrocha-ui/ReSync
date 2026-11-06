@@ -171,7 +171,7 @@ fun DashboardScreen(
     var showSecurityModal by remember { mutableStateOf(false) }
     val changelogPrefs = remember { context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE) }
     var showChangelogModal by remember {
-        mutableStateOf(changelogPrefs.getString("last_seen_changelog_version", "") != "1.0.30")
+        mutableStateOf(changelogPrefs.getString("last_seen_changelog_version", "") != "1.0.31")
     }
     val scrollState = rememberScrollState()
     var isPullRefreshing by remember { mutableStateOf(false) }
@@ -1473,16 +1473,16 @@ fun DashboardScreen(
         )
     }
 
-    // Modal Automático de Novidades (Changelog v1.0.30)
+    // Modal Automático de Novidades (Changelog v1.0.31)
     if (showChangelogModal) {
         ChangelogModal(
-            versionName = "1.0.30",
+            versionName = "1.0.31",
             primaryAccent = primaryAccent,
             onDismiss = {
                 showChangelogModal = false
             },
             onConfirm = {
-                changelogPrefs.edit().putString("last_seen_changelog_version", "1.0.30").apply()
+                changelogPrefs.edit().putString("last_seen_changelog_version", "1.0.31").apply()
                 showChangelogModal = false
             }
         )

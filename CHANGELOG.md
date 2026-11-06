@@ -4,7 +4,7 @@ Todas as mudanças notáveis deste projeto são documentadas neste arquivo.
 
 ---
 
-## [1.0.30] - 2026-11-06
+## [1.0.31] - 2026-11-06
 
 ### ✨ Novidades
 - **Suporte Universal Sem Root Completo:**
@@ -17,7 +17,7 @@ Todas as mudanças notáveis deste projeto são documentadas neste arquivo.
     - **Bluetooth:** Relatório descritivo dos dispositivos pareados com atalho para emparelhamento.
   - Restauração de SMS com solicitação temporária de app padrão via `RoleManager.ROLE_SMS` / `Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT` e reversão automática ao concluir.
 - **Modal de Novidades Bento UI In-App:**
-  - Diálogo no estilo Dark OLED / Bento UI exibido automaticamente na primeira inicialização da versão 1.0.30.
+  - Diálogo no estilo Dark OLED / Bento UI exibido automaticamente na primeira inicialização da versão 1.0.31.
   - Apresentação visual e categorizada dos 5 pilares fundamentais da versão.
   - Persistência do estado de visualização (`last_seen_changelog_version`) gravada com segurança no toque em *"Entendi / Continuar"*.
 
