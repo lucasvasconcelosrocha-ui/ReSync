@@ -115,15 +115,10 @@ class BackupEngine(private val context: Context) {
         }
         controlScope.launch {
             try {
-                // Executar em processo / shell isolado para não disputar o lock do Shell compartilhado do backup
-                Runtime.getRuntime().exec(arrayOf("sh", "-c", "pkill -STOP tar; pkill -STOP gzip; pkill -STOP zip")).waitFor()
-            } catch (_: Throwable) {
-                try {
-                    com.topjohnwu.superuser.Shell.Builder.create().build().use { standaloneShell ->
-                        standaloneShell.newJob().add("pkill -STOP tar; pkill -STOP gzip; pkill -STOP zip").exec()
-                    }
-                } catch (_: Throwable) {}
-            }
+                if (com.topjohnwu.superuser.Shell.isAppGrantedRoot() == true) {
+                    com.topjohnwu.superuser.Shell.cmd("pkill -STOP tar; pkill -STOP gzip; pkill -STOP zip").exec()
+                }
+            } catch (_: Throwable) {}
         }
     }
 
@@ -134,14 +129,10 @@ class BackupEngine(private val context: Context) {
         pauseDeferred = null
         controlScope.launch {
             try {
-                Runtime.getRuntime().exec(arrayOf("sh", "-c", "pkill -CONT tar; pkill -CONT gzip; pkill -CONT zip")).waitFor()
-            } catch (_: Throwable) {
-                try {
-                    com.topjohnwu.superuser.Shell.Builder.create().build().use { standaloneShell ->
-                        standaloneShell.newJob().add("pkill -CONT tar; pkill -CONT gzip; pkill -CONT zip").exec()
-                    }
-                } catch (_: Throwable) {}
-            }
+                if (com.topjohnwu.superuser.Shell.isAppGrantedRoot() == true) {
+                    com.topjohnwu.superuser.Shell.cmd("pkill -CONT tar; pkill -CONT gzip; pkill -CONT zip").exec()
+                }
+            } catch (_: Throwable) {}
         }
     }
 
@@ -152,14 +143,10 @@ class BackupEngine(private val context: Context) {
         pauseDeferred = null
         controlScope.launch {
             try {
-                Runtime.getRuntime().exec(arrayOf("sh", "-c", "pkill -9 tar; pkill -9 gzip; pkill -9 zip; pkill -9 cp")).waitFor()
-            } catch (_: Throwable) {
-                try {
-                    com.topjohnwu.superuser.Shell.Builder.create().build().use { standaloneShell ->
-                        standaloneShell.newJob().add("pkill -9 tar; pkill -9 gzip; pkill -9 zip; pkill -9 cp").exec()
-                    }
-                } catch (_: Throwable) {}
-            }
+                if (com.topjohnwu.superuser.Shell.isAppGrantedRoot() == true) {
+                    com.topjohnwu.superuser.Shell.cmd("pkill -9 tar; pkill -9 gzip; pkill -9 zip; pkill -9 cp").exec()
+                }
+            } catch (_: Throwable) {}
             try {
                 activeStagingDir?.deleteRecursively()
             } catch (_: Throwable) {}
@@ -2828,8 +2815,7 @@ class BackupEngine(private val context: Context) {
     private suspend fun backupWifiConfig(stagingDir: File): Pair<ArchiveEngine.PackEntry?, ManifestItem?> {
         val hasRoot = com.topjohnwu.superuser.Shell.isAppGrantedRoot() == true
         if (!hasRoot) {
-            dbHelper.insertLog(LogLevel.WARN, "BackupEngine", "Backup de Wi-Fi ignorado: requer privilégios Root.")
-            return Pair(null, null)
+            return captureConnectedWifiFallback(stagingDir)
         }
 
         val candidatePaths = listOf(
@@ -2848,8 +2834,8 @@ class BackupEngine(private val context: Context) {
         }
 
         if (foundSourcePath == null) {
-            dbHelper.insertLog(LogLevel.WARN, "BackupEngine", "Nenhum arquivo de configuração Wi-Fi encontrado nos caminhos padrão do sistema.")
-            return Pair(null, null)
+            dbHelper.insertLog(LogLevel.INFO, "BackupEngine", "Arquivos de configuração Wi-Fi em /data/misc não encontrados. Usando fallback de rede ativa.")
+            return captureConnectedWifiFallback(stagingDir)
         }
 
         val sourceFile = File(foundSourcePath)
@@ -2857,8 +2843,8 @@ class BackupEngine(private val context: Context) {
         val cpCmd = com.topjohnwu.superuser.Shell.cmd("nice -n 19 ionice -c 3 cp \"$foundSourcePath\" \"${stagedFile.absolutePath}\" && chmod 644 \"${stagedFile.absolutePath}\"").exec()
         if (!cpCmd.isSuccess || !stagedFile.exists() || stagedFile.length() == 0L) {
             val errDetail = cpCmd.err.joinToString().ifEmpty { "código de saída ${cpCmd.code}" }
-            dbHelper.insertLog(LogLevel.ERROR, "BackupEngine", "Falha ao copiar arquivo Wi-Fi ($foundSourcePath): $errDetail")
-            return Pair(null, null)
+            dbHelper.insertLog(LogLevel.WARN, "BackupEngine", "Falha ao copiar arquivo Wi-Fi ($foundSourcePath): $errDetail. Usando fallback de rede ativa.")
+            return captureConnectedWifiFallback(stagingDir)
         }
 
         val entryName = "system/wifi/${sourceFile.name}"
@@ -2883,6 +2869,45 @@ class BackupEngine(private val context: Context) {
         val packEntry = ArchiveEngine.PackEntry(entryName, sourceFile = stagedFile, manifestItem = item, isStoreOnly = true)
         dbHelper.insertLog(LogLevel.INFO, "BackupEngine", "Configuração Wi-Fi capturada com sucesso de: $foundSourcePath (${stagedFile.length()} bytes)")
         return Pair(packEntry, item)
+    }
+
+    private suspend fun captureConnectedWifiFallback(stagingDir: File): Pair<ArchiveEngine.PackEntry?, ManifestItem?> {
+        return try {
+            val wifiDetails = NetworkDetailsManager(context).getWifiDetails()
+            val stagedFile = File(stagingDir, "wifi_connected_network.json")
+            val json = com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(wifiDetails)
+            stagedFile.writeText(json, Charsets.UTF_8)
+
+            val entryName = "system/wifi/wifi_connected_network.json"
+            val checksum = SecurityManager.computeFileSha256(stagedFile)
+            val networkName = if (wifiDetails.isConnected && wifiDetails.ssid.isNotBlank()) wifiDetails.ssid else "Rede Atual"
+
+            val item = ManifestItem(
+                id = UUID.randomUUID().toString(),
+                type = BackupItemType.WIFI_CONFIG,
+                name = "Rede Wi-Fi Conectada ($networkName)",
+                originalPath = "NetworkDetailsManager/WifiDetails",
+                archiveEntryPath = entryName,
+                sizeBytes = stagedFile.length(),
+                sha256Checksum = checksum,
+                compressionMethod = "STORED",
+                metadata = mapOf(
+                    "mode" to "NON_ROOT_FALLBACK",
+                    "ssid" to wifiDetails.ssid,
+                    "bssid" to wifiDetails.bssid,
+                    "frequency" to wifiDetails.frequencyGhz,
+                    "linkSpeedMbps" to wifiDetails.linkSpeedMbps.toString(),
+                    "androidSdk" to android.os.Build.VERSION.SDK_INT.toString()
+                )
+            )
+
+            val packEntry = ArchiveEngine.PackEntry(entryName, sourceFile = stagedFile, manifestItem = item, isStoreOnly = true)
+            dbHelper.insertLog(LogLevel.INFO, "BackupEngine", "Informações da rede Wi-Fi conectada capturadas em modo não-root: $networkName (${stagedFile.length()} bytes)")
+            Pair(packEntry, item)
+        } catch (e: Throwable) {
+            dbHelper.insertLog(LogLevel.WARN, "BackupEngine", "Falha ao coletar fallback Wi-Fi não-root: ${e.message}")
+            Pair(null, null)
+        }
     }
 
     private suspend fun backupBluetooth(stagingDir: File): List<Pair<ArchiveEngine.PackEntry, ManifestItem>> {
@@ -3248,18 +3273,6 @@ class BackupEngine(private val context: Context) {
             }
         }
 
-        if (chosenPath == null) {
-            for (candidate in candidatePaths) {
-                try {
-                    val p = Runtime.getRuntime().exec(arrayOf("su", "-c", "[ -d \"$candidate\" ]"))
-                    if (p.waitFor() == 0) {
-                        chosenPath = candidate
-                        break
-                    }
-                } catch (_: Throwable) {}
-            }
-        }
-
         // Se a pasta não existir em nenhum caminho candidato
         if (chosenPath == null) {
             return@withContext AppDataBackupResult(
@@ -3373,21 +3386,14 @@ class BackupEngine(private val context: Context) {
             exitCode = tarExec.code
         }
 
-        // Se ainda falhar, testar namespace mount master ("su -mm" no KernelSU / Magisk)
+        // Se ainda falhar, testar tar simples direto via Shell libsu
         if (!isTarCommandAcceptable(exitCode, dataTarFile)) {
             try {
-                val pMm = Runtime.getRuntime().exec(arrayOf(
-                    "su", "-mm", "-c",
-                    "tar -cf \"${dataTarFile.absolutePath}\" -p --numeric-owner$excludeFileArg$excludeArgsStr -C \"$chosenPath\" ."
-                ))
-                val mmErr = pMm.errorStream.bufferedReader().use { it.readText() }
-                val mmExit = pMm.waitFor()
-                if (isTarCommandAcceptable(mmExit, dataTarFile)) {
-                    exitCode = mmExit
-                    outErr = mmErr
-                } else if (mmExit != 0 && outErr.isBlank()) {
-                    exitCode = mmExit
-                    outErr = mmErr
+                val directCmd = "tar -cf \"${dataTarFile.absolutePath}\" -p --numeric-owner$excludeFileArg$excludeArgsStr -C \"$chosenPath\" ."
+                val directExec = Shell.cmd(directCmd).exec()
+                if (isTarCommandAcceptable(directExec.code, dataTarFile)) {
+                    exitCode = directExec.code
+                    outErr = (directExec.out + directExec.err).filter { it.isNotBlank() }.joinToString(" ")
                 }
             } catch (_: Throwable) {}
         }
@@ -3597,18 +3603,11 @@ class BackupEngine(private val context: Context) {
 
         if (!isTarCommandAcceptable(exitCode, userDeTarFile)) {
             try {
-                val pMm = Runtime.getRuntime().exec(arrayOf(
-                    "su", "-mm", "-c",
-                    "tar -cf \"${userDeTarFile.absolutePath}\" -p --numeric-owner$excludeFileArg$excludeArgsStr -C \"$dePath\" ."
-                ))
-                val mmErr = pMm.errorStream.bufferedReader().use { it.readText() }
-                val mmExit = pMm.waitFor()
-                if (isTarCommandAcceptable(mmExit, userDeTarFile)) {
-                    exitCode = mmExit
-                    outErr = mmErr
-                } else if (mmExit != 0 && outErr.isBlank()) {
-                    exitCode = mmExit
-                    outErr = mmErr
+                val directCmd = "tar -cf \"${userDeTarFile.absolutePath}\" -p --numeric-owner$excludeFileArg$excludeArgsStr -C \"$dePath\" ."
+                val directExec = Shell.cmd(directCmd).exec()
+                if (isTarCommandAcceptable(directExec.code, userDeTarFile)) {
+                    exitCode = directExec.code
+                    outErr = (directExec.out + directExec.err).filter { it.isNotBlank() }.joinToString(" ")
                 }
             } catch (_: Throwable) {}
         }

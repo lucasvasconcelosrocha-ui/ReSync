@@ -187,14 +187,12 @@ fun StorageExplorerListComponent(
                     }
                 } catch (_: Throwable) {}
 
-                // 2. Se falhar ou vier vazio em partição do sistema, tentar su direto via Runtime com ls -la
+                // 2. Se falhar ou vier vazio em partição do sistema, tentar su via LibSU com ls -la
                 if (resultList.isEmpty() && isSystemPath) {
                     try {
                         val lines = withTimeoutOrNull(2500L) {
-                            val proc = Runtime.getRuntime().exec(arrayOf("su", "-c", "ls -la \"$path\""))
-                            val res = proc.inputStream.bufferedReader().readLines()
-                            proc.waitFor()
-                            res
+                            val shellRes = Shell.cmd("ls -la \"$path\"").exec()
+                            if (shellRes.isSuccess) shellRes.out else emptyList()
                         }
                         if (lines != null && lines.isNotEmpty()) {
                             for (line in lines) {

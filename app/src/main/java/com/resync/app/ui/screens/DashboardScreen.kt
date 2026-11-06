@@ -1473,12 +1473,15 @@ fun DashboardScreen(
         )
     }
 
-    // Modal Automático de Novidades (Changelog v1.0.30 - ETAPA 7)
+    // Modal Automático de Novidades (Changelog v1.0.30)
     if (showChangelogModal) {
         ChangelogModal(
             versionName = "1.0.30",
             primaryAccent = primaryAccent,
             onDismiss = {
+                showChangelogModal = false
+            },
+            onConfirm = {
                 changelogPrefs.edit().putString("last_seen_changelog_version", "1.0.30").apply()
                 showChangelogModal = false
             }
@@ -2322,7 +2325,8 @@ private fun DataModuleBentoCard(
 private fun ChangelogModal(
     versionName: String,
     primaryAccent: Color,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
 ) {
     val bentoBg = DarkSurface
     val bentoCard = DarkSurfaceVariant
@@ -2415,7 +2419,7 @@ private fun ChangelogModal(
                     icon = Icons.Default.CloudSync,
                     accentColor = AccentElectricCyan,
                     title = "Google Drive Turbo",
-                    description = "Envio em streaming contínuo em blocos de 64 KB com chunks dinâmicos (16 MB / 8 MB / 4 MB) direto do disco. Zero risco de OutOfMemory, conexões HTTP/2 multiplexadas e cache inteligente de pastas.",
+                    description = "Streaming direto em blocos de 64 KB com chunks de 4 MB a 16 MB, conexão HTTP/2 unificada e cache persistente de pastas.",
                     cardBg = bentoCard,
                     borderColor = bentoBorder
                 )
@@ -2423,17 +2427,8 @@ private fun ChangelogModal(
                 ChangelogPillarCard(
                     icon = Icons.Default.Shield,
                     accentColor = StatusSuccess,
-                    title = "Modo Universal Sem Root",
-                    description = "Backup e restauração funcionais para qualquer aparelho! Salve APKs base, splits e arquivos adicionais/OBBs diretamente via Android userspace e restaure com a API nativa PackageInstaller.",
-                    cardBg = bentoCard,
-                    borderColor = bentoBorder
-                )
-
-                ChangelogPillarCard(
-                    icon = Icons.Default.Chat,
-                    accentColor = Color(0xFFFFA726),
-                    title = "Linguagem Clara e Amigável",
-                    description = "Substituição completa de jargões técnicos herméticos por termos diretos e naturais em português: etapas de backup, restauração e diagnósticos agora são 100% compreensíveis.",
+                    title = "Suporte Universal Sem Root",
+                    description = "Extração e restauração de APKs base, splits e mídias públicas via userspace nativo; fallbacks com cópia para Área de Transferência e atalho para configurações em DNS, Wi-Fi e Bluetooth.",
                     cardBg = bentoCard,
                     borderColor = bentoBorder
                 )
@@ -2441,8 +2436,17 @@ private fun ChangelogModal(
                 ChangelogPillarCard(
                     icon = Icons.Default.Terminal,
                     accentColor = Color(0xFFA855F7),
-                    title = "Gestão de Processos e Root Otimizada",
-                    description = "Sessão global persistente via libsu Master Shell com timeout calibrado e blindagem de injeção de comandos, eliminando conflitos de múltiplos 'su' e travamentos de sistema.",
+                    title = "Gestão Root & Sessão Persistente libsu",
+                    description = "Inicialização mestre com FLAG_MOUNT_MASTER no startup, eliminando reinicializações frequentes de shell e atritos com sucompat.",
+                    cardBg = bentoCard,
+                    borderColor = bentoBorder
+                )
+
+                ChangelogPillarCard(
+                    icon = Icons.Default.Speed,
+                    accentColor = Color(0xFFFFA726),
+                    title = "Otimização Térmica e de Hardware",
+                    description = "Leitura direta em sysfs com throttle de 3s e blindagem contra injeção de comandos em rotinas de verificação SHA-256.",
                     cardBg = bentoCard,
                     borderColor = bentoBorder
                 )
@@ -2450,8 +2454,8 @@ private fun ChangelogModal(
                 ChangelogPillarCard(
                     icon = Icons.Default.AutoAwesome,
                     accentColor = Color(0xFF00E676),
-                    title = "Mais Leve, Rápido e Eficiente",
-                    description = "Remoção de código morto, filtragem de recursos de idiomas não utilizados e otimização de leitura direta em sysfs para economia de ciclos de CPU e bateria.",
+                    title = "Pacote Mais Leve",
+                    description = "Redução de mais de 750 KB no APK com exclusão de dependências órfãs e localização restrita ao português.",
                     cardBg = bentoCard,
                     borderColor = bentoBorder
                 )
@@ -2461,7 +2465,7 @@ private fun ChangelogModal(
 
             // Botão Principal
             Button(
-                onClick = onDismiss,
+                onClick = onConfirm,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(50.dp),

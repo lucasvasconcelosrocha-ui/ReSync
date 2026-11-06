@@ -850,19 +850,18 @@ class RestoreEngine(private val context: Context) {
             var extractErr = (extractCmd.out + extractCmd.err).filter { it.isNotBlank() }.joinToString(" ")
             var exitCode = extractCmd.code
 
-            // Se falhar, tenta com mount master ("su -mm" no KernelSU / Magisk)
+            // Se falhar, tenta com tar simples direto via Shell libsu
             if (!extractSuccess) {
                 try {
-                    val pMm = Runtime.getRuntime().exec(arrayOf("su", "-mm", "-c", "tar -xf $escapedDataTar -C $escapedAppDataDir"))
-                    val mmErr = pMm.errorStream.bufferedReader().use { it.readText() }
-                    val mmExit = pMm.waitFor()
-                    if (mmExit == 0) {
+                    val retryCmd = Shell.cmd("tar -xf $escapedDataTar -C $escapedAppDataDir").exec()
+                    if (retryCmd.isSuccess) {
                         extractSuccess = true
                         exitCode = 0
                         extractErr = ""
-                    } else if (mmExit != 0) {
-                        exitCode = mmExit
-                        extractErr = mmErr.ifBlank { extractErr }
+                    } else {
+                        exitCode = retryCmd.code
+                        val retryErr = (retryCmd.out + retryCmd.err).filter { it.isNotBlank() }.joinToString(" ")
+                        if (retryErr.isNotBlank()) extractErr = retryErr
                     }
                 } catch (_: Throwable) {}
             }

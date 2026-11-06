@@ -104,27 +104,7 @@ class CapabilityManager(private val context: Context) {
                 // 1. Verifica flag do libsu
                 if (Shell.isAppGrantedRoot() == true) return@withTimeoutOrNull true
 
-                // 2. Testa comando direto via Runtime "su -c id" (uid=0)
-                try {
-                    val p = Runtime.getRuntime().exec(arrayOf("su", "-c", "id"))
-                    val line = p.inputStream.bufferedReader().readLine()
-                    p.waitFor()
-                    if (p.exitValue() == 0 && line != null && line.contains("uid=0")) {
-                        return@withTimeoutOrNull true
-                    }
-                } catch (_: Throwable) {}
-
-                // 3. Testa comando direto com mount master "su -mm -c id" (KernelSU / Magisk)
-                try {
-                    val pMm = Runtime.getRuntime().exec(arrayOf("su", "-mm", "-c", "id"))
-                    val lineMm = pMm.inputStream.bufferedReader().readLine()
-                    pMm.waitFor()
-                    if (pMm.exitValue() == 0 && lineMm != null && lineMm.contains("uid=0")) {
-                        return@withTimeoutOrNull true
-                    }
-                } catch (_: Throwable) {}
-
-                // 4. Testa Shell libsu executando id
+                // 2. Testa Shell libsu executando id na sessão persistente Master
                 try {
                     val res = Shell.cmd("id").exec()
                     if (res.isSuccess && res.out.any { it.contains("uid=0") }) {
@@ -184,15 +164,18 @@ class CapabilityManager(private val context: Context) {
 
     /**
      * Request root access explicitly:
-     * Closes any cached shell so a non-root cached shell is discarded,
+     * Closes any non-root cached shell so it is discarded,
      * calls Shell.getShell() in Dispatchers.IO to trigger the superuser prompt,
      * and evaluates Shell.isAppGrantedRoot().
      */
     suspend fun requestRootAccess(): Boolean = withContext(Dispatchers.IO) {
         try {
-            // Fechar o shell em cache para não reutilizar um shell sem root
+            // Só fechar o cachedShell se a sessão anterior era não-root ou inativa
             try {
-                Shell.getCachedShell()?.close()
+                val cached = Shell.getCachedShell()
+                if (cached != null && (!cached.isRoot || !cached.isAlive)) {
+                    cached.close()
+                }
             } catch (_: Throwable) {}
 
             // Criar um novo shell síncrono no background
@@ -203,17 +186,9 @@ class CapabilityManager(private val context: Context) {
                 return@withContext true
             }
 
-            // Testar comando real id
+            // Testar comando real id via Master Shell
             val res = Shell.cmd("id").exec()
-            if (res.isSuccess && res.out.any { it.contains("uid=0") }) {
-                return@withContext true
-            }
-
-            // Fallback direto via Runtime
-            val p = Runtime.getRuntime().exec(arrayOf("su", "-c", "id"))
-            val output = p.inputStream.bufferedReader().use { it.readText() }
-            p.waitFor()
-            p.exitValue() == 0 && output.contains("uid=0")
+            res.isSuccess && res.out.any { it.contains("uid=0") }
         } catch (e: Exception) {
             false
         }

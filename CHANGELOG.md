@@ -1,40 +1,53 @@
 # 🚀 Changelog Oficial — ReSync
 
-Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
+Todas as mudanças notáveis deste projeto são documentadas neste arquivo.
 
 ---
 
 ## [1.0.30] - 2026-11-06
 
-### ⚡ Destaques da Versão (Os 5 Pilares)
+### ✨ Novidades
+- **Suporte Universal Sem Root Completo:**
+  - Backup e restauração funcionais para qualquer dispositivo Android mesmo sem permissões de superusuário (`Root`).
+  - Extração e arquivamento de APKs base, split APKs, dados OBB e mídias públicas do usuário através do userspace nativo.
+  - Instalação automatizada de APKs divididos (splits) via API nativa `PackageInstaller.Session`.
+  - Fallbacks assistidos para configurações de sistema:
+    - **DNS Privado:** Cópia instantânea do hostname para a Área de Transferência e atalho para a tela de configurações de rede.
+    - **Wi-Fi Conectado:** Arquivamento das informações da rede Wi-Fi atualmente conectada (`SSID`, `BSSID`, link speed, frequência) em `system/wifi/wifi_connected_network.json`.
+    - **Bluetooth:** Relatório descritivo dos dispositivos pareados com atalho para emparelhamento.
+  - Restauração de SMS com solicitação temporária de app padrão via `RoleManager.ROLE_SMS` / `Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT` e reversão automática ao concluir.
+- **Modal de Novidades Bento UI In-App:**
+  - Diálogo no estilo Dark OLED / Bento UI exibido automaticamente na primeira inicialização da versão 1.0.30.
+  - Apresentação visual e categorizada dos 5 pilares fundamentais da versão.
+  - Persistência do estado de visualização (`last_seen_changelog_version`) gravada com segurança no toque em *"Entendi / Continuar"*.
 
-#### 1. 🚀 Google Drive Turbo (Streaming IOStream sem OOM)
-- **Dynamic Chunking inteligente:** Adaptação automática do tamanho dos blocos de upload para 16 MB em conexões Wi-Fi de alta velocidade, 8 MB em conexões balanceadas ou com aquecimento moderado, e 4 MB em dados móveis.
-- **Streaming contínuo de 64 KB:** Substituição de alocações pesadas de `ByteArray` por `StreamingFileRequestBody`, lendo diretamente do disco via `RandomAccessFile` em blocos de 64 KB. Elimina 100% dos riscos de `OutOfMemoryError` mesmo ao transmitir backups de dezenas de gigabytes.
-- **Conexões HTTP/2 multiplexadas & Connection Pool:** Centralização de todas as transferências de nuvem no singleton `GDriveNetworkClient`, com `ConnectionPool` otimizado (10 conexões ociosas mantidas por 5 min) e `Dispatcher` configurado (maxRequests = 32, maxRequestsPerHost = 16), eliminando re-handshakes TLS custosos.
-- **Cache persistente de pastas e resolução em paralelo:** Cache persistente dos IDs de diretórios (`ReSync`, subpastas de backups rápidos, arquivos e pastas) indexado pelo e-mail da conta Google via `SharedPreferences`, associado à resolução concorrente em segundo plano com `coroutineScope { async { ... } }`.
-- **Buffer de download turbo de 128 KB:** Aumento do buffer de recepção de stream para o arquivo temporário `.part`, reduzindo interrupções de I/O em discos UFS rápidos.
+### ⚡ Melhorias de Desempenho
+- **Google Drive Turbo (Streaming IOStream de Alta Velocidade):**
+  - **Dynamic Chunking Inteligente:** Uploads particionados adaptativos de 16 MB em conexões Wi-Fi ultrarrápidas, 8 MB em conexões balanceadas ou sob calor, e 4 MB em dados móveis.
+  - **Streaming de 64 KB direto do disco:** Leitura com `RandomAccessFile` através de `StreamingFileRequestBody`, eliminando arrays `ByteArray` pesados na memória e prevenindo 100% de `OutOfMemoryError`.
+  - **HTTP/2 Multiplexado e Connection Pool:** Todas as chamadas de API e uploads migrados de `HttpURLConnection` para o singleton `GDriveNetworkClient` com `ConnectionPool` otimizado (10 conexões ociosas persistidas) e `Dispatcher` de alta concorrência (32 requisições máximas, 16 por host).
+  - **Cache Persistente de Pastas:** Armazenamento em disco dos IDs de pastas no Google Drive associado ao e-mail da conta Google, reduzindo drasticamente buscas repetidas na nuvem.
+  - **Buffer Turbo de Download:** Buffer de recepção ampliado para 128 KB em downloads de containers da nuvem.
+- **Otimização de Empacotamento do APK (Redução > 750 KB):**
+  - **Conversão de Imagens para WebP:** Otimização do asset `logo_resync` de 356 KB para WebP com qualidade 95 (~35 KB), economizando ~190 KB.
+  - **Filtro de Localização:** Inclusão de `resourceConfigurations += listOf("pt", "pt-rBR")` para descartar centenas de strings e traduções não utilizadas de bibliotecas de terceiros no `resources.arsc`.
+  - **Exclusão de Dependências Mortas:** Limpeza no empacotamento de arquivos redundantes (`DebugProbesKt.bin`, `version-control-info.textproto`, `DEPENDENCIES`, `INDEX.LIST`, arquivos fonéticos e chaves legado).
+- **Eficiência de Leitura Térmica e de Hardware:**
+  - Throttling de 3.000 ms com cache em memória para sensores térmicos e leitura direta em userspace via `/sys/devices/system/cpu/cpu*/cpufreq/scaling_cur_freq` antes de invocar subshells.
 
-#### 2. 🛡️ Modo Universal Sem Root (User-Space Seamless)
-- **Seleção e restauração completas sem bloqueios:** Quando o dispositivo opera sem acesso de superusuário (`isRootGranted == false`), a tela de aplicativos mantém APKs base, split APKs, recursos extras e dados OBB 100% operacionais e selecionáveis.
-- **Badge clara de proteção:** Pastas internas do sistema restritas ao sandbox (`/data/data` e `/data/user_de`) são desativadas com a badge elegante `"Requer acesso avançado"`.
-- **Instalação nativa via PackageInstaller:** Restauração automatizada de múltiplos split APKs em aparelhos sem root utilizando a API oficial do Android (`PackageInstaller.Session`).
-- **Limpeza de cache orientada:** Limpeza de diretórios acessíveis do usuário e atalho com botão direto `"Config"` para abrir os Detalhes do Aplicativo nas Configurações do Sistema (`Settings.ACTION_APPLICATION_DETAILS_SETTINGS`).
-- **Restauração de DNS privado assistida:** Captura amigável de `SecurityException`, cópia instantânea do hostname para a Área de Transferência e abertura da tela nativa de configurações de rede do Android.
-- **Relatório informativo de Wi-Fi e Bluetooth:** Exportação clara e transparente dos dispositivos pareados conhecidos e do SSID conectado atual, esclarecendo as proteções de chaves criptográficas do Android Keystore/WPA3.
-- **Restauração de SMS com alternância de app padrão:** Suporte à requisição temporária da função padrão de mensagens (`RoleManager.ROLE_SMS` / `Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT`), permitindo a escrita integral do histórico no banco `Telephony` e oferecendo restauração do app de mensagens original ao finalizar.
+### 🐛 Correções
+- **Gestão de Sessão LibSU e Compatibilidade com KernelSU (sucompat):**
+  - Inicialização Master Shell configurada globalmente com `FLAG_MOUNT_MASTER` e timeout de 15s no companion object `init` e na primeira linha de `ReSyncApplication.onCreate()`.
+  - Proteção contra fechamento acidental de sessões root ativas em `PermissionsRepository.checkRoot` e `CapabilityManager.requestRootAccess`, eliminando perda de sessão no KernelSU.
+  - Substituição de chamadas diretas `Runtime.getRuntime().exec(arrayOf("su", ...))` por comandos gerenciados via Master Shell persistente do LibSU em `CapabilityManager`, `BackupEngine`, `RestoreEngine` e `StorageExplorerListComponent`.
+  - Controle de pausa, retomada e cancelamento de processos (`pkill`) migrado para `Shell.cmd(...).exec()`.
+- **Migração Completa para OkHttp no Google Drive:**
+  - Eliminação de `HttpURLConnection` em 10 métodos do `DriveFileManager` e nas rotinas `initiateResumableSession` e `queryCurrentServerByteOffset` do `UploadManager`.
+- **Linguagem Amigável e Acessível:**
+  - Substituição de termos herméticos e siglas por linguagem compreensível em português claro: *"Desbloqueando arquivo de backup..."*, *"Verificando arquivo de backup..."*, *"Instalando aplicativos..."*, *"Pastas do Sistema"*.
 
-#### 3. 💬 Linguagem Clara, Natural e Amigável
-- **Humanização de etapas e notificações:** Remoção de jargões técnicos herméticos como "Descriptografando container...", "Verificando integridade...", "Container", "Checksum" e "Split APKs".
-- **Comunicação natural:** Substituição por frases claras em português: *"Verificando arquivo de backup..."*, *"Desbloqueando arquivo de backup..."*, *"Instalando aplicativos..."*, *"Componentes do app"*, *"Arquivos adicionais e mídia"*, *"Pastas do Sistema"* e *"Redes salvas"*.
-
-#### 4. ⚙️ Gestão de Processos e Root Otimizada
-- **Sessão global persistente com LibSU Master Shell:** Configuração em `ReSyncApplication.onCreate()` via `Shell.setDefaultBuilder()` com a flag `FLAG_MOUNT_MASTER` e timeout seguro de 15 segundos. Evita concorrência e conflitos de sucompat entre módulos.
-- **Blindagem contra Command Injection:** Escape seguro de caminhos via `ShellSecurityUtils.shellEscape()` em comandos de soma criptográfica e verificações de arquivos.
-- **Otimização de leitura de hardware e térmica:** Throttling in-memory de 3000 ms com cache de arquivos de zonas térmicas válidas e priorização de leitura direta em userspace de `/sys/devices/system/cpu/cpu*/cpufreq/scaling_cur_freq` antes de invocar subshells root.
-
-#### 5. 📦 Otimização de Empacotamento e Redução de Tamanho
-- **Filtro de recursos linguísticos:** Configuração de `resourceConfigurations += listOf("pt", "pt-rBR")` no `build.gradle.kts`, eliminando centenas de tabelas de tradução não utilizadas do arquivo `resources.arsc`.
-- **Exclusão de arquivos mortos do APK:** Remoção de metadados desnecessários no bloco de empacotamento (`DebugProbesKt.bin`, `version-control-info.textproto`, `DEPENDENCIES`, `INDEX.LIST`, regras de dialetos fonéticos do Commons Codec, etc.).
-- **Limpeza de drawables órfãos:** Exclusão de imagens e vetores legados sem referências no projeto.
-- **Modal de novidades in-app:** Exibição automática no padrão Bento UI ao abrir a versão 1.0.30, com controle de visualização persistido no `SharedPreferences` (`last_seen_changelog_version`).
+### 🔒 Segurança
+- **Blindagem contra Command Injection:**
+  - Sanitização e escape seguro de caminhos via `shellEscape()` em todas as chamadas de soma de verificação criptográfica SHA-256 e operações de arquivo.
+- **Criptografia e Validação Rígida:**
+  - Preservação da criptografia autenticada AES-256-GCM via Android KeyStore para todos os containers de dados pessoais e credenciais.

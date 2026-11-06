@@ -257,7 +257,10 @@ class PermissionsRepository(private val context: Context) {
             try {
                 if (forceNewShell) {
                     try {
-                        Shell.getCachedShell()?.close()
+                        val cached = Shell.getCachedShell()
+                        if (cached != null && (!cached.isRoot || !cached.isAlive)) {
+                            cached.close()
+                        }
                     } catch (_: Throwable) {}
                     try {
                         Shell.getShell()

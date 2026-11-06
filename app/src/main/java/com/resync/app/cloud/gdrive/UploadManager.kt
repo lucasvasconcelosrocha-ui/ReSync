@@ -13,9 +13,9 @@ import okhttp3.MediaType
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.Request
 import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import okio.BufferedSink
 import java.io.*
-import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
 import java.util.Locale
@@ -580,40 +580,39 @@ class UploadManager(private val oAuthManager: OAuthManager) {
         token: String
     ): String {
         val dbHelper = com.resync.app.data.database.AppDatabaseHelper.getInstance(oAuthManager.context)
-        val url = URL("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,size,md5Checksum,mimeType,parents")
-        val conn = url.openConnection() as HttpURLConnection
-        try {
-            conn.requestMethod = "POST"
-            conn.instanceFollowRedirects = false
-            conn.setRequestProperty("Authorization", "Bearer $token")
-            conn.setRequestProperty("X-Upload-Content-Type", "application/octet-stream")
-            conn.setRequestProperty("X-Upload-Content-Length", totalBytes.toString())
-            conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
-            conn.doOutput = true
-            conn.connectTimeout = 60000
-            conn.readTimeout = 120000
+        val url = "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,size,md5Checksum,mimeType,parents"
 
-            val metadata = JsonObject().apply {
-                addProperty("name", fileName)
-                addProperty("description", "ReSync Container Backup (.resync)")
-                if (!targetFolderId.isNullOrBlank()) {
-                    val parentsArr = com.google.gson.JsonArray().apply { add(targetFolderId) }
-                    add("parents", parentsArr)
-                }
-                if (appProperties.isNotEmpty()) {
-                    val props = JsonObject()
-                    for ((k, v) in appProperties) {
-                        props.addProperty(k, v)
-                    }
-                    add("appProperties", props)
-                }
+        val metadata = JsonObject().apply {
+            addProperty("name", fileName)
+            addProperty("description", "ReSync Container Backup (.resync)")
+            if (!targetFolderId.isNullOrBlank()) {
+                val parentsArr = com.google.gson.JsonArray().apply { add(targetFolderId) }
+                add("parents", parentsArr)
             }
+            if (appProperties.isNotEmpty()) {
+                val props = JsonObject()
+                for ((k, v) in appProperties) {
+                    props.addProperty(k, v)
+                }
+                add("appProperties", props)
+            }
+        }
 
-            OutputStreamWriter(conn.outputStream).use { it.write(metadata.toString()) }
+        val mediaType = "application/json; charset=UTF-8".toMediaTypeOrNull()
+        val requestBody = metadata.toString().toRequestBody(mediaType)
 
-            val code = conn.responseCode
+        val request = Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer $token")
+            .header("X-Upload-Content-Type", "application/octet-stream")
+            .header("X-Upload-Content-Length", totalBytes.toString())
+            .post(requestBody)
+            .build()
+
+        GDriveNetworkClient.client.newCall(request).execute().use { response ->
+            val code = response.code
             if (code == 200 || code == 201) {
-                val location = conn.getHeaderField("Location")
+                val location = response.header("Location")
                 if (!location.isNullOrBlank()) {
                     return location
                 } else {
@@ -622,10 +621,7 @@ class UploadManager(private val oAuthManager: OAuthManager) {
                     throw IllegalStateException(err)
                 }
             } else {
-                val errBody = try {
-                    BufferedReader(InputStreamReader(conn.errorStream ?: conn.inputStream)).use { it.readText() }
-                } catch (_: Exception) { "" }
-
+                val errBody = response.body?.string() ?: ""
                 dbHelper.insertLogAsync(com.resync.app.data.model.LogLevel.ERROR, "GoogleDrive", "Erro HTTP $code ao iniciar upload de '$fileName': $errBody")
 
                 if (code == 403 || code == 507) {
@@ -634,8 +630,6 @@ class UploadManager(private val oAuthManager: OAuthManager) {
                     throw GoogleDriveApiException(code, "Falha ao iniciar upload no Google Drive (HTTP $code): $errBody")
                 }
             }
-        } finally {
-            conn.disconnect()
         }
     }
 
@@ -776,31 +770,29 @@ class UploadManager(private val oAuthManager: OAuthManager) {
     }
 
     fun queryCurrentServerByteOffset(sessionUri: String, totalBytes: Long): Long {
-        val url = URL(sessionUri)
-        val conn = url.openConnection() as HttpURLConnection
-        try {
-            conn.requestMethod = "PUT"
-            conn.instanceFollowRedirects = false
-            conn.setFixedLengthStreamingMode(0)
-            conn.setRequestProperty("Content-Range", "bytes */$totalBytes")
-            conn.connectTimeout = 60000
-            conn.readTimeout = 120000
+        val requestBody = ByteArray(0).toRequestBody(null)
+        val request = Request.Builder()
+            .url(sessionUri)
+            .header("Content-Range", "bytes */$totalBytes")
+            .put(requestBody)
+            .build()
 
-            val code = conn.responseCode
-            if (code == 308) {
-                val rangeHeader = conn.getHeaderField("Range")
-                if (!rangeHeader.isNullOrBlank()) {
-                    val match = Regex("bytes=0-(\\d+)").find(rangeHeader)
-                    if (match != null) {
-                        return match.groupValues[1].toLong() + 1
+        return try {
+            GDriveNetworkClient.client.newCall(request).execute().use { response ->
+                val code = response.code
+                if (code == 308) {
+                    val rangeHeader = response.header("Range")
+                    if (!rangeHeader.isNullOrBlank()) {
+                        val match = Regex("bytes=0-(\\d+)").find(rangeHeader)
+                        if (match != null) {
+                            return match.groupValues[1].toLong() + 1
+                        }
                     }
                 }
+                0L
             }
-            return 0L
         } catch (_: Exception) {
-            return 0L
-        } finally {
-            conn.disconnect()
+            0L
         }
     }
 

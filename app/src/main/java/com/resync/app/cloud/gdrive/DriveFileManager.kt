@@ -15,13 +15,13 @@ import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.OutputStreamWriter
-import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.random.Random
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
+import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 
 data class DriveStorageQuota(
@@ -126,42 +126,48 @@ class DriveFileManager(private val oAuthManager: OAuthManager) {
     }
 
     private fun fetchStorageQuotaInternal(token: String): Result<DriveStorageQuota> {
-        val url = URL("$API_BASE/about?fields=storageQuota,user")
-        val conn = url.openConnection() as HttpURLConnection
-        conn.requestMethod = "GET"
-        conn.setRequestProperty("Authorization", "Bearer $token")
-        conn.connectTimeout = 15000
-        conn.readTimeout = 15000
+        val url = "$API_BASE/about?fields=storageQuota,user"
+        val request = Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer $token")
+            .get()
+            .build()
 
-        val code = conn.responseCode
-        if (code == 200) {
-            val reader = BufferedReader(InputStreamReader(conn.inputStream))
-            val json = gson.fromJson(reader, JsonObject::class.java)
+        return try {
+            GDriveNetworkClient.client.newCall(request).execute().use { response ->
+                val code = response.code
+                val bodyStr = response.body?.string() ?: ""
+                if (code == 200) {
+                    val json = gson.fromJson(bodyStr, JsonObject::class.java)
 
-            val quotaObj = json.getAsJsonObject("storageQuota")
-            val limit = quotaObj?.get("limit")?.asLong ?: (15L * 1024 * 1024 * 1024)
-            val usage = quotaObj?.get("usage")?.asLong ?: 0L
-            val usageInDrive = quotaObj?.get("usageInDrive")?.asLong ?: 0L
+                    val quotaObj = json.getAsJsonObject("storageQuota")
+                    val limit = quotaObj?.get("limit")?.asLong ?: (15L * 1024 * 1024 * 1024)
+                    val usage = quotaObj?.get("usage")?.asLong ?: 0L
+                    val usageInDrive = quotaObj?.get("usageInDrive")?.asLong ?: 0L
 
-            val userObj = json.getAsJsonObject("user")
-            val email = userObj?.get("emailAddress")?.asString
-            val displayName = userObj?.get("displayName")?.asString
+                    val userObj = json.getAsJsonObject("user")
+                    val email = userObj?.get("emailAddress")?.asString
+                    val displayName = userObj?.get("displayName")?.asString
 
-            val isFull = usage >= limit
-            return Result.success(
-                DriveStorageQuota(
-                    limitBytes = limit,
-                    usageBytes = usage,
-                    usageInDriveBytes = usageInDrive,
-                    isStorageFull = isFull,
-                    userEmail = email,
-                    displayName = displayName
-                )
-            )
-        } else if (code == 401) {
-            return Result.failure(GoogleDriveSessionExpiredException("A sessão do Google Drive expirou. É necessário reconectar sua conta para continuar.", 401))
-        } else {
-            return handleApiError(conn, code)
+                    val isFull = usage >= limit
+                    Result.success(
+                        DriveStorageQuota(
+                            limitBytes = limit,
+                            usageBytes = usage,
+                            usageInDriveBytes = usageInDrive,
+                            isStorageFull = isFull,
+                            userEmail = email,
+                            displayName = displayName
+                        )
+                    )
+                } else if (code == 401) {
+                    Result.failure(GoogleDriveSessionExpiredException("A sessão do Google Drive expirou. É necessário reconectar sua conta para continuar.", 401))
+                } else {
+                    handleApiError(bodyStr, code)
+                }
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 
@@ -369,61 +375,67 @@ class DriveFileManager(private val oAuthManager: OAuthManager) {
 
         val encodedQuery = URLEncoder.encode(queryBuilder.toString(), "UTF-8")
         val fields = URLEncoder.encode("files(id,name,size,createdTime,modifiedTime,md5Checksum,mimeType,appProperties)", "UTF-8")
-        val url = URL("$API_BASE/files?q=$encodedQuery&fields=$fields&pageSize=100")
+        val url = "$API_BASE/files?q=$encodedQuery&fields=$fields&pageSize=100"
 
-        val conn = url.openConnection() as HttpURLConnection
-        conn.requestMethod = "GET"
-        conn.setRequestProperty("Authorization", "Bearer $token")
-        conn.connectTimeout = 12000
-        conn.readTimeout = 12000
+        val request = Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer $token")
+            .get()
+            .build()
 
-        val code = conn.responseCode
-        if (code == 200) {
-            val reader = BufferedReader(InputStreamReader(conn.inputStream))
-            val json = gson.fromJson(reader, JsonObject::class.java)
-            val filesArray = json.getAsJsonArray("files")
+        return try {
+            GDriveNetworkClient.client.newCall(request).execute().use { response ->
+                val code = response.code
+                val bodyStr = response.body?.string() ?: ""
+                if (code == 200) {
+                    val json = gson.fromJson(bodyStr, JsonObject::class.java)
+                    val filesArray = json.getAsJsonArray("files")
 
-            val list = mutableListOf<DriveFileMetadata>()
-            if (filesArray != null) {
-                for (element in filesArray) {
-                    val obj = element.asJsonObject
-                    val name = obj.get("name")?.asString ?: ""
-                    // Filter ReSync, SwiftVault and legacy Odin backup containers (.resync, .svb or .zip)
-                    if (!name.endsWith(".resync", ignoreCase = true) && !name.endsWith(".svb", ignoreCase = true) && !name.endsWith(".zip", ignoreCase = true) && !name.contains("Odin", ignoreCase = true) && !name.contains("ReSync", ignoreCase = true) && !name.contains("SwiftVault", ignoreCase = true)) {
-                        continue
-                    }
-                    val id = obj.get("id").asString
-                    val size = obj.get("size")?.asLong ?: 0L
-                    val md5 = obj.get("md5Checksum")?.asString
-                    val mime = obj.get("mimeType")?.asString ?: "application/octet-stream"
+                    val list = mutableListOf<DriveFileMetadata>()
+                    if (filesArray != null) {
+                        for (element in filesArray) {
+                            val obj = element.asJsonObject
+                            val name = obj.get("name")?.asString ?: ""
+                            // Filter ReSync, SwiftVault and legacy Odin backup containers (.resync, .svb or .zip)
+                            if (!name.endsWith(".resync", ignoreCase = true) && !name.endsWith(".svb", ignoreCase = true) && !name.endsWith(".zip", ignoreCase = true) && !name.contains("Odin", ignoreCase = true) && !name.contains("ReSync", ignoreCase = true) && !name.contains("SwiftVault", ignoreCase = true)) {
+                                continue
+                            }
+                            val id = obj.get("id").asString
+                            val size = obj.get("size")?.asLong ?: 0L
+                            val md5 = obj.get("md5Checksum")?.asString
+                            val mime = obj.get("mimeType")?.asString ?: "application/octet-stream"
 
-                    val appProps = mutableMapOf<String, String>()
-                    if (obj.has("appProperties") && !obj.get("appProperties").isJsonNull) {
-                        val propsObj = obj.getAsJsonObject("appProperties")
-                        for (key in propsObj.keySet()) {
-                            appProps[key] = propsObj.get(key).asString
+                            val appProps = mutableMapOf<String, String>()
+                            if (obj.has("appProperties") && !obj.get("appProperties").isJsonNull) {
+                                val propsObj = obj.getAsJsonObject("appProperties")
+                                for (key in propsObj.keySet()) {
+                                    appProps[key] = propsObj.get(key).asString
+                                }
+                            }
+
+                            list.add(
+                                DriveFileMetadata(
+                                    id = id,
+                                    name = name,
+                                    sizeBytes = size,
+                                    createdTime = System.currentTimeMillis(),
+                                    modifiedTime = System.currentTimeMillis(),
+                                    md5Checksum = md5,
+                                    mimeType = mime,
+                                    appProperties = appProps
+                                )
+                            )
                         }
                     }
-
-                    list.add(
-                        DriveFileMetadata(
-                            id = id,
-                            name = name,
-                            sizeBytes = size,
-                            createdTime = System.currentTimeMillis(),
-                            modifiedTime = System.currentTimeMillis(),
-                            md5Checksum = md5,
-                            mimeType = mime,
-                            appProperties = appProps
-                        )
-                    )
+                    Result.success(list)
+                } else if (code == 401) {
+                    Result.failure(GoogleDriveSessionExpiredException("A sessão do Google Drive expirou. É necessário reconectar sua conta para continuar.", 401))
+                } else {
+                    handleApiError(bodyStr, code)
                 }
             }
-            return Result.success(list)
-        } else if (code == 401) {
-            return Result.failure(GoogleDriveSessionExpiredException("A sessão do Google Drive expirou. É necessário reconectar sua conta para continuar.", 401))
-        } else {
-            return handleApiError(conn, code)
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 
@@ -460,24 +472,27 @@ class DriveFileManager(private val oAuthManager: OAuthManager) {
     }
 
     private fun deleteFileInternal(fileId: String, token: String): Result<Boolean> {
-        val url = URL("$API_BASE/files/$fileId")
-        val conn = url.openConnection() as HttpURLConnection
-        try {
-            conn.requestMethod = "DELETE"
-            conn.setRequestProperty("Authorization", "Bearer $token")
-            conn.connectTimeout = 10000
-            conn.readTimeout = 10000
+        val url = "$API_BASE/files/$fileId"
+        val request = Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer $token")
+            .delete()
+            .build()
 
-            val code = conn.responseCode
-            return if (code == 204 || code == 200 || code == 404) {
-                Result.success(true)
-            } else if (code == 401 || code == 403) {
-                Result.failure(GoogleDriveSessionExpiredException("Acesso expirado ou não autorizado no Google Drive (HTTP $code).", code))
-            } else {
-                handleApiError(conn, code)
+        return try {
+            GDriveNetworkClient.client.newCall(request).execute().use { response ->
+                val code = response.code
+                val bodyStr = response.body?.string() ?: ""
+                if (code == 204 || code == 200 || code == 404) {
+                    Result.success(true)
+                } else if (code == 401 || code == 403) {
+                    Result.failure(GoogleDriveSessionExpiredException("Acesso expirado ou não autorizado no Google Drive (HTTP $code).", code))
+                } else {
+                    handleApiError(bodyStr, code)
+                }
             }
-        } finally {
-            conn.disconnect()
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 
@@ -506,60 +521,61 @@ class DriveFileManager(private val oAuthManager: OAuthManager) {
     }
 
     private fun updateFileAppPropertiesInternal(fileId: String, properties: Map<String, String>, token: String): Result<Boolean> {
-        val url = URL("$API_BASE/files/$fileId")
-        val conn = url.openConnection() as HttpURLConnection
-        try {
-            conn.requestMethod = "PATCH"
-            conn.setRequestProperty("Authorization", "Bearer $token")
-            conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
-            conn.doOutput = true
-            conn.connectTimeout = 10000
-            conn.readTimeout = 10000
+        val url = "$API_BASE/files/$fileId"
+        val jsonBody = JsonObject().apply {
+            val propsObj = JsonObject()
+            for ((k, v) in properties) {
+                propsObj.addProperty(k, v)
+            }
+            add("appProperties", propsObj)
+        }
+        val mediaType = "application/json; charset=UTF-8".toMediaTypeOrNull()
+        val requestBody = jsonBody.toString().toRequestBody(mediaType)
+        val request = Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer $token")
+            .patch(requestBody)
+            .build()
 
-            val jsonBody = JsonObject().apply {
-                val propsObj = JsonObject()
-                for ((k, v) in properties) {
-                    propsObj.addProperty(k, v)
+        return try {
+            GDriveNetworkClient.client.newCall(request).execute().use { response ->
+                val code = response.code
+                val bodyStr = response.body?.string() ?: ""
+                if (code in 200..299) {
+                    Result.success(true)
+                } else if (code == 401 || code == 403) {
+                    Result.failure(GoogleDriveSessionExpiredException("Acesso expirado ou não autorizado no Google Drive (HTTP $code).", code))
+                } else {
+                    handleApiError(bodyStr, code)
                 }
-                add("appProperties", propsObj)
             }
-            conn.outputStream.use { os ->
-                os.write(jsonBody.toString().toByteArray(Charsets.UTF_8))
-            }
-
-            val code = conn.responseCode
-            return if (code in 200..299) {
-                Result.success(true)
-            } else if (code == 401 || code == 403) {
-                Result.failure(GoogleDriveSessionExpiredException("Acesso expirado ou não autorizado no Google Drive (HTTP $code).", code))
-            } else {
-                handleApiError(conn, code)
-            }
-        } finally {
-            conn.disconnect()
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 
     private fun checkFolderValid(folderId: String, token: String): Result<Boolean> {
-        return try {
-            val url = URL("$API_BASE/files/$folderId?fields=id,name,trashed,mimeType")
-            val conn = url.openConnection() as HttpURLConnection
-            conn.requestMethod = "GET"
-            conn.setRequestProperty("Authorization", "Bearer $token")
-            conn.connectTimeout = 10000
-            conn.readTimeout = 10000
+        val url = "$API_BASE/files/$folderId?fields=id,name,trashed,mimeType"
+        val request = Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer $token")
+            .get()
+            .build()
 
-            val code = conn.responseCode
-            if (code == 200) {
-                val reader = BufferedReader(InputStreamReader(conn.inputStream))
-                val json = gson.fromJson(reader, JsonObject::class.java)
-                val trashed = json.get("trashed")?.asBoolean ?: false
-                val mime = json.get("mimeType")?.asString ?: ""
-                Result.success(!trashed && mime == "application/vnd.google-apps.folder")
-            } else if (code == 401) {
-                Result.failure(GoogleDriveSessionExpiredException("Sessão expirada (HTTP 401)", 401))
-            } else {
-                Result.success(false)
+        return try {
+            GDriveNetworkClient.client.newCall(request).execute().use { response ->
+                val code = response.code
+                val bodyStr = response.body?.string() ?: ""
+                if (code == 200) {
+                    val json = gson.fromJson(bodyStr, JsonObject::class.java)
+                    val trashed = json.get("trashed")?.asBoolean ?: false
+                    val mime = json.get("mimeType")?.asString ?: ""
+                    Result.success(!trashed && mime == "application/vnd.google-apps.folder")
+                } else if (code == 401) {
+                    Result.failure(GoogleDriveSessionExpiredException("Sessão expirada (HTTP 401)", 401))
+                } else {
+                    Result.success(false)
+                }
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -576,33 +592,32 @@ class DriveFileManager(private val oAuthManager: OAuthManager) {
                 "name = '$safeName' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
             }
             val encodedQuery = URLEncoder.encode(query, "UTF-8")
-            val searchUrl = URL("$API_BASE/files?q=$encodedQuery&fields=files(id,name)")
-            val conn = searchUrl.openConnection() as HttpURLConnection
-            conn.requestMethod = "GET"
-            conn.setRequestProperty("Authorization", "Bearer $token")
-            conn.connectTimeout = 10000
-            conn.readTimeout = 10000
+            val url = "$API_BASE/files?q=$encodedQuery&fields=files(id,name)"
+            val request = Request.Builder()
+                .url(url)
+                .header("Authorization", "Bearer $token")
+                .get()
+                .build()
 
-            val code = conn.responseCode
-            if (code == 200) {
-                val reader = BufferedReader(InputStreamReader(conn.inputStream))
-                val json = gson.fromJson(reader, JsonObject::class.java)
-                val filesArray = json.getAsJsonArray("files")
-                if (filesArray != null && filesArray.size() > 0) {
-                    Result.success(filesArray.get(0).asJsonObject.get("id").asString)
+            GDriveNetworkClient.client.newCall(request).execute().use { response ->
+                val code = response.code
+                val bodyStr = response.body?.string() ?: ""
+                if (code == 200) {
+                    val json = gson.fromJson(bodyStr, JsonObject::class.java)
+                    val filesArray = json.getAsJsonArray("files")
+                    if (filesArray != null && filesArray.size() > 0) {
+                        Result.success(filesArray.get(0).asJsonObject.get("id").asString)
+                    } else {
+                        Result.success(null)
+                    }
+                } else if (code == 401) {
+                    Result.failure(GoogleDriveSessionExpiredException("Sessão expirada (HTTP 401)", 401))
+                } else if (code in listOf(403, 429, 500, 502, 503, 504)) {
+                    dbHelper.insertLogAsync(LogLevel.ERROR, "GoogleDrive", "Erro transitório na busca da pasta '$name' (HTTP $code): $bodyStr")
+                    Result.failure(GoogleDriveApiException(code, "HTTP $code ao buscar pasta '$name': $bodyStr"))
                 } else {
-                    Result.success(null)
+                    handleApiError(bodyStr, code)
                 }
-            } else if (code == 401) {
-                Result.failure(GoogleDriveSessionExpiredException("Sessão expirada (HTTP 401)", 401))
-            } else if (code in listOf(403, 429, 500, 502, 503, 504)) {
-                val errBody = try {
-                    BufferedReader(InputStreamReader(conn.errorStream ?: conn.inputStream)).use { it.readText() }
-                } catch (_: Exception) { "" }
-                dbHelper.insertLogAsync(LogLevel.ERROR, "GoogleDrive", "Erro transitório na busca da pasta '$name' (HTTP $code): $errBody")
-                Result.failure(GoogleDriveApiException(code, "HTTP $code ao buscar pasta '$name': $errBody"))
-            } else {
-                handleApiError(conn, code)
             }
         } catch (e: Exception) {
             Result.failure(e)
@@ -737,15 +752,7 @@ class DriveFileManager(private val oAuthManager: OAuthManager) {
     private fun createFolder(name: String, parentId: String?, token: String): Result<String> {
         val dbHelper = com.resync.app.data.database.AppDatabaseHelper.getInstance(oAuthManager.context)
         return try {
-            val createUrl = URL("$API_BASE/files")
-            val createConn = createUrl.openConnection() as HttpURLConnection
-            createConn.requestMethod = "POST"
-            createConn.setRequestProperty("Authorization", "Bearer $token")
-            createConn.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
-            createConn.connectTimeout = 12000
-            createConn.readTimeout = 12000
-            createConn.doOutput = true
-
+            val url = "$API_BASE/files"
             val body = JsonObject().apply {
                 addProperty("name", name)
                 addProperty("mimeType", "application/vnd.google-apps.folder")
@@ -754,19 +761,26 @@ class DriveFileManager(private val oAuthManager: OAuthManager) {
                     add("parents", parentsArr)
                 }
             }
+            val mediaType = "application/json; charset=UTF-8".toMediaTypeOrNull()
+            val requestBody = body.toString().toRequestBody(mediaType)
+            val request = Request.Builder()
+                .url(url)
+                .header("Authorization", "Bearer $token")
+                .post(requestBody)
+                .build()
 
-            OutputStreamWriter(createConn.outputStream).use { it.write(body.toString()) }
-
-            val code = createConn.responseCode
-            if (code == 200 || code == 201) {
-                val reader = BufferedReader(InputStreamReader(createConn.inputStream))
-                val json = gson.fromJson(reader, JsonObject::class.java)
-                val folderId = json.get("id").asString
-                Result.success(folderId)
-            } else if (code == 401) {
-                Result.failure(GoogleDriveSessionExpiredException("A sessão do Google Drive expirou. É necessário reconectar sua conta para continuar.", 401))
-            } else {
-                handleApiError(createConn, code)
+            GDriveNetworkClient.client.newCall(request).execute().use { response ->
+                val code = response.code
+                val bodyStr = response.body?.string() ?: ""
+                if (code == 200 || code == 201) {
+                    val json = gson.fromJson(bodyStr, JsonObject::class.java)
+                    val folderId = json.get("id").asString
+                    Result.success(folderId)
+                } else if (code == 401) {
+                    Result.failure(GoogleDriveSessionExpiredException("A sessão do Google Drive expirou. É necessário reconectar sua conta para continuar.", 401))
+                } else {
+                    handleApiError(bodyStr, code)
+                }
             }
         } catch (e: Exception) {
             dbHelper.insertLogAsync(com.resync.app.data.model.LogLevel.ERROR, "GoogleDrive", "Exceção ao criar pasta '$name': ${e.message}")
@@ -774,13 +788,7 @@ class DriveFileManager(private val oAuthManager: OAuthManager) {
         }
     }
 
-    private fun <T> handleApiError(conn: HttpURLConnection, code: Int): Result<T> {
-        val errorBody = try {
-            BufferedReader(InputStreamReader(conn.errorStream ?: conn.inputStream)).use { it.readText() }
-        } catch (e: Exception) {
-            ""
-        }
-
+    private fun <T> handleApiError(errorBody: String, code: Int): Result<T> {
         val dbHelper = com.resync.app.data.database.AppDatabaseHelper.getInstance(oAuthManager.context)
         dbHelper.insertLogAsync(com.resync.app.data.model.LogLevel.ERROR, "GoogleDrive", "Erro na API do Google Drive (HTTP $code): $errorBody")
 
@@ -825,49 +833,55 @@ class DriveFileManager(private val oAuthManager: OAuthManager) {
 
     private fun fetchFileMetadataInternal(fileId: String, token: String): Result<DriveFileMetadata> {
         val fields = URLEncoder.encode("id,name,size,createdTime,modifiedTime,md5Checksum,mimeType,appProperties,parents,trashed", "UTF-8")
-        val url = URL("$API_BASE/files/$fileId?fields=$fields")
-        val conn = url.openConnection() as HttpURLConnection
-        conn.requestMethod = "GET"
-        conn.setRequestProperty("Authorization", "Bearer $token")
-        conn.connectTimeout = 12000
-        conn.readTimeout = 12000
+        val url = "$API_BASE/files/$fileId?fields=$fields"
+        val request = Request.Builder()
+            .url(url)
+            .header("Authorization", "Bearer $token")
+            .get()
+            .build()
 
-        val code = conn.responseCode
-        if (code in 200..299) {
-            val reader = BufferedReader(InputStreamReader(conn.inputStream))
-            val obj = gson.fromJson(reader, JsonObject::class.java)
-            val id = obj.get("id")?.asString ?: fileId
-            val name = obj.get("name")?.asString ?: ""
-            val size = obj.get("size")?.asLong ?: 0L
-            val md5 = obj.get("md5Checksum")?.asString
-            val mime = obj.get("mimeType")?.asString ?: "application/octet-stream"
-            val trashed = obj.get("trashed")?.asBoolean ?: false
-            if (trashed) {
-                return Result.failure(IllegalStateException("Arquivo $id está na lixeira do Google Drive."))
-            }
-            val appProps = mutableMapOf<String, String>()
-            if (obj.has("appProperties") && !obj.get("appProperties").isJsonNull) {
-                val propsObj = obj.getAsJsonObject("appProperties")
-                for (k in propsObj.keySet()) {
-                    appProps[k] = propsObj.get(k).asString
+        return try {
+            GDriveNetworkClient.client.newCall(request).execute().use { response ->
+                val code = response.code
+                val bodyStr = response.body?.string() ?: ""
+                if (code in 200..299) {
+                    val obj = gson.fromJson(bodyStr, JsonObject::class.java)
+                    val id = obj.get("id")?.asString ?: fileId
+                    val name = obj.get("name")?.asString ?: ""
+                    val size = obj.get("size")?.asLong ?: 0L
+                    val md5 = obj.get("md5Checksum")?.asString
+                    val mime = obj.get("mimeType")?.asString ?: "application/octet-stream"
+                    val trashed = obj.get("trashed")?.asBoolean ?: false
+                    if (trashed) {
+                        return Result.failure(IllegalStateException("Arquivo $id está na lixeira do Google Drive."))
+                    }
+                    val appProps = mutableMapOf<String, String>()
+                    if (obj.has("appProperties") && !obj.get("appProperties").isJsonNull) {
+                        val propsObj = obj.getAsJsonObject("appProperties")
+                        for (k in propsObj.keySet()) {
+                            appProps[k] = propsObj.get(k).asString
+                        }
+                    }
+                    Result.success(
+                        DriveFileMetadata(
+                            id = id,
+                            name = name,
+                            sizeBytes = size,
+                            createdTime = System.currentTimeMillis(),
+                            modifiedTime = System.currentTimeMillis(),
+                            md5Checksum = md5,
+                            mimeType = mime,
+                            appProperties = appProps
+                        )
+                    )
+                } else if (code == 401) {
+                    Result.failure(GoogleDriveSessionExpiredException("A sessão do Google Drive expirou.", 401))
+                } else {
+                    handleApiError(bodyStr, code)
                 }
             }
-            return Result.success(
-                DriveFileMetadata(
-                    id = id,
-                    name = name,
-                    sizeBytes = size,
-                    createdTime = System.currentTimeMillis(),
-                    modifiedTime = System.currentTimeMillis(),
-                    md5Checksum = md5,
-                    mimeType = mime,
-                    appProperties = appProps
-                )
-            )
-        } else if (code == 401) {
-            return Result.failure(GoogleDriveSessionExpiredException("A sessão do Google Drive expirou.", 401))
-        } else {
-            return handleApiError(conn, code)
+        } catch (e: Exception) {
+            Result.failure(e)
         }
     }
 
@@ -883,32 +897,26 @@ class DriveFileManager(private val oAuthManager: OAuthManager) {
         try {
             val existingId = searchFileByName(name, token, parentId).getOrNull()
             if (!existingId.isNullOrBlank()) {
-                val url = URL("https://www.googleapis.com/upload/drive/v3/files/$existingId?uploadType=media")
-                val conn = url.openConnection() as HttpURLConnection
-                conn.requestMethod = "PATCH"
-                conn.setRequestProperty("Authorization", "Bearer $token")
-                conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8")
-                conn.doOutput = true
-                conn.connectTimeout = 15000
-                conn.readTimeout = 15000
-                OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(content) }
-                val code = conn.responseCode
-                if (code in 200..299) {
-                    Result.success(existingId)
-                } else {
-                    Result.failure(GoogleDriveApiException(code, "Falha ao atualizar índice: HTTP $code"))
+                val url = "https://www.googleapis.com/upload/drive/v3/files/$existingId?uploadType=media"
+                val mediaType = "application/json; charset=UTF-8".toMediaTypeOrNull()
+                val requestBody = content.toRequestBody(mediaType)
+                val request = Request.Builder()
+                    .url(url)
+                    .header("Authorization", "Bearer $token")
+                    .patch(requestBody)
+                    .build()
+
+                GDriveNetworkClient.client.newCall(request).execute().use { response ->
+                    val code = response.code
+                    if (code in 200..299) {
+                        Result.success(existingId)
+                    } else {
+                        Result.failure(GoogleDriveApiException(code, "Falha ao atualizar índice: HTTP $code"))
+                    }
                 }
             } else {
                 val boundary = "-------SwiftVaultBoundary" + System.currentTimeMillis()
-                val url = URL("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart")
-                val conn = url.openConnection() as HttpURLConnection
-                conn.requestMethod = "POST"
-                conn.setRequestProperty("Authorization", "Bearer $token")
-                conn.setRequestProperty("Content-Type", "multipart/related; boundary=$boundary")
-                conn.doOutput = true
-                conn.connectTimeout = 15000
-                conn.readTimeout = 15000
-
+                val url = "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart"
                 val metaObj = JsonObject().apply {
                     addProperty("name", name)
                     addProperty("mimeType", "application/json")
@@ -918,24 +926,32 @@ class DriveFileManager(private val oAuthManager: OAuthManager) {
                     }
                 }
 
-                val os = conn.outputStream
-                val writer = OutputStreamWriter(os, Charsets.UTF_8)
-                writer.write("--$boundary\r\n")
-                writer.write("Content-Type: application/json; charset=UTF-8\r\n\r\n")
-                writer.write(metaObj.toString())
-                writer.write("\r\n--$boundary\r\n")
-                writer.write("Content-Type: application/json; charset=UTF-8\r\n\r\n")
-                writer.write(content)
-                writer.write("\r\n--$boundary--\r\n")
-                writer.flush()
+                val multipartBodyStr = buildString {
+                    append("--").append(boundary).append("\r\n")
+                    append("Content-Type: application/json; charset=UTF-8\r\n\r\n")
+                    append(metaObj.toString())
+                    append("\r\n--").append(boundary).append("\r\n")
+                    append("Content-Type: application/json; charset=UTF-8\r\n\r\n")
+                    append(content)
+                    append("\r\n--").append(boundary).append("--\r\n")
+                }
+                val mediaType = "multipart/related; boundary=$boundary".toMediaTypeOrNull()
+                val requestBody = multipartBodyStr.toRequestBody(mediaType)
+                val request = Request.Builder()
+                    .url(url)
+                    .header("Authorization", "Bearer $token")
+                    .post(requestBody)
+                    .build()
 
-                val code = conn.responseCode
-                if (code in 200..299) {
-                    val reader = BufferedReader(InputStreamReader(conn.inputStream))
-                    val json = gson.fromJson(reader, JsonObject::class.java)
-                    Result.success(json.get("id").asString)
-                } else {
-                    Result.failure(GoogleDriveApiException(code, "Falha ao criar índice: HTTP $code"))
+                GDriveNetworkClient.client.newCall(request).execute().use { response ->
+                    val code = response.code
+                    val bodyStr = response.body?.string() ?: ""
+                    if (code in 200..299) {
+                        val json = gson.fromJson(bodyStr, JsonObject::class.java)
+                        Result.success(json.get("id").asString)
+                    } else {
+                        Result.failure(GoogleDriveApiException(code, "Falha ao criar índice: HTTP $code"))
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -952,27 +968,29 @@ class DriveFileManager(private val oAuthManager: OAuthManager) {
                 "name = '$safeName' and trashed = false"
             }
             val encodedQuery = URLEncoder.encode(query, "UTF-8")
-            val searchUrl = URL("$API_BASE/files?q=$encodedQuery&fields=files(id,name)")
-            val conn = searchUrl.openConnection() as HttpURLConnection
-            conn.requestMethod = "GET"
-            conn.setRequestProperty("Authorization", "Bearer $token")
-            conn.connectTimeout = 10000
-            conn.readTimeout = 10000
+            val url = "$API_BASE/files?q=$encodedQuery&fields=files(id,name)"
+            val request = Request.Builder()
+                .url(url)
+                .header("Authorization", "Bearer $token")
+                .get()
+                .build()
 
-            val code = conn.responseCode
-            if (code == 200) {
-                val reader = BufferedReader(InputStreamReader(conn.inputStream))
-                val json = gson.fromJson(reader, JsonObject::class.java)
-                val filesArray = json.getAsJsonArray("files")
-                if (filesArray != null && filesArray.size() > 0) {
-                    Result.success(filesArray.get(0).asJsonObject.get("id").asString)
+            GDriveNetworkClient.client.newCall(request).execute().use { response ->
+                val code = response.code
+                val bodyStr = response.body?.string() ?: ""
+                if (code == 200) {
+                    val json = gson.fromJson(bodyStr, JsonObject::class.java)
+                    val filesArray = json.getAsJsonArray("files")
+                    if (filesArray != null && filesArray.size() > 0) {
+                        Result.success(filesArray.get(0).asJsonObject.get("id").asString)
+                    } else {
+                        Result.success(null)
+                    }
+                } else if (code == 401) {
+                    Result.failure(GoogleDriveSessionExpiredException("Sessão expirada (HTTP 401)", 401))
                 } else {
-                    Result.success(null)
+                    handleApiError(bodyStr, code)
                 }
-            } else if (code == 401) {
-                Result.failure(GoogleDriveSessionExpiredException("Sessão expirada (HTTP 401)", 401))
-            } else {
-                handleApiError(conn, code)
             }
         } catch (e: Exception) {
             Result.failure(e)

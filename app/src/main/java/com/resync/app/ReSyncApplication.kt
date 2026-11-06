@@ -15,9 +15,27 @@ import java.util.concurrent.TimeUnit
 
 class ReSyncApplication : Application() {
 
+    companion object {
+        init {
+            // Configure LibSU shell settings globally before any component accesses the shell
+            Shell.enableVerboseLogging = false
+            Shell.setDefaultBuilder(
+                Shell.Builder.create()
+                    .setFlags(Shell.FLAG_MOUNT_MASTER)
+                    .setTimeout(15)
+            )
+        }
+    }
+
     private val applicationScope = CoroutineScope(Dispatchers.Default)
 
     override fun onCreate() {
+        // Enforce Mount Master shell configuration on first entry
+        Shell.setDefaultBuilder(
+            Shell.Builder.create()
+                .setFlags(Shell.FLAG_MOUNT_MASTER)
+                .setTimeout(15)
+        )
         super.onCreate()
 
         // Garante canais unificados resync_ops_v3 e limpa canais legados
@@ -79,13 +97,6 @@ class ReSyncApplication : Application() {
         // 2. Modo seguro e verificação de crash loop na inicialização
         checkSafeModeAndRecoverQueue()
 
-        // Configure LibSU shell settings as required
-        Shell.enableVerboseLogging = false
-        Shell.setDefaultBuilder(
-            Shell.Builder.create()
-                .setFlags(Shell.FLAG_MOUNT_MASTER)
-                .setTimeout(15)
-        )
 
         // Initialize Database, hardware keys and verify Root status
         applicationScope.launch {
