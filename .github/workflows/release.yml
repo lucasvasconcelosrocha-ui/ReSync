@@ -33,9 +33,13 @@ jobs:
 
       - name: Set Version & Tag
         run: |
-          VERSION_CODE="${{ github.run_number }}"
-          VERSION_NAME="1.0.${{ github.run_number }}"
-          TAG_NAME="v1.0.${{ github.run_number }}"
+          if [ -f "version.properties" ]; then
+            V_CODE=$(grep "versionCode=" version.properties | cut -d'=' -f2 | tr -d '[:space:]')
+            V_NAME=$(grep "versionName=" version.properties | cut -d'=' -f2 | tr -d '[:space:]')
+          fi
+          VERSION_CODE="${V_CODE:-${{ github.run_number }}}"
+          VERSION_NAME="${V_NAME:-1.0.${{ github.run_number }}}"
+          TAG_NAME="v${VERSION_NAME}"
           
           echo "VERSION_CODE=${VERSION_CODE}" >> $GITHUB_ENV
           echo "VERSION_NAME=${VERSION_NAME}" >> $GITHUB_ENV
@@ -49,6 +53,24 @@ jobs:
           import re
           import json
           import os
+
+          # Preserva release_notes.md pré-definido se existir no repositório
+          if os.path.exists("release_notes.md") and os.path.getsize("release_notes.md") > 20:
+              print("release_notes.md pré-definido encontrado no repositório. Preservando.")
+              if not os.path.exists("changelog.json"):
+                  functions = []
+                  fixes = []
+                  if os.path.exists("version.json"):
+                      try:
+                          with open("version.json", "r", encoding="utf-8") as vj:
+                              vj_data = json.load(vj)
+                              functions = vj_data.get("functions", [])
+                              fixes = vj_data.get("fixes", [])
+                      except Exception:
+                          pass
+                  with open("changelog.json", "w", encoding="utf-8") as f:
+                      json.dump({"functions": functions, "fixes": fixes}, f, ensure_ascii=False, indent=2)
+              exit(0)
 
           prev_tag = ""
           try:
@@ -169,11 +191,26 @@ jobs:
           import json
           import os
 
-          with open("changelog.json", "r", encoding="utf-8") as f:
-              changelog = json.load(f)
+          existing_data = {}
+          if os.path.exists("version.json"):
+              try:
+                  with open("version.json", "r", encoding="utf-8") as f:
+                      existing_data = json.load(f)
+              except Exception:
+                  pass
 
-          with open("release_notes.md", "r", encoding="utf-8") as f:
-              release_notes = f.read()
+          changelog = {}
+          if os.path.exists("changelog.json"):
+              try:
+                  with open("changelog.json", "r", encoding="utf-8") as f:
+                      changelog = json.load(f)
+              except Exception:
+                  pass
+
+          release_notes = ""
+          if os.path.exists("release_notes.md"):
+              with open("release_notes.md", "r", encoding="utf-8") as f:
+                  release_notes = f.read()
 
           version_data = {
               "versionCode": int(os.environ["VERSION_CODE"]),
@@ -182,9 +219,9 @@ jobs:
               "apkName": os.environ["APK_DEST"],
               "apkSize": int(os.environ["APK_SIZE"]),
               "sha256": os.environ["SHA256_HASH"],
-              "releaseNotes": release_notes,
-              "functions": changelog.get("functions", []),
-              "fixes": changelog.get("fixes", [])
+              "releaseNotes": release_notes if release_notes else existing_data.get("releaseNotes", ""),
+              "functions": existing_data.get("functions") or changelog.get("functions", []),
+              "fixes": existing_data.get("fixes") or changelog.get("fixes", [])
           }
 
           with open("version.json", "w", encoding="utf-8") as f:
@@ -203,7 +240,8 @@ jobs:
             "ReSync-${TAG_NAME}.apk.sha256" \
             "version.json" \
             --title "ReSync ${TAG_NAME}" \
-            --notes-file release_notes.md
+            --notes-file release_notes.md \
+            --clobber
 
       - name: Clean Up Keystore
         if: always()
