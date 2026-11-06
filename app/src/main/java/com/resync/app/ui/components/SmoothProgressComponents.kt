@@ -157,10 +157,12 @@ fun SmoothStageText(
     val normalizedStage = when {
         stage.contains("Prepar", ignoreCase = true) -> "Preparando dados..."
         stage.contains("Copi", ignoreCase = true) || stage.contains("Transfer", ignoreCase = true) -> "Copiando arquivos..."
-        stage.contains("Verific", ignoreCase = true) -> "Verificando integridade..."
-        stage.contains("Compact", ignoreCase = true) -> "Compactando container..."
+        stage.contains("Verific", ignoreCase = true) -> "Verificando arquivo de backup..."
+        stage.contains("Descript", ignoreCase = true) || stage.contains("Desbloq", ignoreCase = true) -> "Desbloqueando arquivo de backup..."
+        stage.contains("APK", ignoreCase = true) || stage.contains("Instal", ignoreCase = true) -> "Instalando aplicativos..."
+        stage.contains("Compact", ignoreCase = true) -> "Compactando arquivo de backup..."
         stage.contains("Finaliz", ignoreCase = true) || stage.contains("Conclu", ignoreCase = true) -> "Finalizando..."
-        stage.contains("Drive", ignoreCase = true) || stage.contains("Nuvem", ignoreCase = true) -> "Sincronizando com Drive..."
+        stage.contains("Drive", ignoreCase = true) || stage.contains("Nuvem", ignoreCase = true) -> "Sincronizando com Google Drive..."
         stage.isNotBlank() -> stage
         else -> "Processando..."
     }

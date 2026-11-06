@@ -1403,7 +1403,7 @@ fun CategoryBackupScreen(
                                                         "messages", "sms" -> "Buscar conversas ou mensagens..."
                                                         "calls" -> "Buscar chamadas por contato ou número..."
                                                         "contacts" -> "Buscar contatos por nome ou telefone..."
-                                                        "wifi" -> "Buscar rede por SSID..."
+                                                        "wifi" -> "Buscar rede salva..."
                                                         else -> "Buscar nesta categoria..."
                                                     },
                                                     fontSize = 13.sp,

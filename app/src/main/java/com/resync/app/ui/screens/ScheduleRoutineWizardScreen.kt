@@ -557,7 +557,7 @@ fun ScheduleRoutineWizardScreen(
                 icon = Icons.Default.FolderShared,
                 iconTint = AccentElectricCyan,
                 title = "Dados dos aplicativos",
-                subtitle = "APK base, Splits, Dados internos, OBB e Permissões",
+                subtitle = "Aplicativo, componentes, dados e permissões",
                 parentState = appDataParentState,
                 onParentToggle = {
                     val newState = appDataParentState != ToggleableState.On
@@ -574,16 +574,16 @@ fun ScheduleRoutineWizardScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     RoutineSubOptionItem(
                         icon = Icons.Default.Android,
-                        label = "APK base",
-                        description = "Binário do aplicativo instalável (.apk)",
+                        label = "Aplicativo principal",
+                        description = "Arquivo do aplicativo instalável",
                         checked = includeBaseApk,
                         onCheckedChange = { includeBaseApk = it },
                         accent = AccentElectricCyan
                     )
                     RoutineSubOptionItem(
                         icon = Icons.Default.PieChart,
-                        label = "Splits",
-                        description = "Módulos de densidade e arquitetura ABI",
+                        label = "Componentes do app",
+                        description = "Módulos de idioma e arquitetura",
                         checked = includeAppSplits,
                         onCheckedChange = { includeAppSplits = it },
                         accent = AccentElectricCyan
@@ -591,7 +591,7 @@ fun ScheduleRoutineWizardScreen(
                     RoutineSubOptionItem(
                         icon = Icons.Default.Storage,
                         label = "Dados internos",
-                        description = "Bancos de dados e preferências (/data/data)",
+                        description = "Bancos de dados e preferências do usuário",
                         checked = includeAppData,
                         onCheckedChange = { includeAppData = it },
                         accent = AccentElectricCyan
@@ -599,15 +599,15 @@ fun ScheduleRoutineWizardScreen(
                     RoutineSubOptionItem(
                         icon = Icons.Default.FolderOpen,
                         label = "Dados externos",
-                        description = "Arquivos armazenados em /Android/data",
+                        description = "Arquivos armazenados na memória compartilhada",
                         checked = includeExternalData,
                         onCheckedChange = { includeExternalData = it },
                         accent = AccentElectricCyan
                     )
                     RoutineSubOptionItem(
                         icon = Icons.Default.SportsEsports,
-                        label = "OBB",
-                        description = "Pacotes de expansão pesados (/Android/obb)",
+                        label = "Recursos e mídia",
+                        description = "Recursos adicionais e mídias pesadas",
                         checked = includeObb,
                         onCheckedChange = { includeObb = it },
                         accent = AccentElectricCyan

@@ -73,8 +73,6 @@
     <string name="tab_bluetooth">Bluetooth</string>
     <string name="tab_device">Dispositivo</string>
 
-    <string name="permission_required_phone">Permissão de telefone necessária para ler dados da operadora e rede móvel.</string>
-    <string name="permission_required_location">Permissão de localização necessária para exibir o SSID e dados da célula.</string>
     <string name="permission_required_bluetooth">Permissão de Bluetooth necessária para listar dispositivos.</string>
     <string name="grant_permission">Conceder Permissão</string>
     <string name="turn_on_bluetooth">Ativar Bluetooth</string>
@@ -101,17 +99,16 @@
     <string name="cloud_unavailable_offline">Nuvem indisponível (sem conexão)</string>
     <string name="stage_locating_backup">Localizando backup...</string>
     <string name="stage_downloading_drive">Baixando do Google Drive...</string>
-    <string name="stage_verifying_integrity">Verificando integridade (SHA-256 / MD5)...</string>
-    <string name="stage_decrypting">Descriptografando container (AES-256-GCM)...</string>
-    <string name="stage_restoring_apk">Restaurando APKs...</string>
+    <string name="stage_verifying_integrity">Verificando arquivo de backup...</string>
+    <string name="stage_decrypting">Desbloqueando arquivo de backup...</string>
+    <string name="stage_restoring_apk">Instalando aplicativos...</string>
     <string name="stage_restoring_data">Restaurando dados do aplicativo...</string>
     <string name="stage_applying_permissions">Aplicando permissões e configurações...</string>
     <string name="stage_cleanup">Finalizando e limpando arquivos temporários...</string>
-    <string name="integrity_check_failed">Falha na verificação de integridade: checksum inválido ou corrompido.</string>
-    <string name="decryption_failed">Falha na descriptografia: chave ou arquivo incorreto.</string>
+    <string name="integrity_check_failed">O arquivo de backup está corrompido ou incompleto.</string>
+    <string name="decryption_failed">Não foi possível abrir o backup: senha ou arquivo incorreto.</string>
     <string name="restore_canceled">Restauração cancelada pelo usuário.</string>
     <string name="restore_summary_format">%1$d item(ns) restaurado(s) com sucesso (%2$d falha(s)).</string>
-    <string name="permission_location_needed_ssid">Permissão de localização necessária para exibir o SSID</string>
     <string name="bluetooth_disabled_status">Desconectado / Bluetooth desligado</string>
 
     <!-- Operações em andamento & Velocidade -->
@@ -131,7 +128,6 @@
     <string name="item_timestamp_label">Horário</string>
     <string name="copy_report_details">Copiar Detalhes do Relatório</string>
     <string name="report_copied">Relatório completo copiado para a área de transferência!</string>
-    <string name="active_data_sim_indicator">CHIP %1$d (Dados ativos) - %2$s</string>
     <string name="cellular_connected_status">● Conectado</string>
     <string name="cellular_standby_status">○ Em Espera</string>
     <string name="wifi_disconnected_status">○ Desconectado</string>

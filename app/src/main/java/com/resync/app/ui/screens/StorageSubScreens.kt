@@ -206,6 +206,8 @@ fun StorageCacheScreen(
     val currentAccent by viewModel.themeAccent.collectAsStateWithLifecycle()
     val primaryAccent = getAccentColor(currentAccent)
     val installedApps by viewModel.installedApps.collectAsStateWithLifecycle()
+    val permissionsState by viewModel.permissionsState.collectAsStateWithLifecycle()
+    val isRootActive = permissionsState.isRootGranted || com.topjohnwu.superuser.Shell.isAppGrantedRoot() == true
 
     val cacheList by viewModel.appCacheList.collectAsStateWithLifecycle()
     val isScanning by viewModel.isCacheScanning.collectAsStateWithLifecycle()
@@ -1154,6 +1156,30 @@ fun StorageCacheScreen(
                                 }
 
                                 Spacer(modifier = Modifier.width(10.dp))
+
+                                if (!isRootActive) {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)),
+                                        modifier = Modifier.clickable {
+                                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                                data = Uri.fromParts("package", item.app.packageName, null)
+                                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                            }
+                                            context.startActivity(intent)
+                                        }
+                                    ) {
+                                        Text(
+                                            text = "Config",
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                }
 
                                 Surface(
                                     shape = RoundedCornerShape(8.dp),

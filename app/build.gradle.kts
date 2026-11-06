@@ -39,6 +39,7 @@ android {
         ndk {
             abiFilters.addAll(listOf("arm64-v8a", "armeabi-v7a"))
         }
+        resourceConfigurations += listOf("pt", "pt-rBR")
     }
 
     signingConfigs {
@@ -130,7 +131,16 @@ android {
                 "net/jpountz/util/linux/amd64/**",
                 "net/jpountz/util/linux/i386/**",
                 "**/*.dll",
-                "**/*.dylib"
+                "**/*.dylib",
+                "DebugProbesKt.bin",
+                "META-INF/version-control-info.textproto",
+                "META-INF/INDEX.LIST",
+                "META-INF/native-image/**",
+                "org/apache/commons/codec/language/bm/**",
+                "org/apache/commons/codec/language/dmrules.txt",
+                "mozilla/public-suffix-list.txt",
+                "com/google/api/client/googleapis/google.jks",
+                "com/google/api/client/googleapis/google.p12"
             )
         }
         jniLibs {

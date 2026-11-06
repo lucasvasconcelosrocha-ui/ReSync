@@ -1363,11 +1363,26 @@ class RestoreEngine(private val context: Context) {
                     dbHelper.insertLog(LogLevel.WARN, "RestoreEngine", "DNS não bate com o sistema: esperado=$rawMode, atual=$currentMode")
                 }
             } else {
-                applyError = "Acesso Root necessário para configurar DNS global automaticamente."
-                dbHelper.insertLog(LogLevel.WARN, "RestoreEngine", applyError)
+                try {
+                    android.provider.Settings.Global.putString(context.contentResolver, "private_dns_mode", rawMode)
+                    if (rawMode == "hostname" && !config.hostname.isNullOrBlank()) {
+                        android.provider.Settings.Global.putString(context.contentResolver, "private_dns_specifier", config.hostname)
+                    }
+                    isVerified = true
+                } catch (secEx: SecurityException) {
+                    if (!config.hostname.isNullOrEmpty()) {
+                        dnsManager.copyHostToClipboard(config.hostname)
+                    }
+                    applyError = "Hostname copiado! Cole nas configurações de DNS."
+                    dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "DNS sem root: Hostname copiado para Área de Transferência.")
+                    try {
+                        val settingsIntent = dnsManager.createOpenDnsSettingsIntent()
+                        context.startActivity(settingsIntent)
+                    } catch (_: Exception) {}
+                }
             }
 
-            if (!config.hostname.isNullOrEmpty()) {
+            if (!config.hostname.isNullOrEmpty() && hasRoot) {
                 dnsManager.copyHostToClipboard(config.hostname)
             }
 
@@ -1968,6 +1983,23 @@ class RestoreEngine(private val context: Context) {
                             dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "ReSync configurado temporariamente como app de SMS padrão (--user 0).")
                         }
                     }
+                } else {
+                    if (!originalDefaultSms.isNullOrBlank() && originalDefaultSms != context.packageName) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                            val roleManager = context.getSystemService(android.app.role.RoleManager::class.java)
+                            if (roleManager?.isRoleAvailable(android.app.role.RoleManager.ROLE_SMS) == true && !roleManager.isRoleHeld(android.app.role.RoleManager.ROLE_SMS)) {
+                                val roleIntent = roleManager.createRequestRoleIntent(android.app.role.RoleManager.ROLE_SMS)
+                                roleIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                try { context.startActivity(roleIntent) } catch (_: Exception) {}
+                            }
+                        } else {
+                            val intent = Intent(android.provider.Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT).apply {
+                                putExtra(android.provider.Telephony.Sms.Intents.EXTRA_PACKAGE_NAME, context.packageName)
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            try { context.startActivity(intent) } catch (_: Exception) {}
+                        }
+                    }
                 }
                 DeviceCategoryInspector.ensurePermission(
                     context,
@@ -2091,8 +2123,17 @@ class RestoreEngine(private val context: Context) {
                 if (roleSwitched && !originalDefaultSms.isNullOrBlank()) {
                     try {
                         Shell.cmd("cmd role add-role-holder --user 0 android.app.role.SMS $originalDefaultSms").exec()
-                        dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "App padrão de SMS ($originalDefaultSms) restaurado.")
+                        dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "App padrão de SMS ($originalDefaultSms) restaurado via root.")
                     } catch (_: Throwable) {}
+                } else if (!hasRoot && !originalDefaultSms.isNullOrBlank() && originalDefaultSms != context.packageName) {
+                    val restoreIntent = Intent(android.provider.Telephony.Sms.Intents.ACTION_CHANGE_DEFAULT).apply {
+                        putExtra(android.provider.Telephony.Sms.Intents.EXTRA_PACKAGE_NAME, originalDefaultSms)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    try {
+                        context.startActivity(restoreIntent)
+                        dbHelper.insertLog(LogLevel.INFO, "RestoreEngine", "Solicitando redefinição do app de SMS anterior ($originalDefaultSms).")
+                    } catch (_: Exception) {}
                 }
             }
         }

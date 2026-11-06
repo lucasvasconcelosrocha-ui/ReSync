@@ -84,7 +84,7 @@ class ReSyncApplication : Application() {
         Shell.setDefaultBuilder(
             Shell.Builder.create()
                 .setFlags(Shell.FLAG_MOUNT_MASTER)
-                .setTimeout(30)
+                .setTimeout(15)
         )
 
         // Initialize Database, hardware keys and verify Root status

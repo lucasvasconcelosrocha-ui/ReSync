@@ -58,7 +58,7 @@ class DownloadManager(private val oAuthManager: OAuthManager) {
 
     companion object {
         private const val TAG = "DownloadManager"
-        private const val BUFFER_SIZE = 1024 * 1024 // 1 MB buffer
+        private const val BUFFER_SIZE = 128 * 1024 // 128 KB buffer
     }
 
     fun pause() {
@@ -81,16 +81,7 @@ class DownloadManager(private val oAuthManager: OAuthManager) {
         pauseDeferred = null
     }
 
-    private val httpClient: OkHttpClient by lazy {
-        OkHttpClient.Builder()
-            .protocols(listOf(Protocol.HTTP_2, Protocol.HTTP_1_1))
-            .connectionPool(ConnectionPool(16, 5, TimeUnit.MINUTES))
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .writeTimeout(60, TimeUnit.SECONDS)
-            .retryOnConnectionFailure(true)
-            .build()
-    }
+    private val httpClient: OkHttpClient get() = GDriveNetworkClient.client
 
     /**
      * Downloads .resync / .svb container with pre-allocated .part file, multi-range parallel connections,

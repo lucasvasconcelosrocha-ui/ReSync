@@ -764,7 +764,7 @@ fun InitialSetupScreen(
                                     SetupPermissionItemRow(
                                         icon = Icons.Default.Wifi,
                                         iconTint = AccentEmeraldGreen,
-                                        title = "Localização (Identificação de SSID)",
+                                        title = "Localização (Nome da rede Wi-Fi)",
                                         isGranted = hasLocation,
                                         grantedLabel = "Concedido",
                                         pendingLabel = "Permitir",
@@ -905,7 +905,7 @@ fun InitialSetupScreen(
                                 } else {
                                     rawSsid.ifBlank { "Wi-Fi Conectado" }
                                 }
-                                InfoRow("SSID", cleanSsid)
+                                InfoRow("Nome da Rede", cleanSsid)
                                 if (!hasLocationPerm) {
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Row(
@@ -921,7 +921,7 @@ fun InitialSetupScreen(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(
-                                            text = "ℹ Conceder localização para exibir nome da rede (SSID)",
+                                            text = "ℹ Conceder localização para exibir o nome da rede Wi-Fi",
                                             fontSize = 11.sp,
                                             color = primaryAccent,
                                             modifier = Modifier.weight(1f)

@@ -90,7 +90,8 @@ object SecurityManager {
         if (!file.exists() || file.length() == 0L) return ""
         if (file.length() > 20L * 1024L * 1024L) {
             try {
-                val cmd = com.topjohnwu.superuser.Shell.cmd("nice -n 19 ionice -c 3 sha256sum \"${file.absolutePath}\" 2>/dev/null || sha256sum \"${file.absolutePath}\"").exec()
+                val escaped = com.resync.app.util.ShellSecurityUtils.shellEscape(file.absolutePath)
+                val cmd = com.topjohnwu.superuser.Shell.cmd("nice -n 19 ionice -c 3 sha256sum $escaped 2>/dev/null || sha256sum $escaped").exec()
                 if (cmd.isSuccess && cmd.out.isNotEmpty()) {
                     val hash = cmd.out.first().trim().split("\\s+".toRegex()).firstOrNull()
                     if (!hash.isNullOrBlank() && hash.length == 64) {

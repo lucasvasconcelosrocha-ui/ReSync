@@ -172,6 +172,9 @@ fun AppDetailScreen(
     var checkedObb by remember { mutableStateOf(true) }
     var checkedPermissions by remember { mutableStateOf(true) }
 
+    val permissionsState by viewModel.permissionsState.collectAsStateWithLifecycle()
+    val isRootActive = permissionsState.isRootGranted || com.topjohnwu.superuser.Shell.isAppGrantedRoot() == true
+
     // Opções de inclusão rápida no backup
     var backupIncludeApk by remember { mutableStateOf(true) }
     var backupIncludeInternalData by remember { mutableStateOf(true) }
@@ -1446,17 +1449,36 @@ fun AppDetailScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("Dados Internos (/data/data)", fontSize = 13.sp, color = TextPrimary)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("Dados Internos (/data/data)", fontSize = 13.sp, color = if (isRootActive) TextPrimary else TextMuted)
+                                    if (!isRootActive) {
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Surface(
+                                            shape = RoundedCornerShape(4.dp),
+                                            color = StatusWarning.copy(alpha = 0.15f),
+                                            border = BorderStroke(0.5.dp, StatusWarning.copy(alpha = 0.4f))
+                                        ) {
+                                            Text(
+                                                text = "Requer acesso avançado",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = StatusWarning,
+                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                }
                                 val intSize = storageBreakdown?.internalData?.sizeBytes ?: -1L
                                 Text(
-                                    text = if (intSize < 0L) "Não existe" else formatStorageSize(intSize),
+                                    text = if (!isRootActive) "Requer privilégios para backup de dados internos" else if (intSize < 0L) "Não existe" else formatStorageSize(intSize),
                                     fontSize = 11.sp,
                                     color = TextSecondary
                                 )
                             }
                             Switch(
-                                checked = backupIncludeInternalData,
-                                onCheckedChange = { backupIncludeInternalData = it },
+                                checked = if (isRootActive) backupIncludeInternalData else false,
+                                enabled = isRootActive,
+                                onCheckedChange = { if (isRootActive) backupIncludeInternalData = it },
                                 colors = SwitchDefaults.colors(checkedThumbColor = primaryAccent, checkedTrackColor = primaryAccent.copy(alpha = 0.3f))
                             )
                         }
@@ -1488,7 +1510,7 @@ fun AppDetailScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("Arquivos OBB (Android/obb)", fontSize = 13.sp, color = TextPrimary)
+                                Text("Arquivos adicionais (Recursos e mídia)", fontSize = 13.sp, color = TextPrimary)
                                 val obbSize = storageBreakdown?.obbData?.sizeBytes ?: -1L
                                 Text(
                                     text = if (obbSize < 0L) "Não existe" else formatStorageSize(obbSize),
@@ -2170,11 +2192,11 @@ fun AppDetailScreen(
                         accentColor = AccentEmeraldGreen
                     )
 
-                    // Split APKs
+                    // Componentes do app (Splits)
                     if (hasSplits) {
                         SelectiveBackupOptionCard(
-                            title = "Split APKs",
-                            subtitle = "$splitCount arquivo${if (splitCount > 1) "s" else ""} de split • ${formatStorageSize(splitSize)}",
+                            title = "Componentes do app",
+                            subtitle = "$splitCount arquivo${if (splitCount > 1) "s" else ""} de componentes • ${formatStorageSize(splitSize)}",
                             checked = checkedSplits,
                             onCheckedChange = { checkedSplits = it },
                             icon = Icons.Default.Extension,
@@ -2185,7 +2207,7 @@ fun AppDetailScreen(
                     // Dados Internos
                     SelectiveBackupOptionCard(
                         title = "Dados Internos",
-                        subtitle = "/data/data/${app.packageName} e user_de • ${formatStorageSize(internalDataSize)}",
+                        subtitle = "Dados privados do aplicativo • ${formatStorageSize(internalDataSize)}",
                         checked = checkedInternalData,
                         onCheckedChange = { checkedInternalData = it },
                         icon = Icons.Default.Folder,
@@ -2195,17 +2217,17 @@ fun AppDetailScreen(
                     // Dados Externos
                     SelectiveBackupOptionCard(
                         title = "Dados Externos",
-                        subtitle = "/sdcard/Android/data/${app.packageName} • ${formatStorageSize(externalDataSize)}",
+                        subtitle = "Arquivos da memória compartilhada • ${formatStorageSize(externalDataSize)}",
                         checked = checkedExternalData,
                         onCheckedChange = { checkedExternalData = it },
                         icon = Icons.Default.FolderShared,
                         accentColor = AccentSunsetOrange
                     )
 
-                    // OBB e Mídia
+                    // Arquivos adicionais e Mídia
                     SelectiveBackupOptionCard(
-                        title = "OBB e Mídia",
-                        subtitle = "/sdcard/Android/obb e media • ${formatStorageSize(obbAndMediaSize)}",
+                        title = "Arquivos adicionais e mídia",
+                        subtitle = "Recursos de jogos e mídias extras • ${formatStorageSize(obbAndMediaSize)}",
                         checked = checkedObb,
                         onCheckedChange = { checkedObb = it },
                         icon = Icons.Default.SportsEsports,

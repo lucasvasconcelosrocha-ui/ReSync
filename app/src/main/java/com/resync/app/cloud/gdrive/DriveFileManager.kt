@@ -1,10 +1,13 @@
 package com.resync.app.cloud.gdrive
 
+import android.content.Context
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.resync.app.data.database.AppDatabaseHelper
 import com.resync.app.data.model.LogLevel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -18,6 +21,7 @@ import java.net.URLEncoder
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.random.Random
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.OkHttpClient
 import okhttp3.RequestBody.Companion.toRequestBody
 
 data class DriveStorageQuota(
@@ -61,6 +65,7 @@ class GoogleDriveApiException(val statusCode: Int, msg: String) : Exception(msg)
 class DriveFileManager(private val oAuthManager: OAuthManager) {
 
     private val gson = Gson()
+    val httpClient: OkHttpClient get() = GDriveNetworkClient.client
 
     companion object {
         private const val API_BASE = "https://www.googleapis.com/drive/v3"
@@ -73,6 +78,17 @@ class DriveFileManager(private val oAuthManager: OAuthManager) {
 
     private val folderMutexes = ConcurrentHashMap<String, Mutex>()
     private val folderIdCache = ConcurrentHashMap<String, String>()
+
+    private fun getFolderPrefs() = oAuthManager.context.getSharedPreferences("gdrive_folder_cache", Context.MODE_PRIVATE)
+
+    private fun getCachedFolderId(pathKey: String): String? {
+        return folderIdCache[pathKey] ?: getFolderPrefs().getString(pathKey, null)?.also { folderIdCache[pathKey] = it }
+    }
+
+    private fun putCachedFolderId(pathKey: String, folderId: String) {
+        folderIdCache[pathKey] = folderId
+        getFolderPrefs().edit().putString(pathKey, folderId).apply()
+    }
 
     private fun getFolderMutex(pathKey: String): Mutex {
         return folderMutexes.computeIfAbsent(pathKey) { Mutex() }
@@ -260,43 +276,49 @@ class DriveFileManager(private val oAuthManager: OAuthManager) {
         }
         val rootId = rootResult.getOrThrow()
 
-        val quickBackupsResult = getOrCreateSubfolder(DriveConstants.SUBFOLDER_QUICK_BACKUPS, rootId, accountEmail)
-        if (quickBackupsResult.isFailure) {
-            val err = quickBackupsResult.exceptionOrNull() ?: Exception("Falha ao resolver subpasta '${DriveConstants.SUBFOLDER_QUICK_BACKUPS}'.")
-            dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", "ensureBackupHierarchy falhou em '${DriveConstants.SUBFOLDER_QUICK_BACKUPS}': ${err.message}")
-            return@withContext Result.failure(err)
-        }
-        val quickBackupsId = quickBackupsResult.getOrThrow()
+        coroutineScope {
+            val quickBackupsDeferred = async { getOrCreateSubfolder(DriveConstants.SUBFOLDER_QUICK_BACKUPS, rootId, accountEmail) }
+            val foldersDeferred = async { getOrCreateSubfolder(DriveConstants.SUBFOLDER_FOLDERS, rootId, accountEmail) }
+            val filesDeferred = async { getOrCreateSubfolder(DriveConstants.SUBFOLDER_FILES, rootId, accountEmail) }
 
-        val foldersResult = getOrCreateSubfolder(DriveConstants.SUBFOLDER_FOLDERS, rootId, accountEmail)
-        if (foldersResult.isFailure) {
-            val err = foldersResult.exceptionOrNull() ?: Exception("Falha ao resolver subpasta '${DriveConstants.SUBFOLDER_FOLDERS}'.")
-            dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", "ensureBackupHierarchy falhou em '${DriveConstants.SUBFOLDER_FOLDERS}': ${err.message}")
-            return@withContext Result.failure(err)
-        }
-        val foldersId = foldersResult.getOrThrow()
+            val quickBackupsResult = quickBackupsDeferred.await()
+            if (quickBackupsResult.isFailure) {
+                val err = quickBackupsResult.exceptionOrNull() ?: Exception("Falha ao resolver subpasta '${DriveConstants.SUBFOLDER_QUICK_BACKUPS}'.")
+                dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", "ensureBackupHierarchy falhou em '${DriveConstants.SUBFOLDER_QUICK_BACKUPS}': ${err.message}")
+                return@coroutineScope Result.failure(err)
+            }
+            val quickBackupsId = quickBackupsResult.getOrThrow()
 
-        val filesResult = getOrCreateSubfolder(DriveConstants.SUBFOLDER_FILES, rootId, accountEmail)
-        if (filesResult.isFailure) {
-            val err = filesResult.exceptionOrNull() ?: Exception("Falha ao resolver subpasta '${DriveConstants.SUBFOLDER_FILES}'.")
-            dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", "ensureBackupHierarchy falhou em '${DriveConstants.SUBFOLDER_FILES}': ${err.message}")
-            return@withContext Result.failure(err)
-        }
-        val filesId = filesResult.getOrThrow()
+            val foldersResult = foldersDeferred.await()
+            if (foldersResult.isFailure) {
+                val err = foldersResult.exceptionOrNull() ?: Exception("Falha ao resolver subpasta '${DriveConstants.SUBFOLDER_FOLDERS}'.")
+                dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", "ensureBackupHierarchy falhou em '${DriveConstants.SUBFOLDER_FOLDERS}': ${err.message}")
+                return@coroutineScope Result.failure(err)
+            }
+            val foldersId = foldersResult.getOrThrow()
 
-        Result.success(
-            BackupFolderHierarchy(
-                rootFolderId = rootId,
-                backupsFolderId = quickBackupsId,
-                appsFolderId = quickBackupsId,
-                filesFolderId = filesId,
-                systemFolderId = quickBackupsId,
-                dnsFolderId = quickBackupsId,
-                smsFolderId = quickBackupsId,
-                callsFolderId = quickBackupsId,
-                metadataFolderId = quickBackupsId
+            val filesResult = filesDeferred.await()
+            if (filesResult.isFailure) {
+                val err = filesResult.exceptionOrNull() ?: Exception("Falha ao resolver subpasta '${DriveConstants.SUBFOLDER_FILES}'.")
+                dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", "ensureBackupHierarchy falhou em '${DriveConstants.SUBFOLDER_FILES}': ${err.message}")
+                return@coroutineScope Result.failure(err)
+            }
+            val filesId = filesResult.getOrThrow()
+
+            Result.success(
+                BackupFolderHierarchy(
+                    rootFolderId = rootId,
+                    backupsFolderId = quickBackupsId,
+                    appsFolderId = quickBackupsId,
+                    filesFolderId = filesId,
+                    systemFolderId = quickBackupsId,
+                    dnsFolderId = quickBackupsId,
+                    smsFolderId = quickBackupsId,
+                    callsFolderId = quickBackupsId,
+                    metadataFolderId = quickBackupsId
+                )
             )
-        )
+        }
     }
 
     /**
@@ -649,17 +671,17 @@ class DriveFileManager(private val oAuthManager: OAuthManager) {
         val dbHelper = AppDatabaseHelper.getInstance(oAuthManager.context)
         val pathKey = "${accountEmail.orEmpty()}::$parentId::$name"
 
-        // 1. Fast cache check
-        folderIdCache[pathKey]?.let { cachedId ->
-            dbHelper.insertLog(LogLevel.INFO, "GoogleDrive", "pasta '$name' resolvida (id: $cachedId, pai: $parentId)")
+        // 1. Fast cache check (memory & SharedPreferences)
+        getCachedFolderId(pathKey)?.let { cachedId ->
+            dbHelper.insertLog(LogLevel.INFO, "GoogleDrive", "pasta '$name' resolvida do cache (id: $cachedId, pai: $parentId)")
             return@withContext Result.success(cachedId)
         }
 
         val mutex = getFolderMutex(pathKey)
         mutex.withLock {
             // 2. Double-checked locking inside mutex
-            folderIdCache[pathKey]?.let { cachedId ->
-                dbHelper.insertLog(LogLevel.INFO, "GoogleDrive", "pasta '$name' resolvida (id: $cachedId, pai: $parentId)")
+            getCachedFolderId(pathKey)?.let { cachedId ->
+                dbHelper.insertLog(LogLevel.INFO, "GoogleDrive", "pasta '$name' resolvida do cache (id: $cachedId, pai: $parentId)")
                 return@withContext Result.success(cachedId)
             }
 
@@ -676,7 +698,7 @@ class DriveFileManager(private val oAuthManager: OAuthManager) {
 
             val existingId = searchRes.getOrNull()
             if (!existingId.isNullOrBlank()) {
-                folderIdCache[pathKey] = existingId
+                putCachedFolderId(pathKey, existingId)
                 dbHelper.insertLog(LogLevel.INFO, "GoogleDrive", "pasta '$name' resolvida (id: $existingId, pai: $parentId)")
                 return@withContext Result.success(existingId)
             }
@@ -701,7 +723,7 @@ class DriveFileManager(private val oAuthManager: OAuthManager) {
 
             val createdId = createRes.getOrNull()
             if (!createdId.isNullOrBlank()) {
-                folderIdCache[pathKey] = createdId
+                putCachedFolderId(pathKey, createdId)
                 dbHelper.insertLog(LogLevel.INFO, "GoogleDrive", "pasta '$name' resolvida (id: $createdId, pai: $parentId)")
                 Result.success(createdId)
             } else {

@@ -5,6 +5,7 @@ import android.os.Build
 import android.os.Environment
 import android.os.StatFs
 import android.provider.MediaStore
+import android.provider.Settings
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -98,6 +99,9 @@ fun StorageDetailsScreen(
     val coroutineScope = rememberCoroutineScope()
     val currentAccent by viewModel.themeAccent.collectAsStateWithLifecycle()
     val primaryAccent = getAccentColor(currentAccent)
+
+    val permissionsState by viewModel.permissionsState.collectAsStateWithLifecycle()
+    val isRootActive = permissionsState.isRootGranted || com.topjohnwu.superuser.Shell.isAppGrantedRoot() == true
 
     val installedApps by viewModel.installedApps.collectAsStateWithLifecycle()
     val isLoadingApps by viewModel.isLoadingInstalledApps.collectAsStateWithLifecycle()
@@ -1507,6 +1511,30 @@ fun StorageDetailsScreen(
                                 }
 
                                 Spacer(modifier = Modifier.width(10.dp))
+
+                                if (!isRootActive) {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = Color(0xFF192336),
+                                        border = BorderStroke(1.dp, Color(0xFF2B3A54)),
+                                        modifier = Modifier.clickable {
+                                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                                data = Uri.fromParts("package", item.app.packageName, null)
+                                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                            }
+                                            context.startActivity(intent)
+                                        }
+                                    ) {
+                                        Text(
+                                            text = "Config",
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = primaryAccent,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                }
 
                                 Surface(
                                     shape = RoundedCornerShape(8.dp),

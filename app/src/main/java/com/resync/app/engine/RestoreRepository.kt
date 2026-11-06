@@ -331,12 +331,12 @@ object RestoreRepository {
 
                 _executionState.value = RestoreExecutionState.VERIFYING
                 _restoreProgress.value = RestoreProgress(
-                    stage = "Verificando integridade (SHA-256 / MD5)...",
+                    stage = "Verificando arquivo de backup...",
                     currentItemName = fileToRestore.name,
                     progressPercent = 0.45f
                 )
                 persistState()
-                appendRestoreLog("Verificando container: ${fileToRestore.name} (${fileToRestore.length()} bytes)")
+                appendRestoreLog("Verificando arquivo de backup: ${fileToRestore.name} (${fileToRestore.length()} bytes)")
 
                 // Execute Restore Engine
                 val engine = RestoreEngine(context)

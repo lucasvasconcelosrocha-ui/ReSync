@@ -9,9 +9,11 @@ import com.resync.app.util.AppLogger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.RequestBody
+import okio.BufferedSink
 import java.io.*
 import java.net.HttpURLConnection
 import java.net.URL
@@ -41,14 +43,40 @@ class UploadInterruptedException(
     override val message: String
 ) : Exception(message)
 
+class StreamingFileRequestBody(
+    private val file: File,
+    private val startOffset: Long,
+    private val length: Long,
+    private val onProgress: ((bytesSentInChunk: Long) -> Unit)? = null
+) : RequestBody() {
+    override fun contentType(): MediaType? = "application/octet-stream".toMediaTypeOrNull()
+    override fun contentLength(): Long = length
+
+    override fun writeTo(sink: BufferedSink) {
+        RandomAccessFile(file, "r").use { raf ->
+            raf.seek(startOffset)
+            val buffer = ByteArray(64 * 1024)
+            var remaining = length
+            var totalWritten = 0L
+            while (remaining > 0) {
+                val toRead = minOf(buffer.size.toLong(), remaining).toInt()
+                val read = raf.read(buffer, 0, toRead)
+                if (read <= 0) break
+                sink.write(buffer, 0, read)
+                sink.flush()
+                remaining -= read
+                totalWritten += read
+                onProgress?.invoke(totalWritten)
+            }
+        }
+    }
+}
+
 class UploadManager(private val oAuthManager: OAuthManager) {
 
     private val gson = Gson()
     private val isPaused = AtomicBoolean(false)
     private val isCancelled = AtomicBoolean(false)
-
-    // Reusable buffer pool for reading local file to avoid GC churn in hot loop
-    private val bufferPool = ThreadLocal.withInitial { ByteArray(1024 * 1024) } // 1 MB buffer
 
     fun pause() {
         isPaused.set(true)
@@ -218,187 +246,230 @@ class UploadManager(private val oAuthManager: OAuthManager) {
             // Streaming MD5 calculation on the fly
             val md5Digest = MessageDigest.getInstance("MD5")
 
-            FileInputStream(localFile).use { fis ->
-                val channel = fis.channel
-
-                // If resuming, feed previously uploaded bytes to digest quickly to guarantee single-pass hash
-                if (startByte > 0) {
-                    val preBuf = bufferPool.get()
+            // If resuming, feed previously uploaded bytes to digest quickly to guarantee single-pass hash
+            if (startByte > 0) {
+                RandomAccessFile(localFile, "r").use { raf ->
+                    val preBuf = ByteArray(64 * 1024)
                     var preReadTotal = 0L
                     while (preReadTotal < startByte) {
                         val toRead = minOf(preBuf.size.toLong(), startByte - preReadTotal).toInt()
-                        val r = fis.read(preBuf, 0, toRead)
+                        val r = raf.read(preBuf, 0, toRead)
                         if (r <= 0) break
                         md5Digest.update(preBuf, 0, r)
                         preReadTotal += r
                     }
                 }
+            }
 
-                channel.position(startByte)
-                var bis = BufferedInputStream(fis, 512 * 1024)
+            var transferStartMono = SystemClock.elapsedRealtime()
 
-                var transferStartMono = SystemClock.elapsedRealtime()
+            while (bytesUploaded < totalBytes) {
+                if (isCancelled.get()) {
+                    handleUserCancellation(activeSessionUri, jobId, transferDao, executorOwner)
+                    val cancelMsg = "Upload cancelado pelo usuário."
+                    onProgress(UploadProgressInfo("Cancelado", bytesUploaded, totalBytes, 0f, 0f, 0, isFinished = true, error = cancelMsg))
+                    return@withContext Result.failure(Exception(cancelMsg))
+                }
 
-                while (bytesUploaded < totalBytes) {
-                    if (isCancelled.get()) {
-                        handleUserCancellation(activeSessionUri, jobId, transferDao, executorOwner)
-                        val cancelMsg = "Upload cancelado pelo usuário."
-                        onProgress(UploadProgressInfo("Cancelado", bytesUploaded, totalBytes, 0f, 0f, 0, isFinished = true, error = cancelMsg))
-                        return@withContext Result.failure(Exception(cancelMsg))
+                if (isPaused.get()) {
+                    val now = SystemClock.elapsedRealtime()
+                    accumulatedActiveTimeMs += (now - transferStartMono)
+                    transferDao.updateState(jobId, CloudTransferState.PAUSADO_PELO_USUARIO)
+                    onProgress(UploadProgressInfo("Pausado", bytesUploaded, totalBytes, bytesUploaded.toFloat() / totalBytes, 0f, 0, isPaused = true))
+                    return@withContext Result.failure(UploadInterruptedException(activeSessionUri, bytesUploaded, "Upload pausado pelo usuário."))
+                }
+
+                // Check network status reactively (zero polling suspension)
+                while (!CloudNetworkMonitor.isConnected() && !isCancelled.get() && !isPaused.get()) {
+                    val pauseStartMono = SystemClock.elapsedRealtime()
+                    accumulatedActiveTimeMs += (pauseStartMono - transferStartMono)
+
+                    transferDao.updateState(jobId, CloudTransferState.AGUARDANDO_REDE)
+                    onProgress(
+                        UploadProgressInfo(
+                            stage = "Aguardando conexão... retomará automaticamente",
+                            bytesUploaded = bytesUploaded,
+                            totalBytes = totalBytes,
+                            progressPercent = (bytesUploaded.toFloat() / totalBytes),
+                            speedMBps = 0f,
+                            estimatedRemainingSeconds = 0
+                        )
+                    )
+
+                    CloudNetworkMonitor.awaitNetworkAvailable()
+                    accumulatedIdleTimeMs += (SystemClock.elapsedRealtime() - pauseStartMono)
+                    transferStartMono = SystemClock.elapsedRealtime()
+                    transferDao.updateState(jobId, CloudTransferState.EM_ANDAMENTO)
+
+                    // Re-query true server offset upon network switch (Wi-Fi <-> Cellular)
+                    val recheckOffset = queryCurrentServerByteOffset(activeSessionUri, totalBytes)
+                    if (recheckOffset > bytesUploaded) {
+                        val gapStart = bytesUploaded
+                        bytesUploaded = recheckOffset
+                        RandomAccessFile(localFile, "r").use { raf ->
+                            raf.seek(gapStart)
+                            val mBuf = ByteArray(64 * 1024)
+                            var gapRem = recheckOffset - gapStart
+                            while (gapRem > 0) {
+                                val r = raf.read(mBuf, 0, minOf(mBuf.size.toLong(), gapRem).toInt())
+                                if (r <= 0) break
+                                md5Digest.update(mBuf, 0, r)
+                                gapRem -= r
+                            }
+                        }
                     }
+                }
 
-                    if (isPaused.get()) {
-                        val now = SystemClock.elapsedRealtime()
-                        accumulatedActiveTimeMs += (now - transferStartMono)
-                        transferDao.updateState(jobId, CloudTransferState.PAUSADO_PELO_USUARIO)
-                        onProgress(UploadProgressInfo("Pausado", bytesUploaded, totalBytes, bytesUploaded.toFloat() / totalBytes, 0f, 0, isPaused = true))
-                        return@withContext Result.failure(UploadInterruptedException(activeSessionUri, bytesUploaded, "Upload pausado pelo usuário."))
-                    }
+                // Check thermal governor and throttle if needed
+                CloudThermalGovernor.throttleIfSevere()
 
-                    // Check network status reactively (Requirement 3: zero polling suspension)
-                    while (!CloudNetworkMonitor.isConnected() && !isCancelled.get() && !isPaused.get()) {
-                        val pauseStartMono = SystemClock.elapsedRealtime()
-                        accumulatedActiveTimeMs += (pauseStartMono - transferStartMono)
+                // Compute dynamic chunk size: 16 MB (Fast Wi-Fi), 8 MB (Balanced), 4 MB (Mobile data)
+                val networkType = CloudNetworkMonitor.getActiveNetworkType()
+                val dynamicChunkBytes = when {
+                    networkType.contains("Móveis", ignoreCase = true) || networkType.contains("Cellular", ignoreCase = true) -> 4 * 1024 * 1024 // 4 MB para dados móveis
+                    CloudThermalGovernor.isThermalRestricted() -> 8 * 1024 * 1024 // 8 MB para conexões balanceadas
+                    else -> 16 * 1024 * 1024 // 16 MB para Wi-Fi Rápido
+                }
+                val remainingBytes = totalBytes - bytesUploaded
+                val currentChunkSize = minOf(dynamicChunkBytes.toLong(), remainingBytes).toInt()
+                val alignedChunkSize = if (bytesUploaded + currentChunkSize < totalBytes) {
+                    (currentChunkSize / CHUNK_UNIT * CHUNK_UNIT).coerceAtLeast(CHUNK_UNIT)
+                } else {
+                    currentChunkSize
+                }
+                val chunkLength = alignedChunkSize.toLong()
+                val endByte = bytesUploaded + chunkLength - 1
 
-                        transferDao.updateState(jobId, CloudTransferState.AGUARDANDO_REDE)
+                val chunkResult = uploadChunkWithInfiniteNetworkRetry(
+                    sessionUri = activeSessionUri,
+                    file = localFile,
+                    startByte = bytesUploaded,
+                    length = chunkLength,
+                    endByte = endByte,
+                    totalBytes = totalBytes,
+                    onProgressUpdate = { bytesInChunk ->
+                        val currentTotal = bytesUploaded + bytesInChunk
+                        val nowMono = SystemClock.elapsedRealtime()
+                        val timeDeltaSec = (nowMono - lastReportTimeMono) / 1000.0
+                        if (timeDeltaSec >= 0.5) {
+                            val bytesDelta = currentTotal - lastReportBytes
+                            val instantSpeed = if (timeDeltaSec > 0) ((bytesDelta / (1024.0 * 1024.0)) / timeDeltaSec).toFloat() else 0f
+                            smoothedSpeedMBps = if (smoothedSpeedMBps == 0f) instantSpeed else (0.7f * smoothedSpeedMBps + 0.3f * instantSpeed)
+                            if (instantSpeed > peakSpeedMBps) peakSpeedMBps = instantSpeed
+
+                            lastReportTimeMono = nowMono
+                            lastReportBytes = currentTotal
+
+                            val remaining = totalBytes - currentTotal
+                            val speedBytesSec = (smoothedSpeedMBps * 1024 * 1024).toLong()
+                            val etaSec = if (speedBytesSec > 0) remaining / speedBytesSec else 0L
+                            val progressPercent = (currentTotal.toFloat() / totalBytes.toFloat()).coerceIn(0f, 0.99f)
+
+                            val currentPctInt = (progressPercent * 100).toInt()
+                            if (currentPctInt >= lastMilestonePct + 5) {
+                                lastMilestonePct = (currentPctInt / 5) * 5
+                                AppLogger.i(TAG, "Marco de upload $lastMilestonePct% • $smoothedSpeedMBps MB/s • $currentTotal/$totalBytes bytes • ETA: ${etaSec}s")
+                            }
+
+                            onProgress(
+                                UploadProgressInfo(
+                                    stage = "Enviando ao Drive... ($currentPctInt%)",
+                                    bytesUploaded = currentTotal,
+                                    totalBytes = totalBytes,
+                                    progressPercent = progressPercent,
+                                    speedMBps = smoothedSpeedMBps,
+                                    speedMbps = smoothedSpeedMBps * 8f,
+                                    estimatedRemainingSeconds = etaSec
+                                )
+                            )
+                        }
+                    },
+                    onTokenRefresh = {
+                        oAuthManager.forceRefreshToken(currentToken = token, accountEmail = accountEmail).getOrNull() ?: token
+                    },
+                    onRetry = { attempt, delaySec ->
                         onProgress(
                             UploadProgressInfo(
-                                stage = "Aguardando conexão... retomará automaticamente",
+                                stage = "Reconectando bloco (tentativa $attempt em ${delaySec}s)...",
                                 bytesUploaded = bytesUploaded,
                                 totalBytes = totalBytes,
-                                progressPercent = (bytesUploaded.toFloat() / totalBytes),
+                                progressPercent = (bytesUploaded.toFloat() / totalBytes.toFloat()).coerceIn(0f, 1f),
                                 speedMBps = 0f,
                                 estimatedRemainingSeconds = 0
                             )
                         )
+                    }
+                )
 
-                        CloudNetworkMonitor.awaitNetworkAvailable()
-                        accumulatedIdleTimeMs += (SystemClock.elapsedRealtime() - pauseStartMono)
-                        transferStartMono = SystemClock.elapsedRealtime()
-                        transferDao.updateState(jobId, CloudTransferState.EM_ANDAMENTO)
+                val ackOffset = chunkResult.acknowledgedByteOffset ?: (bytesUploaded + chunkLength)
+                val prevBytes = bytesUploaded
+                bytesUploaded = ackOffset
 
-                        // Re-query true server offset upon network switch (Wi-Fi <-> Cellular)
-                        val recheckOffset = queryCurrentServerByteOffset(activeSessionUri, totalBytes)
-                        if (recheckOffset > bytesUploaded) {
-                            bytesUploaded = recheckOffset
-                            channel.position(bytesUploaded)
-                            bis = BufferedInputStream(fis, 512 * 1024)
+                // Stream confirmed bytes through md5Digest in 64KB blocks
+                if (ackOffset > prevBytes) {
+                    RandomAccessFile(localFile, "r").use { raf ->
+                        raf.seek(prevBytes)
+                        val md5Buf = ByteArray(64 * 1024)
+                        var toProcess = ackOffset - prevBytes
+                        while (toProcess > 0) {
+                            val r = raf.read(md5Buf, 0, minOf(md5Buf.size.toLong(), toProcess).toInt())
+                            if (r <= 0) break
+                            md5Digest.update(md5Buf, 0, r)
+                            toProcess -= r
                         }
                     }
+                }
 
-                    // Check thermal governor and throttle if needed (Requirement 5)
-                    CloudThermalGovernor.throttleIfSevere()
+                val nowMono = SystemClock.elapsedRealtime()
+                accumulatedActiveTimeMs += (nowMono - transferStartMono)
+                transferStartMono = nowMono
 
-                    // Compute dynamic chunk size: 16 to 32 MiB, reduced on mobile or thermal throttle
-                    val networkType = CloudNetworkMonitor.getActiveNetworkType()
-                    val baseChunk = if (networkType.contains("Móveis", ignoreCase = true)) 8 * 1024 * 1024 else 24 * 1024 * 1024
-                    val targetChunkBytes = CloudThermalGovernor.getRecommendedChunkSize(baseChunk)
-                    val remainingBytes = totalBytes - bytesUploaded
-                    val currentChunkSize = minOf(targetChunkBytes.toLong(), remainingBytes).toInt()
-                    val alignedChunkSize = ((currentChunkSize + CHUNK_UNIT - 1) / CHUNK_UNIT * CHUNK_UNIT)
-                        .coerceAtMost(currentChunkSize)
-                        .coerceAtLeast(CHUNK_UNIT)
+                // Update Room progress at every chunk
+                transferDao.updateProgress(
+                    jobId = jobId,
+                    offset = bytesUploaded,
+                    activeMs = accumulatedActiveTimeMs,
+                    idleMs = accumulatedIdleTimeMs,
+                    speed = smoothedSpeedMBps,
+                    updatedAt = System.currentTimeMillis()
+                )
 
-                    val chunkBuffer = ByteArray(currentChunkSize)
-                    var readSoFar = 0
-                    while (readSoFar < currentChunkSize) {
-                        val r = bis.read(chunkBuffer, readSoFar, currentChunkSize - readSoFar)
-                        if (r <= 0) break
-                        readSoFar += r
+                // Calculate speed and report throttled metrics (max ~2x/s)
+                val timeDeltaSec = (nowMono - lastReportTimeMono) / 1000.0
+                val isFinal = chunkResult.metadata != null
+                if (timeDeltaSec >= 0.5 || isFinal) {
+                    val bytesDelta = bytesUploaded - lastReportBytes
+                    val instantSpeed = if (timeDeltaSec > 0) ((bytesDelta / (1024.0 * 1024.0)) / timeDeltaSec).toFloat() else 0f
+                    smoothedSpeedMBps = if (smoothedSpeedMBps == 0f) instantSpeed else (0.7f * smoothedSpeedMBps + 0.3f * instantSpeed)
+                    if (instantSpeed > peakSpeedMBps) peakSpeedMBps = instantSpeed
+
+                    lastReportTimeMono = nowMono
+                    lastReportBytes = bytesUploaded
+
+                    val remaining = totalBytes - bytesUploaded
+                    val speedBytesSec = (smoothedSpeedMBps * 1024 * 1024).toLong()
+                    val etaSec = if (speedBytesSec > 0) remaining / speedBytesSec else 0L
+                    val progressPercent = (bytesUploaded.toFloat() / totalBytes.toFloat()).coerceIn(0f, 0.99f)
+
+                    // Milestone logging every 5%
+                    val currentPctInt = (progressPercent * 100).toInt()
+                    if (currentPctInt >= lastMilestonePct + 5) {
+                        lastMilestonePct = (currentPctInt / 5) * 5
+                        AppLogger.i(TAG, "Marco de upload $lastMilestonePct% • $smoothedSpeedMBps MB/s • ${bytesUploaded}/${totalBytes} bytes • ETA: ${etaSec}s")
                     }
 
-                    if (readSoFar <= 0) break
-
-                    // Update streaming MD5 digest for this chunk
-                    md5Digest.update(chunkBuffer, 0, readSoFar)
-
-                    val endByte = bytesUploaded + readSoFar - 1
-
-                    // Send chunk with jittered exponential backoff and persistent retries
-                    val chunkResult = uploadChunkWithInfiniteNetworkRetry(
-                        sessionUri = activeSessionUri,
-                        chunkData = chunkBuffer,
-                        length = readSoFar,
-                        startByte = bytesUploaded,
-                        endByte = endByte,
-                        totalBytes = totalBytes,
-                        onTokenRefresh = {
-                            oAuthManager.forceRefreshToken(currentToken = token, accountEmail = accountEmail).getOrNull() ?: token
-                        },
-                        onRetry = { attempt, delaySec ->
-                            onProgress(
-                                UploadProgressInfo(
-                                    stage = "Reconectando bloco (tentativa $attempt em ${delaySec}s)...",
-                                    bytesUploaded = bytesUploaded,
-                                    totalBytes = totalBytes,
-                                    progressPercent = (bytesUploaded.toFloat() / totalBytes.toFloat()).coerceIn(0f, 1f),
-                                    speedMBps = 0f,
-                                    estimatedRemainingSeconds = 0
-                                )
-                            )
-                        }
-                    )
-
-                    val ackOffset = chunkResult.acknowledgedByteOffset ?: (bytesUploaded + readSoFar)
-                    val prevBytes = bytesUploaded
-                    bytesUploaded = ackOffset
-
-                    val nowMono = SystemClock.elapsedRealtime()
-                    accumulatedActiveTimeMs += (nowMono - transferStartMono)
-                    transferStartMono = nowMono
-
-                    // Reposition channel if server requested another offset
-                    if (bytesUploaded != prevBytes + readSoFar && bytesUploaded < totalBytes) {
-                        channel.position(bytesUploaded)
-                        bis = BufferedInputStream(fis, 512 * 1024)
-                    }
-
-                    // Update Room progress at every chunk
-                    transferDao.updateProgress(
-                        jobId = jobId,
-                        offset = bytesUploaded,
-                        activeMs = accumulatedActiveTimeMs,
-                        idleMs = accumulatedIdleTimeMs,
-                        speed = smoothedSpeedMBps,
-                        updatedAt = System.currentTimeMillis()
-                    )
-
-                    // Calculate speed and report throttled metrics (max ~2x/s)
-                    val timeDeltaSec = (nowMono - lastReportTimeMono) / 1000.0
-                    val isFinal = chunkResult.metadata != null
-                    if (timeDeltaSec >= 0.5 || isFinal) {
-                        val bytesDelta = bytesUploaded - lastReportBytes
-                        val instantSpeed = if (timeDeltaSec > 0) ((bytesDelta / (1024.0 * 1024.0)) / timeDeltaSec).toFloat() else 0f
-                        smoothedSpeedMBps = if (smoothedSpeedMBps == 0f) instantSpeed else (0.7f * smoothedSpeedMBps + 0.3f * instantSpeed)
-                        if (instantSpeed > peakSpeedMBps) peakSpeedMBps = instantSpeed
-
-                        lastReportTimeMono = nowMono
-                        lastReportBytes = bytesUploaded
-
-                        val remaining = totalBytes - bytesUploaded
-                        val speedBytesSec = (smoothedSpeedMBps * 1024 * 1024).toLong()
-                        val etaSec = if (speedBytesSec > 0) remaining / speedBytesSec else 0L
-                        val progressPercent = (bytesUploaded.toFloat() / totalBytes.toFloat()).coerceIn(0f, 0.99f)
-
-                        // Milestone logging every 5%
-                        val currentPctInt = (progressPercent * 100).toInt()
-                        if (currentPctInt >= lastMilestonePct + 5) {
-                            lastMilestonePct = (currentPctInt / 5) * 5
-                            AppLogger.i(TAG, "Marco de upload $lastMilestonePct% • $smoothedSpeedMBps MB/s • ${bytesUploaded}/${totalBytes} bytes • ETA: ${etaSec}s")
-                        }
-
-                        onProgress(
-                            UploadProgressInfo(
-                                stage = "Enviando ao Drive... ($currentPctInt%)",
-                                bytesUploaded = bytesUploaded,
-                                totalBytes = totalBytes,
-                                progressPercent = progressPercent,
-                                speedMBps = smoothedSpeedMBps,
-                                speedMbps = smoothedSpeedMBps * 8f,
-                                estimatedRemainingSeconds = etaSec
-                            )
+                    onProgress(
+                        UploadProgressInfo(
+                            stage = "Enviando ao Drive... ($currentPctInt%)",
+                            bytesUploaded = bytesUploaded,
+                            totalBytes = totalBytes,
+                            progressPercent = progressPercent,
+                            speedMBps = smoothedSpeedMBps,
+                            speedMbps = smoothedSpeedMBps * 8f,
+                            estimatedRemainingSeconds = etaSec
                         )
-                    }
+                    )
+                }
 
                         // Upload completed and file metadata returned by Google Drive
                         if (isFinal) {
@@ -471,7 +542,6 @@ class UploadManager(private val oAuthManager: OAuthManager) {
                         return@withContext Result.success(driveMeta)
                     }
                 }
-            }
 
             val finalError = "Upload terminou sem confirmação de metadados do Google Drive."
             AppLogger.e(TAG, finalError, extraParams = mapOf("jobId" to jobId))
@@ -576,11 +646,12 @@ class UploadManager(private val oAuthManager: OAuthManager) {
 
     private suspend fun uploadChunkWithInfiniteNetworkRetry(
         sessionUri: String,
-        chunkData: ByteArray,
-        length: Int,
+        file: File,
         startByte: Long,
+        length: Long,
         endByte: Long,
         totalBytes: Long,
+        onProgressUpdate: ((bytesSentInChunk: Long) -> Unit)? = null,
         onTokenRefresh: suspend () -> String,
         onRetry: (attempt: Int, delaySec: Long) -> Unit
     ): ChunkUploadResult {
@@ -593,7 +664,7 @@ class UploadManager(private val oAuthManager: OAuthManager) {
                     CloudNetworkMonitor.awaitNetworkAvailable()
                 }
 
-                return uploadChunkInternal(sessionUri, chunkData, length, startByte, endByte, totalBytes)
+                return uploadChunkInternal(sessionUri, file, startByte, length, endByte, totalBytes, onProgressUpdate)
             } catch (e: Exception) {
                 if (isCancelled.get() || isPaused.get()) throw e
 
@@ -618,14 +689,19 @@ class UploadManager(private val oAuthManager: OAuthManager) {
 
     private fun uploadChunkInternal(
         sessionUri: String,
-        chunkData: ByteArray,
-        length: Int,
+        file: File,
         startByte: Long,
+        length: Long,
         endByte: Long,
-        totalBytes: Long
+        totalBytes: Long,
+        onProgressUpdate: ((bytesSentInChunk: Long) -> Unit)? = null
     ): ChunkUploadResult {
-        val mediaType = "application/octet-stream".toMediaTypeOrNull()
-        val requestBody = chunkData.toRequestBody(mediaType, 0, length)
+        val requestBody = StreamingFileRequestBody(
+            file = file,
+            startOffset = startByte,
+            length = length,
+            onProgress = onProgressUpdate
+        )
         val request = Request.Builder()
             .url(sessionUri)
             .put(requestBody)

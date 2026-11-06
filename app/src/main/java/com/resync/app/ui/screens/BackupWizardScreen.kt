@@ -1293,7 +1293,7 @@ fun BackupWizardScreen(
                             icon = Icons.Default.FolderShared,
                             iconTint = AccentElectricCyan,
                             title = "Dados dos aplicativos",
-                            subtitle = "$appDataFoldersCount ${if (appDataFoldersCount == 1) "pasta" else "pastas"} • APK base, Splits, Dados internos, OBB e Permissões",
+                            subtitle = "$appDataFoldersCount ${if (appDataFoldersCount == 1) "pasta" else "pastas"} • Aplicativo, componentes, dados e permissões",
                             parentState = appDataParentState,
                             onParentToggle = {
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -1362,17 +1362,19 @@ fun BackupWizardScreen(
                                     item {
                                         SubOptionItem(
                                             icon = Icons.Default.Storage,
-                                            label = if (isRootActive) "Dados internos" else "Dados internos (Requer Root)",
+                                            label = if (isRootActive) "Dados internos (/data/data)" else "Dados internos (Requer acesso avançado)",
                                             description = if (isRootActive) {
                                                 "Bancos de dados e preferências (/data/data) • $internalDataCount pastas (${FormatUtils.formatBytes(internalDataTotalBytes)})"
                                             } else {
-                                                "Requer Root. Em modo sem root, apenas APKs serão copiados • $internalDataCount pastas"
+                                                "Requer acesso avançado. Em modo sem root, APKs, recursos extras e mídia são copiados • $internalDataCount pastas"
                                             },
-                                            checked = includeAppData,
+                                            checked = if (isRootActive) includeAppData else false,
                                             onCheckedChange = {
-                                                includeAppData = it
-                                                includeApps = includeBaseApk || includeAppSplits || it || includeObb || includeAppPermissions
-                                                persistCurrentSelection()
+                                                if (isRootActive) {
+                                                    includeAppData = it
+                                                    includeApps = includeBaseApk || includeAppSplits || it || includeObb || includeAppPermissions
+                                                    persistCurrentSelection()
+                                                }
                                             },
                                             accent = AccentElectricCyan,
                                             haptic = haptic
@@ -1382,8 +1384,8 @@ fun BackupWizardScreen(
                                     item {
                                         SubOptionItem(
                                             icon = Icons.Default.SportsEsports,
-                                            label = "OBB",
-                                            description = "Pacotes de dados e mídias pesadas (Android/obb) • $obbCount pastas (${FormatUtils.formatBytes(obbTotalBytes)})",
+                                            label = "Recursos e mídia",
+                                            description = "Recursos adicionais e mídias pesadas de jogos • $obbCount pastas (${FormatUtils.formatBytes(obbTotalBytes)})",
                                             checked = includeObb,
                                             onCheckedChange = {
                                                 includeObb = it
@@ -2170,11 +2172,11 @@ fun BackupWizardScreen(
                             // Apps Summary Card
                             if (includeApps && appDataChildren.any { it }) {
                                 val appChips = mutableListOf<String>()
-                                if (includeBaseApk) appChips.add("APK")
-                                if (includeAppSplits) appChips.add("Splits")
+                                if (includeBaseApk) appChips.add("App")
+                                if (includeAppSplits) appChips.add("Componentes")
                                 if (includeAppData) appChips.add("Dados")
-                                if (includeExternalData) appChips.add("Ext")
-                                if (includeObb) appChips.add("OBB")
+                                if (includeExternalData) appChips.add("Externos")
+                                if (includeObb) appChips.add("Recursos")
                                 if (includeAppPermissions) appChips.add("Permissões")
 
                                 SummaryCategoryCard(

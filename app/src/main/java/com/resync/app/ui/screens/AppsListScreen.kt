@@ -1175,7 +1175,7 @@ fun AppsListScreen(
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { includeObb = !includeObb }) {
                     Checkbox(checked = includeObb, onCheckedChange = { includeObb = it }, colors = CheckboxDefaults.colors(checkedColor = primaryAccent))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Arquivos OBB (/sdcard/Android/obb)", fontSize = 13.sp, color = TextPrimary)
+                    Text("Arquivos adicionais e mídia (Recursos extras)", fontSize = 13.sp, color = TextPrimary)
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))

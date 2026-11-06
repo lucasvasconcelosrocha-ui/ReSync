@@ -579,13 +579,13 @@ fun AppIndividualRestoreScreen(
                         )
                     }
 
-                    // 2. Split APKs
+                    // 2. Componentes do app
                     if (hasSplits) {
                         item(key = "comp_splits") {
                             val splitsSize = splitItems.sumOf { it.sizeBytes }
                             AppRestoreOptionCard(
-                                title = "Split APKs",
-                                subtitle = "${splitItems.size} arquivos de arquitetura/idioma • ${FormatUtils.formatBytes(splitsSize)}",
+                                title = "Componentes do app",
+                                subtitle = "${splitItems.size} arquivos de arquitetura e idioma • ${FormatUtils.formatBytes(splitsSize)}",
                                 checked = checkedSplits,
                                 onCheckedChange = { checkedSplits = it },
                                 icon = Icons.Default.Extension,
@@ -600,7 +600,7 @@ fun AppIndividualRestoreScreen(
                         val intSizeText = if (intSize > 0L) FormatUtils.formatBytes(intSize) else "Dados salvos no pacote"
                         AppRestoreOptionCard(
                             title = "Dados Internos",
-                            subtitle = "/data/data/${app.packageName} • $intSizeText",
+                            subtitle = "Dados privados do aplicativo • $intSizeText",
                             checked = checkedInternalData,
                             onCheckedChange = { checkedInternalData = it },
                             icon = Icons.Default.Folder,
@@ -614,7 +614,7 @@ fun AppIndividualRestoreScreen(
                             val extSize = externalDataItems.sumOf { it.sizeBytes }
                             AppRestoreOptionCard(
                                 title = "Dados Externos",
-                                subtitle = "Android/data/${app.packageName} • ${FormatUtils.formatBytes(extSize)}",
+                                subtitle = "Arquivos da memória compartilhada • ${FormatUtils.formatBytes(extSize)}",
                                 checked = checkedExternalData,
                                 onCheckedChange = { checkedExternalData = it },
                                 icon = Icons.Default.FolderShared,
@@ -623,13 +623,13 @@ fun AppIndividualRestoreScreen(
                         }
                     }
 
-                    // 5. OBB e Mídia
+                    // 5. Arquivos adicionais e Mídia
                     if (hasObb) {
                         item(key = "comp_obb") {
                             val obbSize = obbItems.sumOf { it.sizeBytes }
                             AppRestoreOptionCard(
-                                title = "OBB e Mídia",
-                                subtitle = "Android/obb/${app.packageName} • ${FormatUtils.formatBytes(obbSize)}",
+                                title = "Arquivos adicionais e mídia",
+                                subtitle = "Recursos de jogos e mídias extras • ${FormatUtils.formatBytes(obbSize)}",
                                 checked = checkedObb,
                                 onCheckedChange = { checkedObb = it },
                                 icon = Icons.Default.SportsEsports,

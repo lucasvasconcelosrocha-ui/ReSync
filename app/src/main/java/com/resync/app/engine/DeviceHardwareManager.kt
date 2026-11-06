@@ -256,7 +256,30 @@ class DeviceHardwareManager(private val context: Context) {
         val list = mutableListOf<DeviceCpuCoreInfo>()
         val total = runCatching { Runtime.getRuntime().availableProcessors() }.getOrDefault(1).coerceAtLeast(1)
 
-        val rootFreqs = if (Shell.isAppGrantedRoot() == true) {
+        // Tenta leitura direta em userspace via File.readText() para todos os núcleos
+        val directFreqs = mutableMapOf<Int, Long>()
+        var needRootFallback = false
+
+        for (i in 0 until total) {
+            val freq = try {
+                val f = File("/sys/devices/system/cpu/cpu$i/cpufreq/scaling_cur_freq")
+                if (f.exists() && f.canRead()) {
+                    f.readText().trim().toLongOrNull() ?: 0L
+                } else {
+                    0L
+                }
+            } catch (_: Throwable) {
+                0L
+            }
+            if (freq > 0L) {
+                directFreqs[i] = freq
+            } else {
+                needRootFallback = true
+            }
+        }
+
+        // Apenas recorre a Shell.cmd() caso a leitura direta tenha falhado e o root esteja concedido
+        val rootFreqs = if (needRootFallback && Shell.isAppGrantedRoot() == true) {
             runCatching {
                 val res = Shell.cmd("cat /sys/devices/system/cpu/cpu*/cpufreq/scaling_cur_freq").exec()
                 if (res.isSuccess) {
@@ -266,7 +289,7 @@ class DeviceHardwareManager(private val context: Context) {
         } else emptyMap()
 
         for (i in 0 until total) {
-            val curFreq = rootFreqs[i] ?: readLongFromFile("/sys/devices/system/cpu/cpu$i/cpufreq/scaling_cur_freq")
+            val curFreq = directFreqs[i] ?: rootFreqs[i] ?: readLongFromFile("/sys/devices/system/cpu/cpu$i/cpufreq/scaling_cur_freq")
             val minFreq = readLongFromFile("/sys/devices/system/cpu/cpu$i/cpufreq/cpuinfo_min_freq")
             val maxFreq = readLongFromFile("/sys/devices/system/cpu/cpu$i/cpufreq/cpuinfo_max_freq")
             val onlineStr = safeReadText("/sys/devices/system/cpu/cpu$i/online")

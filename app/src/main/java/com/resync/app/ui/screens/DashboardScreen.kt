@@ -169,6 +169,10 @@ fun DashboardScreen(
     var showHistoryBottomSheet by remember { mutableStateOf(false) }
     var showRootDiagBottomSheet by remember { mutableStateOf(false) }
     var showSecurityModal by remember { mutableStateOf(false) }
+    val changelogPrefs = remember { context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE) }
+    var showChangelogModal by remember {
+        mutableStateOf(changelogPrefs.getString("last_seen_changelog_version", "") != "1.0.30")
+    }
     val scrollState = rememberScrollState()
     var isPullRefreshing by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
@@ -1369,9 +1373,9 @@ fun DashboardScreen(
                 DataModuleBentoCard(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Default.FolderShared,
-                    title = "Root Paths",
-                    subtitle = "/data /sdcard",
-                    badgeText = "12 DIR",
+                    title = "Pastas do Sistema",
+                    subtitle = "Armazenamento",
+                    badgeText = "Pastas",
                     badgeColor = Color(0xFF38BDF8),
                     onClick = onNavigateToFolders
                 )
@@ -1379,8 +1383,8 @@ fun DashboardScreen(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Default.Wifi,
                     title = "Redes Wi-Fi",
-                    subtitle = "wpa_supplicant",
-                    badgeText = "54 SSIDs",
+                    subtitle = "Senhas salvas",
+                    badgeText = "Redes",
                     badgeColor = Color(0xFF10B981),
                     onClick = { onNavigateToCategory("wifi") }
                 )
@@ -1468,6 +1472,18 @@ fun DashboardScreen(
             onDismiss = { showSecurityModal = false }
         )
     }
+
+    // Modal Automático de Novidades (Changelog v1.0.30 - ETAPA 7)
+    if (showChangelogModal) {
+        ChangelogModal(
+            versionName = "1.0.30",
+            primaryAccent = primaryAccent,
+            onDismiss = {
+                changelogPrefs.edit().putString("last_seen_changelog_version", "1.0.30").apply()
+                showChangelogModal = false
+            }
+        )
+    }
 }
 
 private data class BackupHistoryItem(
@@ -1521,7 +1537,7 @@ private fun BackupHistoryBottomSheet(
             val remoteList = (remoteBackupsState as RemoteBackupsState.Loaded).backups
             remoteList.forEach { driveFile ->
                 val dateStr = SimpleDateFormat("dd/MM/yyyy • HH:mm", Locale.getDefault()).format(Date(driveFile.modifiedTime))
-                val hashVal = driveFile.md5Checksum ?: "SHA-256 Verificado"
+                val hashVal = if (!driveFile.md5Checksum.isNullOrBlank()) "Backup verificado" else "Backup na nuvem"
                 list.add(
                     BackupHistoryItem(
                         title = driveFile.name.removeSuffix(".tar.zst").removeSuffix(".zst"),
@@ -2300,3 +2316,222 @@ private fun DataModuleBentoCard(
         }
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ChangelogModal(
+    versionName: String,
+    primaryAccent: Color,
+    onDismiss: () -> Unit
+) {
+    val bentoBg = DarkSurface
+    val bentoCard = DarkSurfaceVariant
+    val bentoBorder = DarkCardBorder
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = bentoBg,
+        scrimColor = Color.Black.copy(alpha = 0.75f),
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        dragHandle = {
+            Surface(
+                modifier = Modifier
+                    .padding(vertical = 12.dp)
+                    .width(44.dp)
+                    .height(4.dp),
+                shape = CircleShape,
+                color = bentoBorder.copy(alpha = 0.8f)
+            ) {}
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 24.dp)
+        ) {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = primaryAccent.copy(alpha = 0.15f),
+                    border = BorderStroke(1.dp, primaryAccent.copy(alpha = 0.4f))
+                ) {
+                    Text(
+                        text = "NOVA VERSÃO • $versionName",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        color = primaryAccent,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Fechar",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = "O que há de novo no ReSync",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimary
+            )
+            Text(
+                text = "Motor universal, streaming de alta velocidade e experiência refinada",
+                fontSize = 12.5.sp,
+                color = TextSecondary
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Scrollable Bento Pillars
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                ChangelogPillarCard(
+                    icon = Icons.Default.CloudSync,
+                    accentColor = AccentElectricCyan,
+                    title = "Google Drive Turbo",
+                    description = "Envio em streaming contínuo em blocos de 64 KB com chunks dinâmicos (16 MB / 8 MB / 4 MB) direto do disco. Zero risco de OutOfMemory, conexões HTTP/2 multiplexadas e cache inteligente de pastas.",
+                    cardBg = bentoCard,
+                    borderColor = bentoBorder
+                )
+
+                ChangelogPillarCard(
+                    icon = Icons.Default.Shield,
+                    accentColor = StatusSuccess,
+                    title = "Modo Universal Sem Root",
+                    description = "Backup e restauração funcionais para qualquer aparelho! Salve APKs base, splits e arquivos adicionais/OBBs diretamente via Android userspace e restaure com a API nativa PackageInstaller.",
+                    cardBg = bentoCard,
+                    borderColor = bentoBorder
+                )
+
+                ChangelogPillarCard(
+                    icon = Icons.Default.Chat,
+                    accentColor = Color(0xFFFFA726),
+                    title = "Linguagem Clara e Amigável",
+                    description = "Substituição completa de jargões técnicos herméticos por termos diretos e naturais em português: etapas de backup, restauração e diagnósticos agora são 100% compreensíveis.",
+                    cardBg = bentoCard,
+                    borderColor = bentoBorder
+                )
+
+                ChangelogPillarCard(
+                    icon = Icons.Default.Terminal,
+                    accentColor = Color(0xFFA855F7),
+                    title = "Gestão de Processos e Root Otimizada",
+                    description = "Sessão global persistente via libsu Master Shell com timeout calibrado e blindagem de injeção de comandos, eliminando conflitos de múltiplos 'su' e travamentos de sistema.",
+                    cardBg = bentoCard,
+                    borderColor = bentoBorder
+                )
+
+                ChangelogPillarCard(
+                    icon = Icons.Default.AutoAwesome,
+                    accentColor = Color(0xFF00E676),
+                    title = "Mais Leve, Rápido e Eficiente",
+                    description = "Remoção de código morto, filtragem de recursos de idiomas não utilizados e otimização de leitura direta em sysfs para economia de ciclos de CPU e bateria.",
+                    cardBg = bentoCard,
+                    borderColor = bentoBorder
+                )
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            // Botão Principal
+            Button(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = primaryAccent)
+            ) {
+                Text(
+                    text = "Entendi / Continuar",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Black
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChangelogPillarCard(
+    icon: ImageVector,
+    accentColor: Color,
+    title: String,
+    description: String,
+    cardBg: Color,
+    borderColor: Color
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = cardBg,
+        border = BorderStroke(1.dp, borderColor)
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(accentColor.copy(alpha = 0.12f))
+                    .border(1.dp, accentColor.copy(alpha = 0.35f), RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = title,
+                    tint = accentColor,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    fontSize = 13.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = description,
+                    fontSize = 11.5.sp,
+                    color = TextSecondary,
+                    lineHeight = 16.sp
+                )
+            }
+        }
+    }
+}
+

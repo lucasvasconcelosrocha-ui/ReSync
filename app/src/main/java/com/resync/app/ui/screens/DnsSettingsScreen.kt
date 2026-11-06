@@ -466,8 +466,8 @@ fun DnsSettingsScreen(
 
                             Spacer(modifier = Modifier.height(12.dp))
                             if (wifiDetails.isConnected) {
-                                InfoRow("SSID", wifiDetails.ssid)
-                                InfoRow("BSSID (MAC)", wifiDetails.bssid)
+                                InfoRow("Nome da Rede (Wi-Fi)", wifiDetails.ssid)
+                                InfoRow("Identificador da Rede", wifiDetails.bssid)
                                 InfoRow("Padrão", wifiDetails.standard)
                                 InfoRow("Banda & Canal", "${wifiDetails.frequencyGhz} (Canal ${if (wifiDetails.channel > 0) wifiDetails.channel else "Automático"})")
                                 InfoRow("Velocidade do Link", "${wifiDetails.linkSpeedMbps} Mbps")
