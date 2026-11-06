@@ -148,7 +148,7 @@ class BackupEngine(private val context: Context) {
                 }
             } catch (_: Throwable) {}
             try {
-                activeStagingDir?.deleteRecursively()
+                safeDeleteStaging(activeStagingDir)
             } catch (_: Throwable) {}
         }
     }
@@ -402,9 +402,9 @@ class BackupEngine(private val context: Context) {
             effectiveVaultDir = fallbackVault
         }
 
-        // Staging directory for atomic generation and hash validation
-        val stagingDir = File(context.cacheDir, "staging_$backupId")
-        stagingDir.mkdirs()
+        // Staging directory for atomic generation and hash validation - estritamente isolado em cacheDir/resync_tmp
+        val resyncTmpDir = File(context.cacheDir, "resync_tmp").apply { mkdirs() }
+        val stagingDir = File(resyncTmpDir, backupId).apply { mkdirs() }
         try { File(stagingDir, ".nomedia").createNewFile() } catch (_: Throwable) {}
         activeStagingDir = stagingDir
         val stagingFile = File(stagingDir, "$backupId${com.resync.app.data.model.BackupPaths.BACKUP_FILE_EXTENSION}")
@@ -960,7 +960,7 @@ class BackupEngine(private val context: Context) {
                         if (file.isDirectory) {
                             var folderTotalBytes = 0L
                             var folderFileCount = 0
-                            collectFilesRecursively(file, filter, packEntries, manifestItems) { sizeAdded ->
+                            collectFilesRecursively(file, filter, packEntries, manifestItems, rootFolder = file) { sizeAdded ->
                                 folderTotalBytes += sizeAdded
                                 folderFileCount++
                                 totalEstimatedSize += sizeAdded
@@ -981,7 +981,7 @@ class BackupEngine(private val context: Context) {
                             )
                             manifestItems.add(folderItem)
                         } else {
-                            collectFilesRecursively(file, filter, packEntries, manifestItems) { sizeAdded ->
+                            collectFilesRecursively(file, filter, packEntries, manifestItems, rootFolder = null) { sizeAdded ->
                                 totalEstimatedSize += sizeAdded
                             }
                         }
@@ -1007,7 +1007,7 @@ class BackupEngine(private val context: Context) {
                 val spaceErr = "Espaço insuficiente no armazenamento interno. Necessário: ${(requiredMargin / (1024 * 1024))} MB. Disponível: ${(freeBytes / (1024 * 1024))} MB."
                 dbHelper.insertLog(LogLevel.ERROR, "BackupEngine", spaceErr)
                 emitProgress(BackupProgress("Erro", spaceErr, 1.0f, 0, 0, isFinished = true, error = spaceErr))
-                stagingDir.deleteRecursively()
+                safeDeleteStaging(stagingDir, selectedFilesAndFolders)
                 return@channelFlow
             }
 
@@ -1837,10 +1837,15 @@ class BackupEngine(private val context: Context) {
             }
 
             // Higiene de segurança: limpar arquivos intermediários do staging imediatamente após empacotamento
+            // CRÍTICO: NUNCA apagar arquivos fora do diretório exclusivo de staging temporário (proibido apagar arquivos de origem!)
+            val stagingCanonical = stagingDir.canonicalPath
             packEntries.forEach { entry ->
                 val src = entry.sourceFile
-                if (src != null && src.exists() && src.absolutePath != stagingFile.absolutePath) {
-                    try { src.delete() } catch (_: Throwable) {}
+                if (src != null && src.exists()) {
+                    val srcCanonical = src.canonicalPath
+                    if (srcCanonical.startsWith(stagingCanonical + File.separator) && srcCanonical != stagingFile.canonicalPath) {
+                        try { src.delete() } catch (_: Throwable) {}
+                    }
                 }
             }
 
@@ -1868,14 +1873,14 @@ class BackupEngine(private val context: Context) {
             val readBackManifest = try {
                 ArchiveEngine.readManifest(stagingFile)
             } catch (e: Exception) {
-                stagingDir.deleteRecursively()
+                safeDeleteStaging(stagingDir, selectedFilesAndFolders)
                 dbHelper.insertLog(LogLevel.ERROR, "BackupEngine", "Falha na verificação de integridade do container: ${e.message}")
                 emitProgress(BackupProgress("Erro", "Container corrompido durante a gravação: ${e.message}", 1.0f, totalEstimatedSize, totalEstimatedSize, isFinished = true, error = e.message, completedItems = completedItemsList.toList()))
                 return@channelFlow
             }
 
             if (readBackManifest.items.size != manifestItems.size) {
-                stagingDir.deleteRecursively()
+                safeDeleteStaging(stagingDir, selectedFilesAndFolders)
                 val countErr = "Inconsistência no número de itens validados: esperado ${manifestItems.size}, encontrado ${readBackManifest.items.size}"
                 dbHelper.insertLog(LogLevel.ERROR, "BackupEngine", countErr)
                 emitProgress(BackupProgress("Erro", countErr, 1.0f, totalEstimatedSize, totalEstimatedSize, isFinished = true, error = countErr, completedItems = completedItemsList.toList()))
@@ -1902,12 +1907,12 @@ class BackupEngine(private val context: Context) {
                     )
                 )
                 
-                val driveStagingDir = File(context.cacheDir, "staging_drive").apply { mkdirs() }
+                val driveStagingDir = File(context.cacheDir, "resync_tmp/staging_drive").apply { mkdirs() }
                 val driveStagingFile = File(driveStagingDir, "$backupId${com.resync.app.data.model.BackupPaths.BACKUP_FILE_EXTENSION}")
                 stagingFile.copyTo(driveStagingFile, overwrite = true)
                 
                 // Limpar staging inicial
-                stagingDir.deleteRecursively()
+                safeDeleteStaging(stagingDir, selectedFilesAndFolders)
 
                 val stagingFinalSha256 = SecurityManager.computeFileSha256(driveStagingFile)
 
@@ -2030,7 +2035,7 @@ class BackupEngine(private val context: Context) {
                 }
 
                 if (!finalVaultDir.exists()) {
-                    stagingDir.deleteRecursively()
+                    safeDeleteStaging(stagingDir, selectedFilesAndFolders)
                     val dirErr = "Não foi possível criar o diretório final: ${finalVaultDir.absolutePath}"
                     dbHelper.insertLog(LogLevel.ERROR, "BackupEngine", dirErr)
                     emitProgress(BackupProgress("Erro", dirErr, 1.0f, 0, 0, isFinished = true, error = dirErr, completedItems = completedItemsList.toList()))
@@ -2048,7 +2053,7 @@ class BackupEngine(private val context: Context) {
                 if (copiedSha256 != stagingSha256) {
                     finalOutputFile.delete()
                     if (finalVaultDir.listFiles().isNullOrEmpty()) finalVaultDir.delete()
-                    stagingDir.deleteRecursively()
+                    safeDeleteStaging(stagingDir, selectedFilesAndFolders)
                     val copyErr = "Divergência de hash SHA-256 após cópia para ${finalOutputFile.absolutePath}."
                     dbHelper.insertLog(LogLevel.ERROR, "BackupEngine", copyErr)
                     emitProgress(BackupProgress("Erro", copyErr, 1.0f, 0, 0, isFinished = true, error = copyErr, completedItems = completedItemsList.toList()))
@@ -2056,7 +2061,7 @@ class BackupEngine(private val context: Context) {
                 }
 
                 // Clean staging
-                stagingDir.deleteRecursively()
+                safeDeleteStaging(stagingDir, selectedFilesAndFolders)
 
                 // Gerar índice sidecar svb_XXXX.index.json na memória interna e salvar no Room
                 try {
@@ -2174,13 +2179,13 @@ class BackupEngine(private val context: Context) {
             }
 
         } catch (e: CancellationException) {
-            stagingDir.deleteRecursively()
+            safeDeleteStaging(stagingDir, selectedFilesAndFolders)
             createdFinalFile?.delete()
             createdFinalDir?.let { if (it.listFiles().isNullOrEmpty()) it.delete() }
             dbHelper.insertLog(LogLevel.WARN, "BackupEngine", "Operação de backup cancelada: ${e.message}")
             throw e
         } catch (e: Exception) {
-            stagingDir.deleteRecursively()
+            safeDeleteStaging(stagingDir, selectedFilesAndFolders)
             createdFinalFile?.delete()
             createdFinalDir?.let { if (it.listFiles().isNullOrEmpty()) it.delete() }
             dbHelper.insertLog(LogLevel.ERROR, "BackupEngine", "Erro crítico durante backup: ${e.message}")
@@ -2190,29 +2195,55 @@ class BackupEngine(private val context: Context) {
             progressEstimator.logCompletion()
             cpuGovernor.stopPeriodicCpuLogging()
             try {
-                if (stagingDir.exists()) stagingDir.deleteRecursively()
+                if (stagingDir.exists()) safeDeleteStaging(stagingDir, selectedFilesAndFolders)
             } catch (_: Throwable) {}
             activeStagingDir = null
         }
     }.flowOn(Dispatchers.IO.limitedParallelism(cpuGovernor.getOptimalThreadCount()))
+
+    private fun safeDeleteStaging(dir: File?, protectedPaths: List<String> = emptyList()) {
+        if (dir == null || !dir.exists()) return
+        try {
+            val resyncTmpCanon = File(context.cacheDir, "resync_tmp").canonicalFile
+            val targetCanon = dir.canonicalFile
+            if (!targetCanon.path.startsWith(resyncTmpCanon.path + File.separator)) {
+                com.resync.app.util.AppLogger.e("Security", "Tentativa de exclusão bloqueada: caminho $targetCanon fora de $resyncTmpCanon")
+                return
+            }
+            for (p in protectedPaths) {
+                if (p.isBlank()) continue
+                val pCanon = File(p).canonicalFile
+                if (targetCanon.path == pCanon.path || targetCanon.path.startsWith(pCanon.path + File.separator) || pCanon.path.startsWith(targetCanon.path + File.separator)) {
+                    com.resync.app.util.AppLogger.e("Security", "Tentativa de exclusão bloqueada: caminho $targetCanon coincide ou é pai da origem protegida $pCanon")
+                    return
+                }
+            }
+            targetCanon.deleteRecursively()
+        } catch (t: Throwable) {
+            com.resync.app.util.AppLogger.e("Security", "Erro ao limpar diretório de staging: ${t.message}")
+        }
+    }
 
     private fun collectFilesRecursively(
         target: File,
         filter: BackupFilter?,
         packEntries: MutableList<ArchiveEngine.PackEntry>,
         manifestItems: MutableList<ManifestItem>,
-        baseDir: File? = null,
+        rootFolder: File? = null,
         onSizeAdded: (Long) -> Unit
     ) {
-        val effectiveBase = baseDir ?: (if (target.isDirectory) target else target.parentFile ?: target)
         if (target.isFile) {
             if (matchesFilter(target, filter)) {
-                val relPath = try {
-                    target.relativeTo(effectiveBase).path.replace('\\', '/')
-                } catch (_: Exception) {
-                    target.name
+                val entryName = if (rootFolder != null) {
+                    val relPath = try {
+                        target.relativeTo(rootFolder).path.replace('\\', '/')
+                    } catch (_: Exception) {
+                        target.name
+                    }
+                    "files/${rootFolder.name}/$relPath"
+                } else {
+                    "files/${target.name}"
                 }
-                val entryName = if (effectiveBase == target.parentFile) "files/" + target.name else "files/" + effectiveBase.name + "/" + relPath
                 val item = ManifestItem(
                     id = UUID.randomUUID().toString(),
                     type = BackupItemType.FILE,
@@ -2234,6 +2265,7 @@ class BackupEngine(private val context: Context) {
                 }
             }
         } else if (target.isDirectory) {
+            val effectiveRoot = rootFolder ?: target
             var children = target.listFiles()
             if ((children == null || children.isEmpty()) && com.topjohnwu.superuser.Shell.isAppGrantedRoot() == true) {
                 try {
@@ -2249,7 +2281,7 @@ class BackupEngine(private val context: Context) {
             }
             if (children != null) {
                 for (child in children) {
-                    collectFilesRecursively(child, filter, packEntries, manifestItems, effectiveBase, onSizeAdded)
+                    collectFilesRecursively(child, filter, packEntries, manifestItems, effectiveRoot, onSizeAdded)
                 }
             }
         }

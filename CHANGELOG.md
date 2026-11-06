@@ -4,6 +4,22 @@ Todas as mudanças notáveis deste projeto são documentadas neste arquivo.
 
 ---
 
+## [1.0.32] - 2026-11-06
+
+### 🛡️ Correções Críticas de Segurança & Integridade de Pastas
+- **Proteção Total da Pasta de Origem (Prevenção de Perda de Dados):**
+  - Corrigida rotina de higiene pós-compactação que excluía arquivos de origem em backups de diretórios locais (`/sdcard/...`, `ksu`, `Documents`).
+  - Todo o ciclo de vida temporário isolado estritamente em `cacheDir/resync_tmp/<id>` com validação canônica rigorosa antes de qualquer exclusão (`safeDeleteStaging`).
+  - Bloqueio definitivo contra exclusão acidental de caminhos protegidos, pastas de origem do usuário ou diretórios externos ao sandbox temporário.
+- **Restauração de Pastas Sem Duplicação de Subpasta (`ksu/ksu/...`):**
+  - Padronização no mapeamento de arquivos em containers e descompactação de pastas.
+  - Implementado `resolveFolderContentRoot` com detecção inteligente de retrocompatibilidade para desembrulhar backups legados que possuíam pasta raiz duplicada.
+  - Remoção completa de `find -mindepth 1 -delete` para diretórios de usuário: restauração segura via mesclagem atômica sem perda de arquivos preexistentes não relacionados.
+- **Suíte de Testes Automatizados de Pastas:**
+  - Adicionado `FolderBackupRestoreTest` com validação de hash SHA-256 da origem pós-backup, bloqueio de deleção externa e garantia de estrutura idêntica na restauração.
+
+---
+
 ## [1.0.31] - 2026-11-06
 
 ### ✨ Novidades

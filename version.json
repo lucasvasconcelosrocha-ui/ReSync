@@ -1,30 +1,26 @@
 {
-  "versionCode": 31,
-  "versionName": "1.0.31",
-  "tag": "v1.0.31",
-  "apkName": "ReSync-v1.0.31.apk",
-  "apkSize": 28784969,
-  "sha256": "d08a380dd480cffc9004b7b82e672a1d4e652c8545997a33c137c8e48d790f00",
-  "releaseNotes": "🚀 **O QUE HÁ DE NOVO NESTA VERSÃO:**\n\n🎨 **Nova Interface Bento UI (Dark Minimalista & OLED)**\n• **Redesign Visual Completo:** Nova arquitetura visual em todas as telas do aplicativo com fundo Preto OLED profundo (`#05070A`), cards modulares Bento (`#0E121A`), bordas finas (*hairline*) e micro-interações fluidas.\n• **Sincronização Global de Cores e Temas:** Padronização completa do `MaterialTheme` em 100% das telas, botões, indicadores e barras de progresso para respeitar dinamicamente a cor de tema escolhida pelo usuário.\n• **Foto de Perfil Integrada:** Carregamento automático do avatar real da conta Google logada na barra superior em todo o aplicativo.\n\n📊 **Novo Dashboard Inicial Interativo & Telemetria Real**\n• **Bento Grid de Estatísticas:** 4 cards no topo exibindo em tempo real: Último Backup Concluído (com data/hora relativa e tipo), Total de Arquivos Protegidos (com contagem e peso formatado), Armazenamento em Nuvem Google Drive (gráfico circular com espaço livre/usado real) e Nível de Segurança (AES-256-GCM / Biometria / Modo de Operação).\n• **Navegação Direta pelos Cards:** Toque nos cards do topo para abrir diretamente a Nuvem, Lista de Backups ou Diagnóstico do Sistema.\n• **Monitor do Sistema & Diagnóstico Root:** Seção dedicada com status em tempo real do Kernel Linux, SELinux, Arquitetura, Nível de API e teste instantâneo de permissão Superusuário/Root com modal detalhado de diagnóstico.\n• **Atalhos Rápidos de Ação:** Limpeza de cache do sistema, verificação manual de integridade e acesso veloz a operações críticas.\n\n🧩 **Central de Módulos de Dados Dedicada**\n• **Telas Bento para Todos os Tipos de Dados:** Interfaces modernas e modulares para Bluetooth (dispositivos pareados), Mensagens SMS/MMS, Registro de Chamadas, Contatos Telefônicos, Papéis de Parede e Redes Wi-Fi.\n• **Módulo Dedicado para DNS Privado:** Painel específico para backup, restauração e inspeção do DNS Seguro ativo do sistema com validação de status e IPs.\n• **Seleção Múltipla Granular:** Capacidade de selecionar/deselecionar itens individuais ou em lote em cada módulo antes de realizar o backup.\n\n⚡ **Motor Universal de Backup (Root & Sem Root)**\n• **Detecção Inteligente de Privilégios:** Alternância transparente e automática entre `RootBackupEngine` e `NonRootBackupEngine` conforme os acessos concedidos pelo usuário (SAF, MediaStore, ContentResolvers e Root).\n• **Google Drive de Alto Desempenho:** Upload e download otimizados em chunks, integridade garantida com verificação SHA-256 e criptografia ponta a ponta AES-256-GCM.\n• **Sem Travamentos ou Textos Cortados:** Ajuste fino de paddings, weights e dimensões de botões e cards para exibição perfeita em qualquer resolução e proporção de tela.",
+  "versionCode": 32,
+  "versionName": "1.0.32",
+  "tag": "v1.0.32",
+  "apkName": "ReSync-v1.0.32.apk",
+  "apkSize": 27483323,
+  "sha256": "6a0fca0d879f604182b5571cae4e9fdc1c24ce52ecc600412a88717af5f986a4",
+  "releaseNotes": "🚀 **O QUE HÁ DE NOVO NESTA VERSÃO (v1.0.32):**\n\n🛡️ **Proteção Total da Pasta de Origem (Prevenção Absoluta de Perda de Dados)**\n• **Origem 100% Intacta:** Corrigida rotina de higiene pós-empacotamento que excluía arquivos de origem em backups de diretórios locais (`/sdcard/...`, `ksu`, `Documents`). A origem nunca é modificada ou excluída.\n• **Isolamento Estrito em `cacheDir/resync_tmp`:** Todas as operações temporárias de staging e extração residem estritamente dentro do diretório temporário exclusivo do app, com blindagem canônica contra exclusão externa.\n• **Validação Canônica `safeDeleteStaging`:** Bloqueio definitivo contra exclusão acidental de caminhos protegidos ou diretórios raiz do usuário.\n\n📂 **Restauração de Pastas Sem Duplicação de Subpasta**\n• **Estrutura Idêntica ao Original:** Padronização completa na criação de containers e extração direta sem criação de subpastas aninhadas redundantes (`ksu/ksu/...`).\n• **Retrocompatibilidade com Backups Legados:** Detecção automática e desembrulho de arquivos legados que possuíam pasta raiz duplicada.\n• **Eliminação de Wipes Destrutivos:** Remoção completa de `find -mindepth 1 -delete` para diretórios de usuário: restauração atômica via mesclagem segura sem apagar arquivos preexistentes não relacionados.\n\n🧪 **Suíte de Testes Automatizados de Pastas**\n• Adição de testes unitários automatizados cobrindo preservação integral da origem pós-backup, bloqueio de exclusões fora do sandbox temporário e ausência de subpastas aninhadas na restauração.",
   "functions": [
+    "Proteção Total da Pasta de Origem contra modificação ou exclusão durante backups locais e nuvem",
+    "Isolamento estrito de arquivos temporários em cacheDir/resync_tmp",
+    "Restauração Direta de Pastas sem duplicação de subpastas (eliminação de ksu/ksu)",
+    "Detecção e desembrulho retrocompatível de backups legados com raiz duplicada",
+    "Preservação de arquivos preexistentes do usuário na restauração sem wipes destrutivos",
     "Nova Interface Bento UI com fundo OLED profundo (#05070A) e cards modulares (#0E121A)",
     "Sincronização Global com MaterialTheme respeitando dinamicamente a cor de tema do usuário",
-    "Carregamento automático do avatar da conta Google logada na barra superior",
-    "Bento Grid de Estatísticas: Último Backup, Total de Arquivos, Nuvem Google Drive e Nível de Segurança",
-    "Navegação direta pelos cards do dashboard inicial",
-    "Monitor do Sistema & Diagnóstico Root em tempo real (Kernel, SELinux, Arquitetura)",
-    "Central de Módulos de Dados Dedicada: Bluetooth, SMS/MMS, Chamadas, Contatos, Wallpapers e Wi-Fi",
-    "Módulo Dedicado para Backup, Restauração e Inspeção de DNS Privado Seguro",
-    "Seleção múltipla granular de itens por categoria antes do backup",
-    "Motor Universal de Backup inteligente com chaveamento transparente entre Root e Sem Root",
-    "Google Drive de Alto Desempenho com uploads/downloads em chunks e validação SHA-256",
-    "Ajuste fino de dimensões, paddings e eliminação de truncamentos de texto"
+    "Google Drive Turbo com uploads/downloads em chunks e validação SHA-256",
+    "Motor Universal de Backup inteligente com chaveamento transparente entre Root e Sem Root"
   ],
   "fixes": [
-    "Correção de quebra e corte de texto no botão de teste de permissão Root do modal de diagnóstico",
-    "Correção do espaçamento entre rótulo e valor na linha do Kernel Linux",
-    "Ajuste da altura do card de Etiqueta Ativa na central da nuvem eliminando espaços vazios",
-    "Correção do badge de status Bluetooth e eliminação de botões de ação duplicados",
-    "Garantia de largura total sem reticências nos cards Bento da Home"
+    "Correção crítica de exclusão indevida de arquivos da pasta de origem pós-backup",
+    "Correção da restauração de pastas para não criar subpastas aninhadas duplicadas (ksu/ksu)",
+    "Remoção de comandos destrutivos find -mindepth 1 -delete em diretórios compartilhados de usuário",
+    "Blindagem canônica contra tentativa de exclusão de caminhos fora de resync_tmp"
   ]
 }

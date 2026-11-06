@@ -622,12 +622,13 @@ object BackupRepository {
                 if (destinationType == BackupDestinationType.SOMENTE_DRIVE) {
                     // 1. Apagar o arquivo temporário de staging
                     val stagingFile = File(record.filePath)
-                    if (stagingFile.exists()) {
+                    val cacheCanon = appCtx.cacheDir.canonicalPath
+                    if (stagingFile.exists() && stagingFile.canonicalPath.startsWith(cacheCanon)) {
                         stagingFile.delete()
-                    }
-                    val stagingParent = stagingFile.parentFile
-                    if (stagingParent != null && stagingParent.name.startsWith("staging") && stagingParent.listFiles().isNullOrEmpty()) {
-                        stagingParent.delete()
+                        val stagingParent = stagingFile.parentFile
+                        if (stagingParent != null && stagingParent.canonicalPath.startsWith(cacheCanon) && stagingParent.listFiles().isNullOrEmpty()) {
+                            stagingParent.delete()
+                        }
                     }
 
                     // 2. Garantir que NENHUMA cópia existe em ReSyncBackups ou diretórios legados

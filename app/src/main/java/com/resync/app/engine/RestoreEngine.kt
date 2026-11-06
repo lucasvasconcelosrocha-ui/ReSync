@@ -27,6 +27,7 @@ import com.resync.app.data.model.SmsRecord
 import com.resync.app.util.ShellSecurityUtils.shellEscape
 import com.resync.app.util.ShellSecurityUtils.validatePackageName
 import com.topjohnwu.superuser.Shell
+import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -172,8 +173,8 @@ class RestoreEngine(private val context: Context) {
             android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
         } catch (_: Throwable) {}
 
-        val tempRestoreDir = File(context.cacheDir, "swiftvault_restore_temp_${System.currentTimeMillis()}")
-        tempRestoreDir.mkdirs()
+        val tempRestoreBase = File(context.cacheDir, "resync_tmp").apply { mkdirs() }
+        val tempRestoreDir = File(tempRestoreBase, "restore_${UUID.randomUUID()}").apply { mkdirs() }
 
         val appResults = mutableListOf<Pair<String, RestoreInstallResult>>()
         val generalErrors = mutableListOf<String>()
@@ -686,7 +687,7 @@ class RestoreEngine(private val context: Context) {
                 )
             )
         } finally {
-            tempRestoreDir.deleteRecursively()
+            safeDeleteTemp(tempRestoreDir)
         }
     }.flowOn(Dispatchers.IO.limitedParallelism(2))
 
@@ -887,11 +888,17 @@ class RestoreEngine(private val context: Context) {
         }
         if (extDataTar != null) {
             val escapedExtDataTar = shellEscape(extDataTar.absolutePath)
-            batchCommands.add("mkdir -p $escapedExtData && find $escapedExtData -mindepth 1 -delete && nice -n 19 ionice -c 3 tar -xf $escapedExtDataTar -C $escapedExtData")
+            val extTemp = File(tempDir, "ext_data_unpacked_$validPkg").apply { mkdirs() }
+            val escapedExtTemp = shellEscape(extTemp.absolutePath)
+            batchCommands.add("mkdir -p $escapedExtData && nice -n 19 ionice -c 3 tar -xf $escapedExtDataTar -C $escapedExtTemp")
+            batchCommands.add("if [ -d $escapedExtTemp/$validPkg ]; then cp -rf $escapedExtTemp/$validPkg/* $escapedExtData/ 2>/dev/null; else cp -rf $escapedExtTemp/* $escapedExtData/ 2>/dev/null; fi")
         }
         if (obbTar != null) {
             val escapedObbTar = shellEscape(obbTar.absolutePath)
-            batchCommands.add("mkdir -p $escapedObb && find $escapedObb -mindepth 1 -delete && nice -n 19 ionice -c 3 tar -xf $escapedObbTar -C $escapedObb")
+            val obbTemp = File(tempDir, "obb_unpacked_$validPkg").apply { mkdirs() }
+            val escapedObbTemp = shellEscape(obbTemp.absolutePath)
+            batchCommands.add("mkdir -p $escapedObb && nice -n 19 ionice -c 3 tar -xf $escapedObbTar -C $escapedObbTemp")
+            batchCommands.add("if [ -d $escapedObbTemp/$validPkg ]; then cp -rf $escapedObbTemp/$validPkg/* $escapedObb/ 2>/dev/null; else cp -rf $escapedObbTemp/* $escapedObb/ 2>/dev/null; fi")
         }
 
         // 8. Batch apply chown and restorecon
@@ -1146,9 +1153,11 @@ class RestoreEngine(private val context: Context) {
                 }
             }
 
-            if (extractedFolder.exists() && extractedFolder.isDirectory) {
-                extractedFolder.walkTopDown().filter { it.isFile }.forEach { file ->
-                    val relPath = file.relativeTo(extractedFolder).path
+            val effectiveSourceFolder = resolveFolderContentRoot(extractedFolder, folderItem.name, destinationFolder.name)
+
+            if (effectiveSourceFolder.exists() && effectiveSourceFolder.isDirectory) {
+                effectiveSourceFolder.walkTopDown().filter { it.isFile }.forEach { file ->
+                    val relPath = file.relativeTo(effectiveSourceFolder).path
                     val destFile = File(destinationFolder, relPath)
                     // Proteção contra Path Traversal (Zip Slip)
                     val destCanonical = destFile.canonicalPath
@@ -1169,8 +1178,20 @@ class RestoreEngine(private val context: Context) {
                 for (child in childItems) {
                     val src = File(tempDir, child.archiveEntryPath)
                     if (src.exists() && src.isFile) {
-                        val dest = File(child.originalPath.ifBlank { File(destinationFolder, src.name).absolutePath })
-                        // Proteção contra Path Traversal (Zip Slip)
+                        var rel = if (child.archiveEntryPath.startsWith(folderItem.archiveEntryPath.trimEnd('/') + "/")) {
+                            child.archiveEntryPath.removePrefix(folderItem.archiveEntryPath.trimEnd('/') + "/")
+                        } else if (folderItem.originalPath.isNotBlank() && child.originalPath.startsWith(folderItem.originalPath.trimEnd('/') + "/")) {
+                            child.originalPath.removePrefix(folderItem.originalPath.trimEnd('/') + "/")
+                        } else {
+                            src.name
+                        }
+                        // Desduplicação retrocompatível no caminho relativo
+                        if (rel.startsWith("${folderItem.name}/", ignoreCase = true)) {
+                            rel = rel.substring(folderItem.name.length + 1)
+                        } else if (rel.startsWith("${destinationFolder.name}/", ignoreCase = true)) {
+                            rel = rel.substring(destinationFolder.name.length + 1)
+                        }
+                        val dest = File(destinationFolder, rel)
                         val destCanonical = dest.canonicalPath
                         val targetCanonical = destinationFolder.canonicalPath
                         if (!destCanonical.startsWith(targetCanonical + File.separator) && destCanonical != targetCanonical) {
@@ -1600,7 +1621,51 @@ class RestoreEngine(private val context: Context) {
         }
     }
 
+    private fun safeDeleteTemp(dir: File?) {
+        if (dir == null || !dir.exists()) return
+        try {
+            val resyncTmpCanon = File(context.cacheDir, "resync_tmp").canonicalFile
+            val targetCanon = dir.canonicalFile
+            if (targetCanon.path.startsWith(resyncTmpCanon.path + File.separator)) {
+                targetCanon.deleteRecursively()
+            }
+        } catch (_: Throwable) {}
+    }
+
     companion object {
+        fun resolveFolderContentRoot(extractedFolder: File, vararg candidateNames: String): File {
+            if (!extractedFolder.exists() || !extractedFolder.isDirectory) return extractedFolder
+            val children = extractedFolder.listFiles() ?: return extractedFolder
+
+            // Se existir apenas 1 diretório filho e o nome coincidir com o nome da pasta (ex: temp/files/ksu/ksu/)
+            if (children.size == 1 && children[0].isDirectory) {
+                val childName = children[0].name
+                if (candidateNames.any { it.isNotBlank() && it.equals(childName, ignoreCase = true) }) {
+                    return children[0]
+                }
+            }
+
+            // Se todos os arquivos dentro de extractedFolder estiverem sob uma subpasta de mesmo nome
+            val files = extractedFolder.walkTopDown().filter { it.isFile }.toList()
+            if (files.isNotEmpty()) {
+                for (name in candidateNames) {
+                    if (name.isBlank()) continue
+                    val prefix = name.lowercase() + "/"
+                    val allUnderChild = files.all { f ->
+                        f.relativeTo(extractedFolder).path.replace('\\', '/').lowercase().startsWith(prefix)
+                    }
+                    if (allUnderChild) {
+                        val candidateSubDir = children.firstOrNull { it.isDirectory && it.name.equals(name, ignoreCase = true) }
+                        if (candidateSubDir != null) {
+                            return candidateSubDir
+                        }
+                    }
+                }
+            }
+
+            return extractedFolder
+        }
+
         fun parseVcardContacts(vcardText: String): List<ContactRecord> {
         val result = mutableListOf<ContactRecord>()
         val lines = vcardText.lines()

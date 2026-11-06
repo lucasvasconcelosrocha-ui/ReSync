@@ -171,7 +171,7 @@ fun DashboardScreen(
     var showSecurityModal by remember { mutableStateOf(false) }
     val changelogPrefs = remember { context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE) }
     var showChangelogModal by remember {
-        mutableStateOf(changelogPrefs.getString("last_seen_changelog_version", "") != "1.0.31")
+        mutableStateOf(changelogPrefs.getString("last_seen_changelog_version", "") != "1.0.32")
     }
     val scrollState = rememberScrollState()
     var isPullRefreshing by remember { mutableStateOf(false) }
@@ -1473,16 +1473,16 @@ fun DashboardScreen(
         )
     }
 
-    // Modal Automático de Novidades (Changelog v1.0.31)
+    // Modal Automático de Novidades (Changelog v1.0.32)
     if (showChangelogModal) {
         ChangelogModal(
-            versionName = "1.0.31",
+            versionName = "1.0.32",
             primaryAccent = primaryAccent,
             onDismiss = {
                 showChangelogModal = false
             },
             onConfirm = {
-                changelogPrefs.edit().putString("last_seen_changelog_version", "1.0.31").apply()
+                changelogPrefs.edit().putString("last_seen_changelog_version", "1.0.32").apply()
                 showChangelogModal = false
             }
         )
@@ -2415,6 +2415,15 @@ private fun ChangelogModal(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                ChangelogPillarCard(
+                    icon = Icons.Default.FolderSpecial,
+                    accentColor = Color(0xFF00E676),
+                    title = "Segurança Máxima de Pastas & Restauração Direta",
+                    description = "Blindagem total contra modificação de pastas de origem durante backups (locais e Google Drive), isolamento de arquivos temporários em resync_tmp e restauração direta sem criação de subpastas aninhadas (ksu/ksu).",
+                    cardBg = bentoCard,
+                    borderColor = bentoBorder
+                )
+
                 ChangelogPillarCard(
                     icon = Icons.Default.CloudSync,
                     accentColor = AccentElectricCyan,
