@@ -55,6 +55,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -431,17 +432,70 @@ fun CloudSyncCenterScreen(
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    IconButton(onClick = onBack) {
-                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Voltar", tint = TextPrimary)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.CloudSync, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "ReSync Nuvem",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = TextPrimary
+                            )
+                            Text(
+                                text = activeAccountEmail ?: "Google Drive",
+                                fontSize = 11.sp,
+                                color = TextMuted,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "Google Drive",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                        color = TextPrimary
-                    )
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Badge AES-256-GCM (FOTO 7)
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFF0D281E),
+                            border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.4f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Color(0xFF10B981)))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "AES-256-GCM",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF10B981),
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        // Avatar do Usuário do Google Drive
+                        UserAvatar(
+                            photoUrl = activeRoomAccount?.photoUrl,
+                            displayName = activeRoomAccount?.name?.ifBlank { activeRoomAccount.email },
+                            email = activeRoomAccount?.email,
+                            size = 32.dp,
+                            onClick = { launchAccountPicker() }
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(10.dp))
@@ -1095,377 +1149,397 @@ fun CloudSyncCenterScreen(
                             categorySummaries.sumOf { (_, s) -> if (s.hasContacts) s.countContacts.coerceAtLeast(1) else 0 }
                         }
 
+                        val labelBackupsBytes = remember(labelBackups) {
+                            labelBackups.sumOf { it.sizeBytes }
+                        }
+                        val isRootActive = remember {
+                            try {
+                                com.topjohnwu.superuser.Shell.isAppGrantedRoot() == true
+                            } catch (_: Exception) {
+                                false
+                            }
+                        }
+
+                        // Card Bento "Etiqueta Ativa" (FOTO 2 & FOTO 7)
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .wrapContentHeight()
                                 .clip(RoundedCornerShape(16.dp))
-                                .border(1.dp, DarkCardBorder, RoundedCornerShape(16.dp)),
-                            colors = CardDefaults.cardColors(containerColor = DarkSurfaceVariant)
+                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp)),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                         ) {
-                            Column(modifier = Modifier.padding(18.dp)) {
+                            Column(modifier = Modifier.fillMaxWidth().wrapContentHeight().padding(16.dp)) {
+                                // 1) Topo do Card
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Row(
-                                        modifier = Modifier.weight(1f),
-                                        verticalAlignment = Alignment.CenterVertically
+                                    Box(
+                                        modifier = Modifier
+                                            .size(42.dp)
+                                            .clip(CircleShape)
+                                            .background(primaryAccent.copy(alpha = 0.12f)),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        Icon(Icons.Default.Label, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(20.dp))
-                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Icon(
+                                            Icons.Default.Smartphone,
+                                            contentDescription = null,
+                                            tint = primaryAccent,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = "Etiqueta do backup na nuvem",
-                                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                            color = TextPrimary,
+                                            text = effectiveViewLabel,
+                                            fontSize = 15.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = "Android ${Build.VERSION.RELEASE} • Root ${if (isRootActive) "Ativo" else "Inativo"}",
+                                            fontSize = 11.5.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
                                     }
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    TextButton(
-                                        onClick = { showLabelManagerModal = true },
-                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                                    ) {
-                                        Icon(Icons.Default.Tune, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(15.dp))
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Gerenciar", fontSize = 12.sp, color = primaryAccent, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
+                                    if (effectiveViewLabel == customDeviceLabel) {
+                                        Surface(
+                                            shape = RoundedCornerShape(50),
+                                            color = Color(0xFF0D281E),
+                                            border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.4f)),
+                                            modifier = Modifier.wrapContentSize()
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Color(0xFF10B981)))
+                                                Text(
+                                                    text = "Ativa",
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFF10B981),
+                                                    maxLines = 1,
+                                                    softWrap = false
+                                                )
+                                            }
+                                        }
+                                    } else {
+                                        Surface(
+                                            shape = RoundedCornerShape(50),
+                                            color = Color(0xFF2D1E05),
+                                            border = BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.4f)),
+                                            modifier = Modifier.wrapContentSize()
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Color(0xFFF59E0B)))
+                                                Text(
+                                                    text = "Outro",
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFFF59E0B),
+                                                    maxLines = 1,
+                                                    softWrap = false
+                                                )
+                                            }
+                                        }
                                     }
                                 }
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "A etiqueta identifica seu aparelho no Google Drive para agrupar e gerenciar backups. Toque para alternar ou criar etiquetas.",
-                                    fontSize = 12.sp,
-                                    color = TextSecondary,
-                                    lineHeight = 16.sp
-                                )
 
                                 Spacer(modifier = Modifier.height(12.dp))
-                                Surface(
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = DarkBg,
-                                    border = BorderStroke(1.dp, if (effectiveViewLabel == customDeviceLabel) primaryAccent.copy(alpha = 0.5f) else DarkCardBorder),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { showLabelManagerModal = true }
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(Icons.Default.Smartphone, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(22.dp))
-                                        Spacer(modifier = Modifier.width(10.dp))
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text("Etiqueta em exibição", fontSize = 10.5.sp, color = TextMuted)
-                                            Spacer(modifier = Modifier.height(2.dp))
-                                            Text(
-                                                text = effectiveViewLabel,
-                                                fontSize = 14.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = TextPrimary,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                            Spacer(modifier = Modifier.height(4.dp))
-                                            if (effectiveViewLabel == customDeviceLabel) {
-                                                Surface(
-                                                    shape = RoundedCornerShape(4.dp),
-                                                    color = primaryAccent.copy(alpha = 0.15f)
-                                                ) {
-                                                    Text(
-                                                        text = "Ativa neste dispositivo",
-                                                        fontSize = 9.sp,
-                                                        color = primaryAccent,
-                                                        fontWeight = FontWeight.Bold,
-                                                        maxLines = 1,
-                                                        softWrap = false,
-                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                                    )
-                                                }
-                                            } else {
-                                                Surface(
-                                                    shape = RoundedCornerShape(4.dp),
-                                                    color = StatusWarning.copy(alpha = 0.15f)
-                                                ) {
-                                                    Text(
-                                                        text = "Visualizando outro aparelho",
-                                                        fontSize = 9.sp,
-                                                        color = StatusWarning,
-                                                        fontWeight = FontWeight.Bold,
-                                                        maxLines = 1,
-                                                        softWrap = false,
-                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                                    )
-                                                }
-                                            }
-                                        }
-                                        Icon(Icons.Default.SwapHoriz, contentDescription = "Alternar", tint = primaryAccent, modifier = Modifier.size(20.dp))
-                                    }
-                                }
 
-                                Spacer(modifier = Modifier.height(14.dp))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = "Backups nesta etiqueta (${labelBackups.size} arq.):",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = TextPrimary
-                                    )
-                                    Text(
-                                        text = "Toque para ver/restaurar",
-                                        fontSize = 10.sp,
-                                        color = primaryAccent
-                                    )
+                                // 2) Meio do Card: Armazenamento na Nuvem
+                                val totalAccountQuota = remember(activeAccountEmail, multiAccounts) {
+                                    val acc = multiAccounts.firstOrNull { it.email == activeAccountEmail }
+                                    if (acc != null && acc.quotaTotalBytes > 0) acc.quotaTotalBytes else 15L * 1024 * 1024 * 1024
                                 }
-                                Spacer(modifier = Modifier.height(8.dp))
+                                val storageFraction = (labelBackupsBytes.toFloat() / totalAccountQuota.toFloat()).coerceIn(0.01f, 1f)
 
-                                // 4 colunas x 2 linhas (Clicáveis)
-                                Column(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    // Linha 1: Aplicativos, Mensagens, Chamadas, Pastas
+                                Column(modifier = Modifier.fillMaxWidth()) {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Card(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .clip(RoundedCornerShape(10.dp))
-                                                .border(0.5.dp, if (remoteAppsCount > 0) primaryAccent.copy(alpha = 0.4f) else DarkCardBorder, RoundedCornerShape(10.dp))
-                                                .clickable { onOpenCategoryRestore("Aplicativos") },
-                                            colors = CardDefaults.cardColors(containerColor = DarkBg)
-                                        ) {
-                                            Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Text("$remoteAppsCount", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = primaryAccent)
-                                                Text("Aplicativos", fontSize = 9.5.sp, color = TextSecondary, maxLines = 1)
-                                            }
-                                        }
-                                        Card(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .clip(RoundedCornerShape(10.dp))
-                                                .border(0.5.dp, if (remoteSmsCount > 0) AccentElectricCyan.copy(alpha = 0.4f) else DarkCardBorder, RoundedCornerShape(10.dp))
-                                                .clickable { onOpenCategoryRestore("Mensagens") },
-                                            colors = CardDefaults.cardColors(containerColor = DarkBg)
-                                        ) {
-                                            Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Text("$remoteSmsCount", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = AccentElectricCyan)
-                                                Text("Mensagens", fontSize = 9.5.sp, color = TextSecondary, maxLines = 1)
-                                            }
-                                        }
-                                        Card(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .clip(RoundedCornerShape(10.dp))
-                                                .border(0.5.dp, if (remoteCallsCount > 0) AccentEmeraldGreen.copy(alpha = 0.4f) else DarkCardBorder, RoundedCornerShape(10.dp))
-                                                .clickable { onOpenCategoryRestore("Chamadas") },
-                                            colors = CardDefaults.cardColors(containerColor = DarkBg)
-                                        ) {
-                                            Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Text("$remoteCallsCount", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = AccentEmeraldGreen)
-                                                Text("Chamadas", fontSize = 9.5.sp, color = TextSecondary, maxLines = 1)
-                                            }
-                                        }
-                                        Card(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .clip(RoundedCornerShape(10.dp))
-                                                .border(0.5.dp, if (remoteFoldersCount > 0) AccentNeonPurple.copy(alpha = 0.4f) else DarkCardBorder, RoundedCornerShape(10.dp))
-                                                .clickable { onOpenCategoryRestore("Pastas") },
-                                            colors = CardDefaults.cardColors(containerColor = DarkBg)
-                                        ) {
-                                            Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Text("$remoteFoldersCount", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = AccentNeonPurple)
-                                                Text("Pastas", fontSize = 9.5.sp, color = TextSecondary, maxLines = 1)
-                                            }
-                                        }
-                                    }
-
-                                    // Linha 2: Bluetooth, DNS, Wi-Fi, Contatos
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Card(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .clip(RoundedCornerShape(10.dp))
-                                                .border(0.5.dp, if (remoteBluetoothCount > 0) AccentNeonBlue.copy(alpha = 0.4f) else DarkCardBorder, RoundedCornerShape(10.dp))
-                                                .clickable { onOpenCategoryRestore("Bluetooth") },
-                                            colors = CardDefaults.cardColors(containerColor = DarkBg)
-                                        ) {
-                                            Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Text("$remoteBluetoothCount", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = AccentNeonBlue)
-                                                Text("Bluetooth", fontSize = 9.5.sp, color = TextSecondary, maxLines = 1)
-                                            }
-                                        }
-                                        Card(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .clip(RoundedCornerShape(10.dp))
-                                                .border(0.5.dp, if (remoteDnsCount > 0) AccentCyberPurple.copy(alpha = 0.4f) else DarkCardBorder, RoundedCornerShape(10.dp))
-                                                .clickable { onOpenCategoryRestore("DNS") },
-                                            colors = CardDefaults.cardColors(containerColor = DarkBg)
-                                        ) {
-                                            Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Text("$remoteDnsCount", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = AccentCyberPurple)
-                                                Text("DNS", fontSize = 9.5.sp, color = TextSecondary, maxLines = 1)
-                                            }
-                                        }
-                                        Card(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .clip(RoundedCornerShape(10.dp))
-                                                .border(0.5.dp, if (remoteWifiCount > 0) StatusWarning.copy(alpha = 0.4f) else DarkCardBorder, RoundedCornerShape(10.dp))
-                                                .clickable { onOpenCategoryRestore("Wi-Fi") },
-                                            colors = CardDefaults.cardColors(containerColor = DarkBg)
-                                        ) {
-                                            Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Text("$remoteWifiCount", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = StatusWarning)
-                                                Text("Wi-Fi", fontSize = 9.5.sp, color = TextSecondary, maxLines = 1)
-                                            }
-                                        }
-                                        Card(
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .clip(RoundedCornerShape(10.dp))
-                                                .border(0.5.dp, if (remoteContactsCount > 0) AccentSunsetOrange.copy(alpha = 0.4f) else DarkCardBorder, RoundedCornerShape(10.dp))
-                                                .clickable { onOpenCategoryRestore("Contatos") },
-                                            colors = CardDefaults.cardColors(containerColor = DarkBg)
-                                        ) {
-                                            Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                                Text("$remoteContactsCount", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = AccentSunsetOrange)
-                                                Text("Contatos", fontSize = 9.5.sp, color = TextSecondary, maxLines = 1)
-                                            }
-                                        }
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(10.dp))
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = DarkBg.copy(alpha = 0.5f),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(8.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Icon(Icons.Default.Info, contentDescription = null, tint = TextMuted, modifier = Modifier.size(16.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
                                         Text(
-                                            text = "Toque em qualquer categoria para listar os backups e restaurar diretamente.",
-                                            fontSize = 11.sp,
-                                            color = TextMuted
+                                            text = "Armazenamento na Nuvem",
+                                            fontSize = 11.5.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            text = "${FormatUtils.formatBytes(labelBackupsBytes)} (${labelBackups.size} arq.)",
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = primaryAccent
                                         )
                                     }
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    LinearProgressIndicator(
+                                        progress = { storageFraction },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(6.dp)
+                                            .clip(RoundedCornerShape(3.dp)),
+                                        color = primaryAccent,
+                                        trackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                                    )
                                 }
 
                                 Spacer(modifier = Modifier.height(14.dp))
+
+                                // 3) Base do Card: Botão largo Trocar / Criar Nova Etiqueta
                                 OutlinedButton(
-                                    onClick = {
-                                        labelToDelete = effectiveViewLabel
-                                        showDeleteSpecificLabelDialog = true
-                                    },
-                                    modifier = Modifier.fillMaxWidth().height(42.dp),
+                                    onClick = { showLabelManagerModal = true },
+                                    modifier = Modifier.fillMaxWidth().heightIn(min = 46.dp),
                                     shape = RoundedCornerShape(10.dp),
-                                    border = BorderStroke(1.dp, StatusError.copy(alpha = 0.7f)),
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = StatusError),
-                                    enabled = !isDeletingLabelBackups
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = primaryAccent
+                                    ),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                                 ) {
-                                    if (isDeletingLabelBackups) {
-                                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = StatusError, strokeWidth = 2.dp)
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text("Excluindo...", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                    } else {
-                                        Icon(Icons.Default.DeleteSweep, contentDescription = null, modifier = Modifier.size(18.dp), tint = StatusError)
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text("Excluir etiqueta e backups associados", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = StatusError)
-                                    }
+                                    Icon(Icons.Default.SwapHoriz, contentDescription = null, modifier = Modifier.size(16.dp), tint = primaryAccent)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Trocar / Criar Nova Etiqueta", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = primaryAccent, maxLines = 1, softWrap = false)
                                 }
                             }
                         }
 
-                            Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
 
-                            // Action Buttons for the active account
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Button(
-                                    onClick = {
-                                        val targetEmail = activeAccountEmail ?: multiAccounts.firstOrNull()?.email
-                                        if (targetEmail.isNullOrBlank()) {
-                                            Toast.makeText(context, "Nenhuma conta Google Drive conectada.", Toast.LENGTH_SHORT).show()
-                                        } else {
-                                            Toast.makeText(context, "Sincronizando conta ativa...", Toast.LENGTH_SHORT).show()
-                                            viewModel.refreshActiveAccountData(targetEmail, isManual = true) {
-                                                val qErr = (viewModel.driveQuotaState.value as? DriveQuotaState.Error)?.message
-                                                val bErr = (viewModel.remoteBackupsState.value as? RemoteBackupsState.Error)?.message
-                                                val err = qErr ?: bErr
-                                                if (err != null) {
-                                                    Toast.makeText(context, "Erro na sincronização: $err", Toast.LENGTH_LONG).show()
-                                                } else {
-                                                    Toast.makeText(context, "Sincronização concluída com sucesso!", Toast.LENGTH_SHORT).show()
-                                                }
-                                            }
-                                        }
-                                    },
-                                    modifier = Modifier.weight(1f).height(48.dp),
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = primaryAccent),
-                                    enabled = !isRefreshingActiveAccount
-                                ) {
-                                    if (isRefreshingActiveAccount) {
-                                        CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.Black, strokeWidth = 2.dp)
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("SINCRONIZANDO...", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Color.Black, maxLines = 1)
-                                    } else {
-                                        Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("SINCRONIZAR", fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, softWrap = false)
-                                    }
+                        // Bento Grid "Componentes da Etiqueta" (Partições) - FOTO 7
+                        val partitionsList = remember(remoteAppsCount, remoteSmsCount, remoteCallsCount, remoteFoldersCount, remoteBluetoothCount, remoteDnsCount, remoteWifiCount, remoteContactsCount) {
+                            listOf(
+                                Triple("Aplicativos", "$remoteAppsCount apps", Icons.Default.Apps to AccentElectricCyan),
+                                Triple("Mensagens", "$remoteSmsCount SMS", Icons.Default.Chat to AccentElectricCyan),
+                                Triple("Chamadas", "$remoteCallsCount chamadas", Icons.Default.Call to AccentEmeraldGreen),
+                                Triple("Pastas", "$remoteFoldersCount pastas", Icons.Default.Folder to AccentNeonPurple),
+                                Triple("Bluetooth", "$remoteBluetoothCount dispositivos", Icons.Default.Bluetooth to AccentNeonBlue),
+                                Triple("DNS", "$remoteDnsCount registros", Icons.Default.Dns to AccentCyberPurple),
+                                Triple("Wi-Fi", "$remoteWifiCount redes", Icons.Default.Wifi to StatusWarning),
+                                Triple("Contatos", "$remoteContactsCount contatos", Icons.Default.Contacts to AccentSunsetOrange)
+                            )
+                        }
+                        val activePartitionsCount = remember(partitionsList) {
+                            partitionsList.count { it.second.startsWith("0").not() }
+                        }
+
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Componentes da Etiqueta",
+                                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "Toque para inspecionar e restaurar seletivamente",
+                                        fontSize = 11.5.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = primaryAccent.copy(alpha = 0.12f),
+                                    border = BorderStroke(1.dp, primaryAccent.copy(alpha = 0.3f))
+                                ) {
+                                    Text(
+                                        text = "$activePartitionsCount partições ativas",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = primaryAccent,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
 
-                                OutlinedButton(
-                                    onClick = {
-                                        val targetEmail = activeAccountEmail ?: multiAccounts.firstOrNull()?.email
-                                        if (targetEmail.isNullOrBlank()) {
-                                            Toast.makeText(context, "Nenhuma conta Google Drive conectada.", Toast.LENGTH_SHORT).show()
-                                        } else {
-                                            Toast.makeText(context, "Atualizando dados da conta ativa...", Toast.LENGTH_SHORT).show()
-                                            viewModel.refreshActiveAccountData(targetEmail, isManual = true) {
-                                                val qErr = (viewModel.driveQuotaState.value as? DriveQuotaState.Error)?.message
-                                                val bErr = (viewModel.remoteBackupsState.value as? RemoteBackupsState.Error)?.message
-                                                val err = qErr ?: bErr
-                                                if (err != null) {
-                                                    Toast.makeText(context, "Erro na atualização: $err", Toast.LENGTH_LONG).show()
-                                                } else {
-                                                    Toast.makeText(context, "Dados atualizados com sucesso!", Toast.LENGTH_SHORT).show()
+                            Spacer(modifier = Modifier.height(12.dp))
+
+                            // 2 Columns Bento Grid
+                            val chunkedPartitions = partitionsList.chunked(2)
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                chunkedPartitions.forEach { pair ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        pair.forEach { (catName, countLabel, iconAndColor) ->
+                                            val (catIcon, catColor) = iconAndColor
+                                            Card(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .clip(RoundedCornerShape(12.dp))
+                                                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+                                                    .clickable { onOpenCategoryRestore(catName) },
+                                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(horizontal = 12.dp, vertical = 12.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(36.dp)
+                                                            .clip(RoundedCornerShape(8.dp))
+                                                            .background(catColor.copy(alpha = 0.12f)),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Icon(catIcon, contentDescription = null, tint = catColor, modifier = Modifier.size(18.dp))
+                                                    }
+                                                    Spacer(modifier = Modifier.width(10.dp))
+                                                    Column(modifier = Modifier.weight(1f)) {
+                                                        Text(
+                                                            text = catName,
+                                                            fontSize = 13.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = MaterialTheme.colorScheme.onSurface,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                        Spacer(modifier = Modifier.height(1.dp))
+                                                        Text(
+                                                            text = countLabel,
+                                                            fontSize = 10.5.sp,
+                                                            color = if (countLabel.startsWith("0")) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f) else catColor,
+                                                            maxLines = 1,
+                                                            fontWeight = FontWeight.Medium
+                                                        )
+                                                    }
+                                                    Icon(
+                                                        Icons.Default.ChevronRight,
+                                                        contentDescription = null,
+                                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
                                                 }
                                             }
                                         }
-                                    },
-                                    modifier = Modifier.weight(1f).height(48.dp),
-                                    shape = RoundedCornerShape(12.dp),
-                                    border = BorderStroke(1.dp, primaryAccent),
-                                    enabled = !isRefreshingActiveAccount
-                                ) {
-                                    if (isRefreshingActiveAccount) {
-                                        CircularProgressIndicator(modifier = Modifier.size(18.dp), color = primaryAccent, strokeWidth = 2.dp)
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("ATUALIZANDO...", color = primaryAccent, fontWeight = FontWeight.Bold, fontSize = 11.sp, maxLines = 1)
-                                    } else {
-                                        Icon(Icons.Default.Refresh, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(18.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("ATUALIZAR", color = primaryAccent, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, softWrap = false)
+                                        if (pair.size == 1) {
+                                            Spacer(modifier = Modifier.weight(1f))
+                                        }
                                     }
                                 }
                             }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+                            TextButton(
+                                onClick = {
+                                    labelToDelete = effectiveViewLabel
+                                    showDeleteSpecificLabelDialog = true
+                                },
+                                modifier = Modifier.align(Alignment.CenterHorizontally),
+                                enabled = !isDeletingLabelBackups
+                            ) {
+                                Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = StatusError.copy(alpha = 0.7f), modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    "Excluir etiqueta \"$effectiveViewLabel\" e backups",
+                                    fontSize = 11.sp,
+                                    color = StatusError.copy(alpha = 0.8f)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        // Action Buttons for the active account (FOTO 7)
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Button(
+                                onClick = {
+                                    val targetEmail = activeAccountEmail ?: multiAccounts.firstOrNull()?.email
+                                    if (targetEmail.isNullOrBlank()) {
+                                        Toast.makeText(context, "Nenhuma conta Google Drive conectada.", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(context, "Sincronizando conta ativa...", Toast.LENGTH_SHORT).show()
+                                        viewModel.refreshActiveAccountData(targetEmail, isManual = true) {
+                                            val qErr = (viewModel.driveQuotaState.value as? DriveQuotaState.Error)?.message
+                                            val bErr = (viewModel.remoteBackupsState.value as? RemoteBackupsState.Error)?.message
+                                            val err = qErr ?: bErr
+                                            if (err != null) {
+                                                Toast.makeText(context, "Erro na sincronização: $err", Toast.LENGTH_LONG).show()
+                                            } else {
+                                                Toast.makeText(context, "Sincronização concluída com sucesso!", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.weight(1f).height(48.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = primaryAccent),
+                                enabled = !isRefreshingActiveAccount
+                            ) {
+                                if (isRefreshingActiveAccount) {
+                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.Black, strokeWidth = 2.dp)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("SINCRONIZANDO...", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Color.Black, maxLines = 1)
+                                } else {
+                                    Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("SINCRONIZAR AGORA", fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, softWrap = false)
+                                }
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    val targetEmail = activeAccountEmail ?: multiAccounts.firstOrNull()?.email
+                                    if (targetEmail.isNullOrBlank()) {
+                                        Toast.makeText(context, "Nenhuma conta Google Drive conectada.", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Toast.makeText(context, "Verificando integridade dos backups...", Toast.LENGTH_SHORT).show()
+                                        viewModel.refreshActiveAccountData(targetEmail, isManual = true) {
+                                            val qErr = (viewModel.driveQuotaState.value as? DriveQuotaState.Error)?.message
+                                            val bErr = (viewModel.remoteBackupsState.value as? RemoteBackupsState.Error)?.message
+                                            val err = qErr ?: bErr
+                                            if (err != null) {
+                                                Toast.makeText(context, "Erro na verificação: $err", Toast.LENGTH_LONG).show()
+                                            } else {
+                                                Toast.makeText(context, "Integridade verificada com sucesso!", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.weight(1f).height(48.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.surface,
+                                    contentColor = primaryAccent
+                                ),
+                                enabled = !isRefreshingActiveAccount
+                            ) {
+                                if (isRefreshingActiveAccount) {
+                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), color = primaryAccent, strokeWidth = 2.dp)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("VERIFICANDO...", color = primaryAccent, fontWeight = FontWeight.Bold, fontSize = 11.sp, maxLines = 1)
+                                } else {
+                                    Icon(Icons.Default.Verified, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("VERIFICAR", color = primaryAccent, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, softWrap = false)
+                                }
+                            }
+                        }
 
                             Spacer(modifier = Modifier.height(10.dp))
 

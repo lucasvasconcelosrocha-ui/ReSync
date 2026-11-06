@@ -352,7 +352,8 @@ class MainActivity : ComponentActivity() {
                                         onNavigateToStorageDetails = { navController.navigate(Screen.StorageDetails.route) },
                                         onNavigateToScheduledBackups = { navController.navigate(Screen.ScheduledBackups.route) },
                                         onNavigateToFolders = { navController.navigate(Screen.FoldersBackup.route) },
-                                        onNavigateToStorageCache = { navController.navigate(Screen.StorageCache.route) }
+                                        onNavigateToStorageCache = { navController.navigate(Screen.StorageCache.route) },
+                                        onNavigateToSettings = { navController.navigate(Screen.Account.route) }
                                     )
                                 }
 

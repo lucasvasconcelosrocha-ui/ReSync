@@ -138,100 +138,132 @@ fun AppUpdateDialog(
                                 .heightIn(max = 280.dp)
                                 .verticalScroll(rememberScrollState())
                         ) {
-                            if (release.functions.isNotEmpty()) {
-                                Text(
-                                    text = "Função",
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimary
-                                )
-                                Spacer(modifier = Modifier.height(6.dp))
-                                release.functions.forEach { item ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 3.dp),
-                                        verticalAlignment = Alignment.Top
-                                    ) {
+                            if (release.releaseNotes.isNotBlank()) {
+                                val cleanLines = release.releaseNotes.lines()
+                                    .map { it.trim() }
+                                    .filter { it.isNotBlank() && it != "---" }
+                                
+                                cleanLines.forEach { line ->
+                                    val isHeader = line.startsWith("🚀") || line.startsWith("🎨") ||
+                                            line.startsWith("📊") || line.startsWith("🧩") ||
+                                            line.startsWith("⚡") ||
+                                            (line.startsWith("**") && line.endsWith("**") && !line.contains("•"))
+                                    val isBullet = line.startsWith("•") || line.startsWith("*") || line.startsWith("-")
+
+                                    if (isHeader) {
+                                        Spacer(modifier = Modifier.height(10.dp))
+                                        val cleanHeader = line.replace("**", "").trim()
                                         Text(
-                                            text = "•",
-                                            color = primaryAccent,
-                                            fontSize = 15.sp,
+                                            text = cleanHeader,
+                                            fontSize = 14.5.sp,
                                             fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(end = 8.dp)
+                                            color = if (line.startsWith("🚀")) primaryAccent else TextPrimary
                                         )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                    } else if (isBullet) {
+                                        val cleanItem = line.removePrefix("•").removePrefix("*").removePrefix("-").trim()
+                                            .replace("**", "")
+                                            .replace("`", "")
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 3.dp),
+                                            verticalAlignment = Alignment.Top
+                                        ) {
+                                            Text(
+                                                text = "•",
+                                                color = primaryAccent,
+                                                fontSize = 15.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(end = 8.dp)
+                                            )
+                                            Text(
+                                                text = cleanItem,
+                                                color = TextSecondary,
+                                                fontSize = 13.5.sp,
+                                                lineHeight = 19.sp,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
+                                    } else {
                                         Text(
-                                            text = item,
+                                            text = line.replace("**", "").replace("`", ""),
                                             color = TextSecondary,
                                             fontSize = 13.5.sp,
                                             lineHeight = 19.sp,
-                                            modifier = Modifier.weight(1f)
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 2.dp)
                                         )
                                     }
                                 }
-                            }
-
-                            if (release.fixes.isNotEmpty()) {
+                            } else {
                                 if (release.functions.isNotEmpty()) {
-                                    Spacer(modifier = Modifier.height(14.dp))
-                                }
-                                Text(
-                                    text = "Otimização e reparo",
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = TextPrimary
-                                )
-                                Spacer(modifier = Modifier.height(6.dp))
-                                release.fixes.forEach { item ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 3.dp),
-                                        verticalAlignment = Alignment.Top
-                                    ) {
-                                        Text(
-                                            text = "•",
-                                            color = primaryAccent,
-                                            fontSize = 15.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(end = 8.dp)
-                                        )
-                                        Text(
-                                            text = item,
-                                            color = TextSecondary,
-                                            fontSize = 13.5.sp,
-                                            lineHeight = 19.sp,
-                                            modifier = Modifier.weight(1f)
-                                        )
+                                    Text(
+                                        text = "Função",
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextPrimary
+                                    )
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    release.functions.forEach { item ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 3.dp),
+                                            verticalAlignment = Alignment.Top
+                                        ) {
+                                            Text(
+                                                text = "•",
+                                                color = primaryAccent,
+                                                fontSize = 15.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(end = 8.dp)
+                                            )
+                                            Text(
+                                                text = item,
+                                                color = TextSecondary,
+                                                fontSize = 13.5.sp,
+                                                lineHeight = 19.sp,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
                                     }
                                 }
-                            }
 
-                            if (release.functions.isEmpty() && release.fixes.isEmpty() && release.releaseNotes.isNotBlank()) {
-                                val lines = release.releaseNotes.lines()
-                                    .map { it.trim().removePrefix("*").removePrefix("-").removePrefix("•").trim() }
-                                    .filter { it.isNotBlank() && !it.startsWith("#") }
-                                lines.forEach { item ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 3.dp),
-                                        verticalAlignment = Alignment.Top
-                                    ) {
-                                        Text(
-                                            text = "•",
-                                            color = primaryAccent,
-                                            fontSize = 15.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(end = 8.dp)
-                                        )
-                                        Text(
-                                            text = item,
-                                            color = TextSecondary,
-                                            fontSize = 13.5.sp,
-                                            lineHeight = 19.sp,
-                                            modifier = Modifier.weight(1f)
-                                        )
+                                if (release.fixes.isNotEmpty()) {
+                                    if (release.functions.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.height(14.dp))
+                                    }
+                                    Text(
+                                        text = "Otimização e reparo",
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TextPrimary
+                                    )
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    release.fixes.forEach { item ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 3.dp),
+                                            verticalAlignment = Alignment.Top
+                                        ) {
+                                            Text(
+                                                text = "•",
+                                                color = primaryAccent,
+                                                fontSize = 15.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(end = 8.dp)
+                                            )
+                                            Text(
+                                                text = item,
+                                                color = TextSecondary,
+                                                fontSize = 13.5.sp,
+                                                lineHeight = 19.sp,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                        }
                                     }
                                 }
                             }

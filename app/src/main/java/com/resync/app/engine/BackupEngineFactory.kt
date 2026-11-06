@@ -21,23 +21,33 @@ object BackupEngineFactory {
     private var cachedHasRoot: Boolean? = null
 
     /**
-     * Deteção silenciosa e segura da disponibilidade de privilégios de Superusuário.
-     * Verifica se o binário su está disponível e se a shell atual possui privilégios de root (uid=0).
+     * Deteção passiva, silenciosa e segura da disponibilidade de privilégios de Superusuário.
+     * NÃO dispara prompt de superusuário na tela.
      */
     suspend fun isRootAvailable(context: Context? = null): Boolean = withContext(Dispatchers.IO) {
         cachedHasRoot?.let { return@withContext it }
 
         val hasRoot = try {
-            if (context != null) {
-                CapabilityManager(context).verifyRootAccess(timeoutMs = 3000L)
-            } else {
-                Shell.isAppGrantedRoot() == true || (try { Shell.getShell().isRoot } catch (_: Throwable) { false })
-            }
+            Shell.isAppGrantedRoot() == true || (try { Shell.getCachedShell()?.isRoot == true } catch (_: Throwable) { false })
         } catch (e: Throwable) {
-            Log.w(TAG, "Falha na verificação silenciosa de Root: ${e.message}")
+            Log.w(TAG, "Falha na verificação passiva de Root: ${e.message}")
             false
         }
 
+        cachedHasRoot = hasRoot
+        hasRoot
+    }
+
+    /**
+     * Verificação interativa explícita (chamada apenas quando o usuário solicita ativação de Root).
+     */
+    suspend fun verifyRootInteractive(context: Context): Boolean = withContext(Dispatchers.IO) {
+        val hasRoot = try {
+            CapabilityManager(context).requestRootAccess()
+        } catch (e: Throwable) {
+            Log.w(TAG, "Falha na solicitação explícita de Root: ${e.message}")
+            false
+        }
         cachedHasRoot = hasRoot
         hasRoot
     }

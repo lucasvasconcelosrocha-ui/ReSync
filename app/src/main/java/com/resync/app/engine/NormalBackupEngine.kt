@@ -34,6 +34,16 @@ class NormalBackupEngine(
 
     override val isRootEnabled: Boolean = false
 
+    val contactsProvider = com.resync.app.engine.provider.ContactsBackupProvider(context)
+    val calendarProvider = com.resync.app.engine.provider.CalendarBackupProvider(context)
+    val mediaProvider = com.resync.app.engine.provider.MediaBackupProvider(context)
+    val documentProvider = com.resync.app.engine.provider.DocumentBackupProvider(context)
+    val applicationProvider = com.resync.app.engine.provider.ApplicationBackupProvider(context)
+    val smsProvider = com.resync.app.engine.provider.SmsBackupProvider(context)
+    val callLogProvider = com.resync.app.engine.provider.CallLogBackupProvider(context)
+    val settingsProvider = com.resync.app.engine.provider.SettingsBackupProvider(context)
+    val externalBackupProvider = com.resync.app.engine.provider.ExternalBackupProvider(context)
+
     private fun resolveDestinationDir(destinationDir: File?): File {
         val baseDir = try {
             context.getExternalFilesDir(null) ?: Environment.getExternalStorageDirectory() ?: File("/storage/emulated/0")

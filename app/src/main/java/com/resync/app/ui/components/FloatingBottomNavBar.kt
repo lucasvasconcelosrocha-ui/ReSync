@@ -56,7 +56,7 @@ fun FloatingBottomNavBar(
             NavItemData(
                 route = Screen.Dashboard.route,
                 title = "Início",
-                icon = Icons.Default.Home,
+                icon = Icons.Default.GridView,
                 onClick = onNavigateToDashboard
             ),
             NavItemData(
@@ -74,13 +74,13 @@ fun FloatingBottomNavBar(
             NavItemData(
                 route = Screen.CloudSync.route,
                 title = "Nuvem",
-                icon = Icons.Default.CloudQueue,
+                icon = Icons.Default.Sync,
                 onClick = onNavigateToCloud
             ),
             NavItemData(
                 route = Screen.Account.route,
                 title = "Conta",
-                icon = Icons.Default.Person,
+                icon = Icons.Default.AccountCircle,
                 onClick = onNavigateToSettings
             )
         )
@@ -104,8 +104,8 @@ fun FloatingBottomNavBar(
                     spotColor = primaryAccent.copy(alpha = 0.25f)
                 ),
             shape = RoundedCornerShape(24.dp),
-            color = DarkSurfaceVariant,
-            border = BorderStroke(1.dp, DarkCardBorder)
+            color = Color(0xFF0F131C),
+            border = BorderStroke(1.dp, Color(0xFF1E2530))
         ) {
             Row(
                 modifier = Modifier

@@ -636,6 +636,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val isAutoUpdateCheckEnabled: StateFlow<Boolean> = _isAutoUpdateCheckEnabled.asStateFlow()
 
     // Capability state
+    val capabilityDetector = com.resync.app.engine.BackupCapabilityDetector(application)
+    val permissionManager = com.resync.app.engine.BackupPermissionManager(application)
+    private val _capabilityMatrix = MutableStateFlow<com.resync.app.engine.BackupCapabilityDetector.CapabilityMatrix?>(null)
+    val capabilityMatrix: StateFlow<com.resync.app.engine.BackupCapabilityDetector.CapabilityMatrix?> = _capabilityMatrix.asStateFlow()
+
     private val _activeMode = MutableStateFlow(CapabilityManager.ExecutionMode.STANDARD)
     val activeMode: StateFlow<CapabilityManager.ExecutionMode> = _activeMode.asStateFlow()
 
@@ -744,6 +749,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         observeDatabaseChanges()
         checkForUpdateOnStartup()
         refreshNotificationStatus()
+        refreshCapabilities()
 
         viewModelScope.launch {
             installedApps.collectLatest { apps ->
@@ -926,9 +932,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         permissionsRepository.setHyperOsAutostartConfigured(configured)
     }
 
+    fun refreshCapabilities() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val isRoot = permissionsRepository.permissionsState.value.isRootGranted
+            val matrix = capabilityDetector.evaluateCapabilities(isRootExplicitlyGranted = isRoot)
+            _capabilityMatrix.value = matrix
+        }
+    }
+
     fun refreshRootStatus(forceNewShell: Boolean = false) {
         viewModelScope.launch(Dispatchers.IO) {
-            val isRoot = permissionsRepository.checkRoot(forceNewShell = forceNewShell)
+            val isRoot = permissionsRepository.checkRoot(forceNewShell = forceNewShell, isInteractive = false)
             val status = if (isRoot) CapabilityManager.RootStatus.AUTHORIZED else {
                 val hasBinary = capabilityManager.hasSuBinary()
                 val hasManager = capabilityManager.getInstalledRootManagers().isNotEmpty()
@@ -942,6 +956,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 CapabilityManager.ExecutionMode.STANDARD
             }
+            refreshCapabilities()
         }
     }
 
@@ -952,6 +967,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val granted = capabilityManager.requestRootAccess()
                 permissionsRepository.updateRootGranted(granted)
                 refreshRootStatus(forceNewShell = false)
+                refreshCapabilities()
                 withContext(Dispatchers.Main) {
                     onComplete?.invoke(granted)
                 }

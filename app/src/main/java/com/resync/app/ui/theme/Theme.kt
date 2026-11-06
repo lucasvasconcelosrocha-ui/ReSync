@@ -8,19 +8,25 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.resync.app.data.model.ThemeAccent
 
-// Deep Dark Palette
-val DarkBg = Color(0xFF0A0D14)
-val DarkSurface = Color(0xFF121824)
-val DarkSurfaceVariant = Color(0xFF1A2232)
-val DarkCardBorder = Color(0x28FFFFFF)
+// Deep Dark OLED Palette (100% Unificada)
+val DarkBg = Color(0xFF05070A)
+val DarkSurface = Color(0xFF0E121A)
+val DarkSurfaceVariant = Color(0xFF131822)
+val DarkCardBorder = Color(0xFF1F2633)
 val TextPrimary = Color(0xFFF1F5F9)
 val TextSecondary = Color(0xFF94A3B8)
 val TextMuted = Color(0xFF64748B)
 
-// Standard Card & Action Button Tokens (Padrão Unificado "Status do Root")
-val StandardCardBg = DarkSurfaceVariant.copy(alpha = 0.7f)
+// Standard Card & Action Button Tokens (Padrão Unificado)
+val StandardCardBg = DarkSurface
 val StandardCardBorder = DarkCardBorder
-val StandardCardShape = RoundedCornerShape(14.dp)
+val StandardCardShape = RoundedCornerShape(16.dp)
+
+// OLED Bento Tokens
+val BrandCoral = Color(0xFFFF3B47)
+val BentoCardBg = DarkSurface
+val BentoCardBgSecondary = DarkSurfaceVariant
+val BentoCardBorder = DarkCardBorder
 
 // Status Colors
 val StatusSuccess = Color(0xFF10B981)
@@ -66,16 +72,22 @@ fun ReSyncTheme(
     val colorScheme = darkColorScheme(
         primary = accentColor,
         onPrimary = Color.White,
-        primaryContainer = accentColor.copy(alpha = 0.25f),
+        primaryContainer = accentColor.copy(alpha = 0.20f),
         onPrimaryContainer = Color.White,
-        secondary = StatusAdvanced,
+        secondary = accentColor,
         onSecondary = Color.White,
+        secondaryContainer = accentColor.copy(alpha = 0.15f),
+        onSecondaryContainer = Color.White,
+        tertiary = StatusSuccess,
+        onTertiary = Color.White,
         background = DarkBg,
         onBackground = TextPrimary,
         surface = DarkSurface,
         onSurface = TextPrimary,
         surfaceVariant = DarkSurfaceVariant,
         onSurfaceVariant = TextSecondary,
+        outline = DarkCardBorder,
+        outlineVariant = DarkCardBorder,
         error = StatusError,
         onError = Color.White
     )

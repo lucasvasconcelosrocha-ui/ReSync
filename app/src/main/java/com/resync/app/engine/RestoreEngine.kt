@@ -534,6 +534,30 @@ class RestoreEngine(private val context: Context) {
                     BackupItemType.BLUETOOTH -> {
                         itemOutcome = restoreBluetooth(tempRestoreDir, item, selectedBtKeys)
                     }
+                    BackupItemType.CALENDAR -> {
+                        val calFile = File(tempRestoreDir, item.archiveEntryPath)
+                        if (calFile.exists() && calFile.length() > 0L) {
+                            val restored = com.resync.app.engine.provider.CalendarBackupProvider(context).restoreCalendarFromJson(calFile)
+                            itemOutcome = ItemRestoreOutcome(true, verified = true, detailCount = "$restored eventos", statusText = "$restored eventos restaurados")
+                        } else {
+                            itemOutcome = ItemRestoreOutcome(false, error = "Arquivo de calendário não encontrado: ${item.archiveEntryPath}", statusText = "Arquivo ausente")
+                        }
+                    }
+                    BackupItemType.MEDIA_IMAGES,
+                    BackupItemType.MEDIA_VIDEOS,
+                    BackupItemType.MEDIA_AUDIO -> {
+                        val restored = com.resync.app.engine.provider.MediaBackupProvider(context).restoreMediaItems(item.type, tempRestoreDir)
+                        itemOutcome = ItemRestoreOutcome(true, verified = true, detailCount = "$restored mídias", statusText = "$restored arquivos restaurados")
+                    }
+                    BackupItemType.SYSTEM_SETTINGS -> {
+                        val settingsFile = File(tempRestoreDir, item.archiveEntryPath)
+                        if (settingsFile.exists()) {
+                            val (autoRestored, manualReq) = com.resync.app.engine.provider.SettingsBackupProvider(context).restoreSettingsFromJson(settingsFile)
+                            itemOutcome = ItemRestoreOutcome(true, verified = true, detailCount = "$autoRestored aplicadas, $manualReq manuais", statusText = "Restaurado")
+                        } else {
+                            itemOutcome = ItemRestoreOutcome(false, error = "Arquivo de configurações ausente", statusText = "Arquivo ausente")
+                        }
+                    }
                     else -> {
                         itemOutcome = ItemRestoreOutcome(true, verified = true, detailCount = "1 de 1", statusText = "Concluído")
                     }

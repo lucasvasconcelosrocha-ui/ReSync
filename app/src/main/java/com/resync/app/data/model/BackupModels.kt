@@ -45,7 +45,25 @@ enum class BackupItemType {
     WALLPAPER_LOCK,
 
     @SerializedName("bluetooth")
-    BLUETOOTH
+    BLUETOOTH,
+
+    @SerializedName("media_images")
+    MEDIA_IMAGES,
+
+    @SerializedName("media_videos")
+    MEDIA_VIDEOS,
+
+    @SerializedName("media_audio")
+    MEDIA_AUDIO,
+
+    @SerializedName("calendar")
+    CALENDAR,
+
+    @SerializedName("system_settings")
+    SYSTEM_SETTINGS,
+
+    @SerializedName("external_backup")
+    EXTERNAL_BACKUP
 }
 
 /**
@@ -74,13 +92,66 @@ data class BluetoothBackupData(
 )
 
 /**
- * Contact record model for backup and restore
+ * Contact record model for backup and restore with full fields
  */
 data class ContactRecord(
     val id: String,
     val displayName: String,
     val phoneNumbers: List<String> = emptyList(),
-    val emails: List<String> = emptyList()
+    val emails: List<String> = emptyList(),
+    val postalAddresses: List<String> = emptyList(),
+    val organizations: List<String> = emptyList(),
+    val notes: String? = null,
+    val photoBase64: String? = null
+)
+
+/**
+ * Calendar record model for backup and restore
+ */
+data class CalendarRecord(
+    val id: Long = 0L,
+    val title: String,
+    val description: String? = null,
+    val eventLocation: String? = null,
+    val dtStart: Long,
+    val dtEnd: Long? = null,
+    val duration: String? = null,
+    val allDay: Boolean = false,
+    val eventTimezone: String? = null,
+    val rrule: String? = null,
+    val calendarDisplayName: String? = null,
+    val hasAlarm: Boolean = false,
+    val reminders: List<Int> = emptyList()
+)
+
+/**
+ * Media item record for MediaStore backups
+ */
+data class MediaItemRecord(
+    val id: Long,
+    val uriString: String,
+    val displayName: String,
+    val mimeType: String,
+    val sizeBytes: Long,
+    val dateModified: Long,
+    val relativePath: String? = null,
+    val width: Int = 0,
+    val height: Int = 0,
+    val durationMs: Long = 0L,
+    val artist: String? = null,
+    val album: String? = null,
+    val title: String? = null
+)
+
+/**
+ * System setting record for granular backup and restore
+ */
+data class SystemSettingItem(
+    val namespace: String, // "system", "global", "secure"
+    val name: String,
+    val value: String?,
+    val isRestorable: Boolean = true,
+    val description: String = ""
 )
 
 /**

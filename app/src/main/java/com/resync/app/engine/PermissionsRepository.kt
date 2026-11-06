@@ -28,6 +28,7 @@ data class PermissionsState(
     val hasMediaAudio: Boolean = false,
     val hasPostNotifications: Boolean = false,
     val hasContacts: Boolean = false,
+    val hasCalendar: Boolean = false,
     val hasSms: Boolean = false,
     val hasCalls: Boolean = false,
     val hasBluetoothConnect: Boolean = false,
@@ -42,7 +43,7 @@ data class PermissionsState(
         get() = hasAllFilesAccess
 
     val areAllRuntimeGranted: Boolean
-        get() = hasContacts && hasSms && hasCalls && hasPostNotifications
+        get() = hasContacts && hasCalendar && hasSms && hasCalls && hasPostNotifications
 }
 
 class PermissionsRepository(private val context: Context) {
@@ -98,6 +99,7 @@ class PermissionsRepository(private val context: Context) {
             }
 
             val hasContacts = checkPerm(Manifest.permission.READ_CONTACTS)
+            val hasCalendar = checkPerm(Manifest.permission.READ_CALENDAR)
             val hasSms = checkPerm(Manifest.permission.READ_SMS)
             val hasCalls = checkPerm(Manifest.permission.READ_CALL_LOG)
 
@@ -195,6 +197,7 @@ class PermissionsRepository(private val context: Context) {
                 hasMediaAudio = hasAudio,
                 hasPostNotifications = hasNotifications,
                 hasContacts = hasContacts,
+                hasCalendar = hasCalendar,
                 hasSms = hasSms,
                 hasCalls = hasCalls,
                 hasBluetoothConnect = hasBluetooth,
@@ -233,9 +236,23 @@ class PermissionsRepository(private val context: Context) {
 
     /**
      * Checagem limpa e segura de root com timeout de 5 segundos.
-     * Fecha shell em cache para evitar estados falsos congelados.
+     * Quando isInteractive = false (ex: inicialização do app), realiza checagem passiva
+     * sem disparar pop-up de Superusuário.
      */
-    suspend fun checkRoot(forceNewShell: Boolean = true): Boolean = withContext(Dispatchers.IO) {
+    suspend fun checkRoot(forceNewShell: Boolean = false, isInteractive: Boolean = false): Boolean = withContext(Dispatchers.IO) {
+        // Inicialização ou verificação passiva não disparam prompt superusuário
+        if (!isInteractive && !forceNewShell) {
+            val isPassiveGranted = try {
+                Shell.isAppGrantedRoot() == true
+            } catch (_: Throwable) {
+                false
+            }
+            if (!isPassiveGranted) {
+                updateRootGranted(false)
+                return@withContext false
+            }
+        }
+
         val result = withTimeoutOrNull(5000L) {
             try {
                 if (forceNewShell) {

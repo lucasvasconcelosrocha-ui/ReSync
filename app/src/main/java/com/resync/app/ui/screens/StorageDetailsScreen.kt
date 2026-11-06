@@ -102,6 +102,9 @@ fun StorageDetailsScreen(
     val installedApps by viewModel.installedApps.collectAsStateWithLifecycle()
     val isLoadingApps by viewModel.isLoadingInstalledApps.collectAsStateWithLifecycle()
     val totalAppCacheBytes by viewModel.totalAppCacheBytes.collectAsStateWithLifecycle()
+    val appCacheList by viewModel.appCacheList.collectAsStateWithLifecycle()
+    val analyzedCount by viewModel.cacheAnalyzedCount.collectAsStateWithLifecycle()
+    val totalAppsCount by viewModel.cacheTotalAppsCount.collectAsStateWithLifecycle()
 
     var isRefreshing by remember { mutableStateOf(false) }
 
@@ -217,9 +220,18 @@ fun StorageDetailsScreen(
         results.sortedByDescending { it.sizeBytes }
     }
 
-    // Top 10 aplicativos
+    // Top 5 e 10 aplicativos
     val topApps = remember(installedApps) {
         installedApps.sortedByDescending { it.sizeBytes }.take(10)
+    }
+    val top5Apps = remember(installedApps) {
+        installedApps.sortedByDescending { it.sizeBytes }.take(5)
+    }
+    val top5TotalBytes = remember(top5Apps) {
+        top5Apps.sumOf { it.sizeBytes }
+    }
+    val appsWithLargestCache = remember(appCacheList) {
+        appCacheList.filter { it.cacheBytes > 0 }.sortedByDescending { it.cacheBytes }.take(4)
     }
 
     suspend fun loadStorageMetrics() = withContext(Dispatchers.IO) {
@@ -322,40 +334,124 @@ fun StorageDetailsScreen(
                     .fillMaxWidth()
                     .background(DarkSurface)
                     .statusBarsPadding()
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onBack) {
-                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar", tint = TextPrimary)
-                    }
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Armazenamento do celular",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = TextPrimary
-                    )
-                }
-
-                IconButton(
-                    onClick = {
-                        isRefreshing = true
-                        coroutineScope.launch {
-                            loadStorageMetrics()
-                            isRefreshing = false
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = DarkSurfaceVariant,
+                        border = BorderStroke(1.dp, DarkCardBorder),
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clickable { onBack() }
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Voltar",
+                                tint = TextPrimary,
+                                modifier = Modifier.size(18.dp)
+                            )
                         }
                     }
-                ) {
-                    if (isRefreshing) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp), color = primaryAccent, strokeWidth = 2.dp)
-                    } else {
-                        Icon(Icons.Default.Refresh, contentDescription = "Atualizar", tint = primaryAccent)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = "Armazenamento",
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                            color = TextPrimary,
+                            fontSize = 18.sp
+                        )
+                        Text(
+                            text = "Memória interna do sistema",
+                            fontSize = 11.5.sp,
+                            color = TextSecondary
+                        )
+                    }
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Status pill "Saudável"
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = if (usedPercent < 90f) Color(0xFF0A2518) else Color(0xFF2A1515),
+                        border = BorderStroke(1.dp, if (usedPercent < 90f) Color(0xFF1B432E) else Color(0xFF4A2020))
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(if (usedPercent < 90f) Color(0xFF00E575) else StatusError)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (usedPercent < 90f) "Saudável" else "Atenção",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (usedPercent < 90f) Color(0xFF00E575) else StatusError
+                            )
+                        }
+                    }
+
+                    // Botão Atualizar
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = DarkSurfaceVariant,
+                        border = BorderStroke(1.dp, DarkCardBorder),
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clickable {
+                                isRefreshing = true
+                                coroutineScope.launch {
+                                    loadStorageMetrics()
+                                    viewModel.scanAppCache(force = true)
+                                    isRefreshing = false
+                                }
+                            }
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            if (isRefreshing) {
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color(0xFFFFA726), strokeWidth = 2.dp)
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "Atualizar",
+                                    tint = Color(0xFFFFA726),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
     ) { innerPadding ->
+        var showCategoryDetailsSection by rememberSaveable { mutableStateOf(false) }
+
+        val appsSum = remember(installedApps) { installedApps.sumOf { it.sizeBytes } }
+        val imagesCat = categories.find { it.name.equals("Imagens", ignoreCase = true) }?.sizeBytes ?: 0L
+        val videosCat = categories.find { it.name.equals("Vídeos", ignoreCase = true) }?.sizeBytes ?: 0L
+        val audioCat = categories.find { it.name.equals("Áudio", ignoreCase = true) }?.sizeBytes ?: 0L
+        val docsCat = categories.find { it.name.equals("Documentos", ignoreCase = true) }?.sizeBytes ?: 0L
+        val systemCat = categories.find { it.name.equals("Sistema", ignoreCase = true) }?.sizeBytes ?: 0L
+        val othersCat = categories.find { it.name.equals("Outros", ignoreCase = true) }?.sizeBytes ?: 0L
+        val mediaSum = imagesCat + videosCat
+
+        val appsPercent = if (totalStorageBytes > 0) ((appsSum.toFloat() / totalStorageBytes.toFloat()) * 100f) else 0f
+        val imagesPercent = if (totalStorageBytes > 0) ((imagesCat.toFloat() / totalStorageBytes.toFloat()) * 100f) else 0f
+        val videosPercent = if (totalStorageBytes > 0) ((videosCat.toFloat() / totalStorageBytes.toFloat()) * 100f) else 0f
+        val audioPercent = if (totalStorageBytes > 0) ((audioCat.toFloat() / totalStorageBytes.toFloat()) * 100f) else 0f
+        val docsPercent = if (totalStorageBytes > 0) ((docsCat.toFloat() / totalStorageBytes.toFloat()) * 100f) else 0f
+        val cachePercent = if (totalStorageBytes > 0) ((totalAppCacheBytes.toFloat() / totalStorageBytes.toFloat()) * 100f) else 0f
+        val systemPercent = if (totalStorageBytes > 0) ((systemCat.toFloat() / totalStorageBytes.toFloat()) * 100f) else 0f
+        val othersPercent = if (totalStorageBytes > 0) ((othersCat.toFloat() / totalStorageBytes.toFloat()) * 100f) else 0f
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -364,14 +460,14 @@ fun StorageDetailsScreen(
                 .padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
             // ==========================================
-            // 1) GRÁFICO CIRCULAR / DONUT ANIMADO
+            // 1) GRÁFICO CIRCULAR / DONUT ANIMADO (FOTO 1)
             // ==========================================
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(18.dp))
-                    .border(1.dp, DarkCardBorder, RoundedCornerShape(18.dp)),
-                colors = CardDefaults.cardColors(containerColor = DarkSurfaceVariant)
+                    .clip(RoundedCornerShape(20.dp))
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(20.dp)),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Column(
                     modifier = Modifier
@@ -380,535 +476,782 @@ fun StorageDetailsScreen(
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Box(
-                        modifier = Modifier.size(160.dp),
+                        modifier = Modifier.size(175.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize().padding(12.dp)) {
+                        androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize().padding(14.dp)) {
+                            // Trilho de fundo
                             drawArc(
-                                color = DarkBg,
+                                color = Color(0xFF1B2436),
                                 startAngle = -90f,
                                 sweepAngle = 360f,
                                 useCenter = false,
-                                style = Stroke(width = 16.dp.toPx(), cap = StrokeCap.Round)
+                                style = Stroke(width = 15.dp.toPx(), cap = StrokeCap.Round)
                             )
+                            // Arco animado de progresso (Laranja brilhante)
                             drawArc(
-                                color = primaryAccent,
+                                color = Color(0xFFFF7A00),
                                 startAngle = -90f,
                                 sweepAngle = animatedProgress * 360f,
                                 useCenter = false,
-                                style = Stroke(width = 16.dp.toPx(), cap = StrokeCap.Round)
+                                style = Stroke(width = 15.dp.toPx(), cap = StrokeCap.Round)
                             )
                         }
 
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
                                 text = String.format(Locale("pt", "BR"), "%.1f%%", usedPercent),
-                                fontSize = 26.sp,
+                                fontSize = 28.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = TextPrimary
                             )
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Usado",
-                                fontSize = 12.sp,
+                                text = "ESPAÇO USADO",
+                                fontSize = 10.5.sp,
                                 color = TextSecondary,
-                                fontWeight = FontWeight.Medium
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.2.sp
                             )
                         }
                     }
 
                     Spacer(modifier = Modifier.height(16.dp))
 
+                    // Barra segmentada multicolorida
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(Color(0xFF1B2436))
+                    ) {
+                        if (usedStorageBytes > 0L) {
+                            val wApps = (appsSum.toFloat() / usedStorageBytes.toFloat()).coerceIn(0.02f, 1f)
+                            val wMedia = (mediaSum.toFloat() / usedStorageBytes.toFloat()).coerceIn(0.02f, 1f)
+                            val wDocs = (docsCat.toFloat() / usedStorageBytes.toFloat()).coerceIn(0.01f, 1f)
+                            val wSys = (systemCat.toFloat() / usedStorageBytes.toFloat()).coerceIn(0.01f, 1f)
+
+                            Box(modifier = Modifier.weight(wApps).fillMaxHeight().background(Color(0xFF00D2FF)))
+                            Box(modifier = Modifier.weight(wMedia).fillMaxHeight().background(Color(0xFF00E575)))
+                            Box(modifier = Modifier.weight(wDocs).fillMaxHeight().background(Color(0xFFFFB300)))
+                            Box(modifier = Modifier.weight(wSys).fillMaxHeight().background(Color(0xFF64748B)))
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(18.dp))
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Usado", fontSize = 11.5.sp, color = TextMuted)
-                            Text(FormatUtils.formatBytes(usedStorageBytes), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = primaryAccent)
+                            Text("USADO", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = TextMuted)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(FormatUtils.formatBytes(usedStorageBytes), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFA726))
                         }
-                        VerticalDivider(modifier = Modifier.height(30.dp), color = DarkCardBorder)
+                        VerticalDivider(modifier = Modifier.height(32.dp), color = Color(0xFF1E283D))
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Livre", fontSize = 11.5.sp, color = TextMuted)
-                            Text(FormatUtils.formatBytes(freeStorageBytes), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = AccentEmeraldGreen)
+                            Text("LIVRE", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = TextMuted)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(FormatUtils.formatBytes(freeStorageBytes), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color(0xFF00E575))
                         }
-                        VerticalDivider(modifier = Modifier.height(30.dp), color = DarkCardBorder)
+                        VerticalDivider(modifier = Modifier.height(32.dp), color = Color(0xFF1E283D))
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Total", fontSize = 11.5.sp, color = TextMuted)
-                            Text(FormatUtils.formatBytes(totalStorageBytes), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                            Text("TOTAL", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = TextMuted)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(FormatUtils.formatBytes(totalStorageBytes), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
             // ==========================================
-            // 2) BARRA DE CATEGORIAS COLORIDA CONTÍNUA
+            // 2) CARD RÁPIDO: LIMPEZA DE CACHE (FOTO 1)
             // ==========================================
-            Text(
-                text = "DIVISÃO POR CATEGORIA",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp,
-                color = TextSecondary,
-                modifier = Modifier.padding(start = 2.dp, bottom = 8.dp)
-            )
-
+            val totalDisplay = if (totalAppsCount > 0) totalAppsCount else installedApps.size
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
-                    .border(1.dp, DarkCardBorder, RoundedCornerShape(16.dp)),
-                colors = CardDefaults.cardColors(containerColor = DarkSurfaceVariant)
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp)),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    // Barra contínua colorida
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(12.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(DarkBg)
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
                     ) {
-                        if (usedStorageBytes > 0L) {
-                            categories.forEach { cat ->
-                                if (cat.sizeBytes > 0L) {
-                                    val weight = (cat.sizeBytes.toFloat() / usedStorageBytes.toFloat()).coerceIn(0.01f, 1f)
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(weight)
-                                            .fillMaxHeight()
-                                            .background(cat.color)
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CleaningServices,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "Limpeza de Cache",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextPrimary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+                                ) {
+                                    Text(
+                                        text = FormatUtils.formatBytes(totalAppCacheBytes),
+                                        fontSize = 10.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                     )
                                 }
                             }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "$analyzedCount de $totalDisplay apps analisados",
+                                fontSize = 11.sp,
+                                color = TextMuted
+                            )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
 
-                    // Lista detalhada de cada categoria
-                    categories.forEachIndexed { index, cat ->
-                        if (index > 0) {
-                            HorizontalDivider(color = DarkCardBorder.copy(alpha = 0.5f), modifier = Modifier.padding(vertical = 4.dp))
-                        }
-
-                        val isExpandableCategory = cat.name.lowercase() in listOf("aplicativos", "imagens", "vídeos", "áudio", "documentos", "outros")
-                        val isExpanded = isExpandableCategory && expandedCategories.contains(cat.name)
-
-                        val arrowRotation by animateFloatAsState(
-                            targetValue = if (isExpanded) 90f else 0f,
-                            animationSpec = tween(durationMillis = 250),
-                            label = "chevron_rot_${cat.name}"
+                    Button(
+                        onClick = onNavigateToStorageCache,
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                        modifier = Modifier.height(36.dp)
+                    ) {
+                        Text(
+                            text = "Limpar tudo",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
                         )
+                    }
+                }
+            }
 
-                        Column(modifier = Modifier.fillMaxWidth()) {
+            Spacer(modifier = Modifier.height(18.dp))
+
+            // ==========================================
+            // 3) DIVISÃO POR CATEGORIA (BENTO GRID 2x2 - FOTO 1)
+            // ==========================================
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 2.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "DIVISÃO POR CATEGORIA",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.8.sp,
+                    color = TextSecondary
+                )
+                Text(
+                    text = if (showCategoryDetailsSection) "Ocultar" else "Ver detalhes",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFF00E5FF),
+                    modifier = Modifier.clickable {
+                        showCategoryDetailsSection = !showCategoryDetailsSection
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Bento Grid 4x2 com as 8 categorias unificadas (FOTO 1)
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Linha 1: Aplicativos e Imagens
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // Card 1: Aplicativos
+                    Card(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(16.dp))
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
+                            .clickable {
+                                expandedCategories = if ("Aplicativos" in expandedCategories) emptySet() else setOf("Aplicativos")
+                            },
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .clickable {
-                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        if (isExpandableCategory) {
-                                            if (isExpanded) {
-                                                expandedCategories = expandedCategories - cat.name
-                                            } else {
-                                                expandedCategories = expandedCategories + cat.name
-                                                if (cat.name.lowercase() != "aplicativos") {
-                                                    if (visibleCountMap[cat.name] == null) {
-                                                        visibleCountMap = visibleCountMap + (cat.name to 10)
-                                                    }
-                                                    if (categoryFilesMap[cat.name] == null) {
-                                                        coroutineScope.launch {
-                                                            isLoadingCategoryFiles = true
-                                                            val files = queryCategoryFiles(cat.name)
-                                                            categoryFilesMap = categoryFilesMap + (cat.name to files)
-                                                            isLoadingCategoryFiles = false
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        } else {
-                                            when (cat.name.lowercase()) {
-                                                "cache" -> onNavigateToStorageCache()
-                                                "sistema" -> onNavigateToStorageSystem()
-                                                else -> onNavigateToFiles()
-                                            }
-                                        }
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(Color(0xFF00D2FF).copy(alpha = 0.15f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.Apps, contentDescription = null, tint = Color(0xFF00D2FF), modifier = Modifier.size(20.dp))
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = Color(0xFF00D2FF).copy(alpha = 0.12f),
+                                    border = BorderStroke(0.5.dp, Color(0xFF00D2FF).copy(alpha = 0.35f))
+                                ) {
+                                    Text("Maior uso", fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF00D2FF), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text("Aplicativos", fontSize = 12.sp, color = TextSecondary)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.Bottom,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(FormatUtils.formatBytes(appsSum), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                Text(String.format(Locale("pt", "BR"), "%.1f%%", appsPercent), fontSize = 11.sp, color = TextMuted)
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Box(modifier = Modifier.fillMaxWidth(0.85f).height(3.5.dp).clip(RoundedCornerShape(2.dp)).background(Color(0xFF00D2FF)))
+                        }
+                    }
+
+                    // Card 2: Imagens
+                    Card(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(16.dp))
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
+                            .clickable {
+                                val catName = "Imagens"
+                                expandedCategories = if (catName in expandedCategories) emptySet() else setOf(catName)
+                                if (catName in expandedCategories && categoryFilesMap[catName] == null) {
+                                    coroutineScope.launch {
+                                        isLoadingCategoryFiles = true
+                                        val files = queryCategoryFiles(catName)
+                                        categoryFilesMap = categoryFilesMap + (catName to files)
+                                        isLoadingCategoryFiles = false
                                     }
-                                    .padding(vertical = 8.dp, horizontal = 4.dp),
+                                }
+                            },
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(Color(0xFF00E575).copy(alpha = 0.15f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.PhotoLibrary, contentDescription = null, tint = Color(0xFF00E575), modifier = Modifier.size(20.dp))
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = Color(0xFF00E575).copy(alpha = 0.12f),
+                                    border = BorderStroke(0.5.dp, Color(0xFF00E575).copy(alpha = 0.35f))
+                                ) {
+                                    Text("Fotos", fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF00E575), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text("Imagens", fontSize = 12.sp, color = TextSecondary)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.Bottom,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(FormatUtils.formatBytes(imagesCat), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                Text(String.format(Locale("pt", "BR"), "%.1f%%", imagesPercent), fontSize = 11.sp, color = TextMuted)
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Box(modifier = Modifier.fillMaxWidth(0.6f).height(3.5.dp).clip(RoundedCornerShape(2.dp)).background(Color(0xFF00E575)))
+                        }
+                    }
+                }
+
+                // Linha 2: Vídeos e Áudio
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // Card 3: Vídeos
+                    Card(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(16.dp))
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
+                            .clickable {
+                                val catName = "Vídeos"
+                                expandedCategories = if (catName in expandedCategories) emptySet() else setOf(catName)
+                                if (catName in expandedCategories && categoryFilesMap[catName] == null) {
+                                    coroutineScope.launch {
+                                        isLoadingCategoryFiles = true
+                                        val files = queryCategoryFiles(catName)
+                                        categoryFilesMap = categoryFilesMap + (catName to files)
+                                        isLoadingCategoryFiles = false
+                                    }
+                                }
+                            },
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(Color(0xFF818CF8).copy(alpha = 0.15f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.VideoLibrary, contentDescription = null, tint = Color(0xFF818CF8), modifier = Modifier.size(20.dp))
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = Color(0xFF818CF8).copy(alpha = 0.12f),
+                                    border = BorderStroke(0.5.dp, Color(0xFF818CF8).copy(alpha = 0.35f))
+                                ) {
+                                    Text("Vídeos HD", fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF818CF8), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text("Vídeos", fontSize = 12.sp, color = TextSecondary)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.Bottom,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(FormatUtils.formatBytes(videosCat), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                Text(String.format(Locale("pt", "BR"), "%.1f%%", videosPercent), fontSize = 11.sp, color = TextMuted)
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Box(modifier = Modifier.fillMaxWidth(0.45f).height(3.5.dp).clip(RoundedCornerShape(2.dp)).background(Color(0xFF818CF8)))
+                        }
+                    }
+
+                    // Card 4: Áudio
+                    Card(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(16.dp))
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
+                            .clickable {
+                                val catName = "Áudio"
+                                expandedCategories = if (catName in expandedCategories) emptySet() else setOf(catName)
+                                if (catName in expandedCategories && categoryFilesMap[catName] == null) {
+                                    coroutineScope.launch {
+                                        isLoadingCategoryFiles = true
+                                        val files = queryCategoryFiles(catName)
+                                        categoryFilesMap = categoryFilesMap + (catName to files)
+                                        isLoadingCategoryFiles = false
+                                    }
+                                }
+                            },
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(Color(0xFFF59E0B).copy(alpha = 0.15f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.Audiotrack, contentDescription = null, tint = Color(0xFFF59E0B), modifier = Modifier.size(20.dp))
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = Color(0xFFF59E0B).copy(alpha = 0.12f),
+                                    border = BorderStroke(0.5.dp, Color(0xFFF59E0B).copy(alpha = 0.35f))
+                                ) {
+                                    Text("Músicas", fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFFF59E0B), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text("Áudio", fontSize = 12.sp, color = TextSecondary)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.Bottom,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(FormatUtils.formatBytes(audioCat), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                Text(String.format(Locale("pt", "BR"), "%.1f%%", audioPercent), fontSize = 11.sp, color = TextMuted)
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Box(modifier = Modifier.fillMaxWidth(0.35f).height(3.5.dp).clip(RoundedCornerShape(2.dp)).background(Color(0xFFF59E0B)))
+                        }
+                    }
+                }
+
+                // Linha 3: Documentos e Cache
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // Card 5: Documentos
+                    Card(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(16.dp))
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
+                            .clickable {
+                                val catName = "Documentos"
+                                expandedCategories = if (catName in expandedCategories) emptySet() else setOf(catName)
+                                if (catName in expandedCategories && categoryFilesMap[catName] == null) {
+                                    coroutineScope.launch {
+                                        isLoadingCategoryFiles = true
+                                        val files = queryCategoryFiles(catName)
+                                        categoryFilesMap = categoryFilesMap + (catName to files)
+                                        isLoadingCategoryFiles = false
+                                    }
+                                }
+                            },
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(Color(0xFFFFB300).copy(alpha = 0.15f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.Description, contentDescription = null, tint = Color(0xFFFFB300), modifier = Modifier.size(20.dp))
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = Color(0xFFFFB300).copy(alpha = 0.12f),
+                                    border = BorderStroke(0.5.dp, Color(0xFFFFB300).copy(alpha = 0.35f))
+                                ) {
+                                    Text("PDF/Docs", fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFFFFB300), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text("Documentos", fontSize = 12.sp, color = TextSecondary)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.Bottom,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(FormatUtils.formatBytes(docsCat), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                Text(String.format(Locale("pt", "BR"), "%.1f%%", docsPercent), fontSize = 11.sp, color = TextMuted)
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Box(modifier = Modifier.fillMaxWidth(0.35f).height(3.5.dp).clip(RoundedCornerShape(2.dp)).background(Color(0xFFFFB300)))
+                        }
+                    }
+
+                    // Card 6: Cache
+                    Card(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(16.dp))
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
+                            .clickable { onNavigateToStorageCache() },
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.CleaningServices, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+                                ) {
+                                    Text("Temporário", fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text("Cache", fontSize = 12.sp, color = TextSecondary)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.Bottom,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(FormatUtils.formatBytes(totalAppCacheBytes), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                Text(String.format(Locale("pt", "BR"), "%.1f%%", cachePercent), fontSize = 11.sp, color = TextMuted)
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Box(modifier = Modifier.fillMaxWidth(0.25f).height(3.5.dp).clip(RoundedCornerShape(2.dp)).background(MaterialTheme.colorScheme.primary))
+                        }
+                    }
+                }
+
+                // Linha 4: Sistema e Outros
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // Card 7: Sistema
+                    Card(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(16.dp))
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
+                            .clickable { onNavigateToStorageSystem() },
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(Color(0xFF64748B).copy(alpha = 0.15f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.Memory, contentDescription = null, tint = Color(0xFF64748B), modifier = Modifier.size(20.dp))
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = Color(0xFF64748B).copy(alpha = 0.12f),
+                                    border = BorderStroke(0.5.dp, Color(0xFF64748B).copy(alpha = 0.35f))
+                                ) {
+                                    Text("Kernel/Base", fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF94A3B8), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text("Sistema", fontSize = 12.sp, color = TextSecondary)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.Bottom,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(FormatUtils.formatBytes(systemCat), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                Text(String.format(Locale("pt", "BR"), "%.1f%%", systemPercent), fontSize = 11.sp, color = TextMuted)
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Box(modifier = Modifier.fillMaxWidth(0.2f).height(3.5.dp).clip(RoundedCornerShape(2.dp)).background(Color(0xFF64748B)))
+                        }
+                    }
+
+                    // Card 8: Outros
+                    Card(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(16.dp))
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
+                            .clickable {
+                                val catName = "Outros"
+                                expandedCategories = if (catName in expandedCategories) emptySet() else setOf(catName)
+                                if (catName in expandedCategories && categoryFilesMap[catName] == null) {
+                                    coroutineScope.launch {
+                                        isLoadingCategoryFiles = true
+                                        val files = queryCategoryFiles(catName)
+                                        categoryFilesMap = categoryFilesMap + (catName to files)
+                                        isLoadingCategoryFiles = false
+                                    }
+                                }
+                            },
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(Color(0xFF94A3B8).copy(alpha = 0.15f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(Icons.Default.FolderOpen, contentDescription = null, tint = Color(0xFF94A3B8), modifier = Modifier.size(20.dp))
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = Color(0xFF94A3B8).copy(alpha = 0.12f),
+                                    border = BorderStroke(0.5.dp, Color(0xFF94A3B8).copy(alpha = 0.35f))
+                                ) {
+                                    Text("Arquivos", fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF94A3B8), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text("Outros", fontSize = 12.sp, color = TextSecondary)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.Bottom,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(FormatUtils.formatBytes(othersCat), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                Text(String.format(Locale("pt", "BR"), "%.1f%%", othersPercent), fontSize = 11.sp, color = TextMuted)
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Box(modifier = Modifier.fillMaxWidth(0.18f).height(3.5.dp).clip(RoundedCornerShape(2.dp)).background(Color(0xFF94A3B8)))
+                        }
+                    }
+                }
+            }
+
+            // Seção Expansível Detalhada de Arquivos / Categoria Selecionada (Substitui lista duplicada)
+            AnimatedVisibility(visible = expandedCategories.isNotEmpty()) {
+                val selectedCatName = expandedCategories.firstOrNull() ?: ""
+                val catObj = categories.find { it.name.equals(selectedCatName, ignoreCase = true) }
+                Column(modifier = Modifier.fillMaxWidth().padding(top = 14.dp)) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp)),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(10.dp)
-                                            .clip(CircleShape)
-                                            .background(cat.color)
+                                    Icon(
+                                        imageVector = catObj?.icon ?: Icons.Default.Folder,
+                                        contentDescription = null,
+                                        tint = catObj?.color ?: MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Icon(imageVector = cat.icon, contentDescription = null, tint = cat.color, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = cat.name,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = TextPrimary
-                                    )
-                                }
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    val sizeDisplay = if (cat.name.equals("aplicativos", ignoreCase = true) && cat.sizeBytes == 0L) {
-                                        "Calculando..."
-                                    } else {
-                                        FormatUtils.formatBytes(cat.sizeBytes)
-                                    }
-                                    Text(
-                                        text = sizeDisplay,
-                                        fontSize = 13.sp,
+                                        text = "Arquivos em $selectedCatName",
+                                        fontSize = 13.5.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = TextPrimary
                                     )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Icon(
-                                        imageVector = Icons.Default.ChevronRight,
-                                        contentDescription = null,
-                                        tint = if (isExpanded) primaryAccent else TextMuted,
-                                        modifier = Modifier
-                                            .size(16.dp)
-                                            .graphicsLayer(rotationZ = arrowRotation)
-                                    )
+                                }
+                                IconButton(
+                                    onClick = { expandedCategories = emptySet() },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(Icons.Default.Close, contentDescription = "Fechar", tint = TextMuted, modifier = Modifier.size(16.dp))
                                 }
                             }
-
-                            // Conteúdo Expandido no próprio lugar
-                            AnimatedVisibility(
-                                visible = isExpanded,
-                                enter = expandVertically() + fadeIn(),
-                                exit = shrinkVertically() + fadeOut()
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 8.dp)
-                                ) {
-                                    if (cat.name.lowercase() == "aplicativos") {
-                                        // Chips de filtro no topo da lista: Usuário, Sistema e Todos
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(bottom = 10.dp),
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                        ) {
-                                            val filters = listOf(
-                                                Triple("USER", "Usuário", installedApps.count { !it.isSystemApp }),
-                                                Triple("SYSTEM", "Sistema", installedApps.count { it.isSystemApp }),
-                                                Triple("ALL", "Todos", installedApps.size)
-                                            )
-                                            filters.forEach { (key, label, count) ->
-                                                val selected = appsFilter == key
-                                                Surface(
-                                                    shape = RoundedCornerShape(8.dp),
-                                                    color = if (selected) cat.color.copy(alpha = 0.18f) else DarkBg,
-                                                    border = BorderStroke(1.dp, if (selected) cat.color else DarkCardBorder),
-                                                    modifier = Modifier
-                                                        .weight(1f)
-                                                        .height(34.dp)
-                                                        .clickable { appsFilter = key }
-                                                ) {
-                                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                                        Text(
-                                                            text = "$label ($count)",
-                                                            fontSize = 11.sp,
-                                                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                                                            color = if (selected) cat.color else TextSecondary,
-                                                            maxLines = 1
-                                                        )
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        val filteredSortedApps = remember(installedApps, appsFilter) {
-                                            val list = when (appsFilter) {
-                                                "USER" -> installedApps.filter { !it.isSystemApp }
-                                                "SYSTEM" -> installedApps.filter { it.isSystemApp }
-                                                else -> installedApps
-                                            }
-                                            list.sortedByDescending { it.sizeBytes }
-                                        }
-
-                                        val appsListState = rememberSaveable(saver = LazyListState.Saver) { LazyListState() }
-
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .heightIn(max = 320.dp)
-                                        ) {
-                                            if (isLoadingApps && filteredSortedApps.isEmpty()) {
-                                                Box(
-                                                    modifier = Modifier.fillMaxWidth().padding(24.dp),
-                                                    contentAlignment = Alignment.Center
-                                                ) {
-                                                    CircularProgressIndicator(modifier = Modifier.size(20.dp), color = cat.color, strokeWidth = 2.dp)
-                                                }
-                                            } else if (filteredSortedApps.isEmpty()) {
-                                                Box(
-                                                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                                                    contentAlignment = Alignment.Center
-                                                ) {
-                                                    Text("Nenhum aplicativo encontrado.", fontSize = 11.5.sp, color = TextMuted)
-                                                }
-                                            } else {
-                                                LazyColumn(
-                                                    state = appsListState,
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .heightIn(max = 320.dp),
-                                                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                                                ) {
-                                                    items(filteredSortedApps, key = { it.packageName }) { app ->
-                                                        Card(
-                                                            modifier = Modifier
-                                                                .fillMaxWidth()
-                                                                .clip(RoundedCornerShape(10.dp))
-                                                                .border(1.dp, DarkCardBorder, RoundedCornerShape(10.dp))
-                                                                .clickable { onNavigateToAppDetail(app) },
-                                                            colors = CardDefaults.cardColors(containerColor = DarkSurface)
-                                                        ) {
-                                                            Row(
-                                                                modifier = Modifier
-                                                                    .fillMaxWidth()
-                                                                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                                                                verticalAlignment = Alignment.CenterVertically
-                                                            ) {
-                                                                RealAppIcon(
-                                                                    packageName = app.packageName,
-                                                                    size = 36.dp
-                                                                )
-                                                                Spacer(modifier = Modifier.width(10.dp))
-                                                                Column(modifier = Modifier.weight(1f)) {
-                                                                    Text(
-                                                                        text = app.appName,
-                                                                        fontSize = 12.5.sp,
-                                                                        fontWeight = FontWeight.SemiBold,
-                                                                        color = TextPrimary,
-                                                                        maxLines = 1,
-                                                                        overflow = TextOverflow.Ellipsis
-                                                                    )
-                                                                    Text(
-                                                                        text = app.packageName,
-                                                                        fontSize = 10.sp,
-                                                                        color = TextMuted,
-                                                                        maxLines = 1,
-                                                                        overflow = TextOverflow.Ellipsis
-                                                                    )
-                                                                }
-                                                                Spacer(modifier = Modifier.width(8.dp))
-                                                                val sizeStr = if (app.sizeBytes == 0L && isLoadingApps) {
-                                                                    "Calculando..."
-                                                                } else {
-                                                                    FormatUtils.formatBytes(app.sizeBytes)
-                                                                }
-                                                                Text(
-                                                                    text = sizeStr,
-                                                                    fontSize = 11.5.sp,
-                                                                    fontWeight = FontWeight.Bold,
-                                                                    color = cat.color
-                                                                )
-                                                                Spacer(modifier = Modifier.width(4.dp))
-                                                                Icon(
-                                                                    imageVector = Icons.Default.ChevronRight,
-                                                                    contentDescription = null,
-                                                                    tint = TextMuted,
-                                                                    modifier = Modifier.size(14.dp)
-                                                                )
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        Spacer(modifier = Modifier.height(6.dp))
-                                        OutlinedButton(
-                                            onClick = { expandedCategories = expandedCategories - cat.name },
-                                            modifier = Modifier.fillMaxWidth().height(32.dp),
-                                            shape = RoundedCornerShape(8.dp),
-                                            border = BorderStroke(1.dp, DarkCardBorder),
-                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                                        ) {
-                                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = null, tint = TextMuted, modifier = Modifier.size(14.dp))
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text("Recolher", fontSize = 11.sp, color = TextSecondary)
-                                        }
-                                    } else {
-                                        val files = categoryFilesMap[cat.name]
-                                    if (isLoadingCategoryFiles && files == null) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(vertical = 20.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = cat.color, strokeWidth = 2.dp)
-                                                Spacer(modifier = Modifier.width(10.dp))
-                                                Text("Localizando arquivos...", fontSize = 11.5.sp, color = TextMuted)
-                                            }
-                                        }
-                                    } else if (files.isNullOrEmpty()) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(vertical = 12.dp),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            Text("Nenhum arquivo encontrado nesta categoria.", fontSize = 11.5.sp, color = TextMuted)
-                                        }
-                                    } else {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .heightIn(max = 320.dp)
-                                        ) {
-                                            val categoryListState = rememberSaveable(cat.name, saver = LazyListState.Saver) { LazyListState() }
-                                            LazyColumn(
-                                                state = categoryListState,
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .heightIn(max = 320.dp)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Column(modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
+                                if (selectedCatName.lowercase() == "aplicativos") {
+                                    val filteredSortedApps = remember(installedApps, appsFilter) {
+                                        when (appsFilter) {
+                                            "USER" -> installedApps.filter { !it.isSystemApp }
+                                            "SYSTEM" -> installedApps.filter { it.isSystemApp }
+                                            else -> installedApps
+                                        }.sortedByDescending { it.sizeBytes }
+                                    }
+                                    LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        items(filteredSortedApps.take(15), key = { it.packageName }) { app ->
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth().clickable { onNavigateToAppDetail(app) }.padding(vertical = 4.dp),
+                                                verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                itemsIndexed(files, key = { _, fileItem -> fileItem.path }) { fIdx, fileItem ->
-                                                    if (fIdx > 0) {
-                                                        HorizontalDivider(color = DarkCardBorder.copy(alpha = 0.3f), modifier = Modifier.padding(vertical = 2.dp))
-                                                    }
-                                                    Row(
-                                                        modifier = Modifier
-                                                            .fillMaxWidth()
-                                                            .padding(vertical = 6.dp),
-                                                        verticalAlignment = Alignment.CenterVertically
-                                                    ) {
-                                                        Box(
-                                                            modifier = Modifier
-                                                                .size(36.dp)
-                                                                .clip(RoundedCornerShape(8.dp))
-                                                                .background(cat.color.copy(alpha = 0.12f)),
-                                                            contentAlignment = Alignment.Center
-                                                        ) {
-                                                            Icon(imageVector = cat.icon, contentDescription = null, tint = cat.color, modifier = Modifier.size(18.dp))
-                                                        }
-                                                        Spacer(modifier = Modifier.width(10.dp))
-                                                        Column(modifier = Modifier.weight(1f)) {
-                                                            Text(
-                                                                text = fileItem.name,
-                                                                fontSize = 12.sp,
-                                                                fontWeight = FontWeight.SemiBold,
-                                                                color = TextPrimary,
-                                                                maxLines = 1,
-                                                                overflow = TextOverflow.Ellipsis
-                                                            )
-                                                            Row(
-                                                                modifier = Modifier.fillMaxWidth(),
-                                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                                                verticalAlignment = Alignment.CenterVertically
-                                                            ) {
-                                                                Text(
-                                                                    text = FormatUtils.formatBytes(fileItem.sizeBytes),
-                                                                    fontSize = 11.sp,
-                                                                    color = cat.color,
-                                                                    fontWeight = FontWeight.Medium
-                                                                )
-                                                                Text("•", fontSize = 9.sp, color = TextMuted)
-                                                                Text(
-                                                                    text = fileItem.parentFolder,
-                                                                    fontSize = 10.5.sp,
-                                                                    color = TextSecondary,
-                                                                    maxLines = 1,
-                                                                    overflow = TextOverflow.Ellipsis,
-                                                                    modifier = Modifier.weight(1f, fill = false)
-                                                                )
-                                                                Text("•", fontSize = 9.sp, color = TextMuted)
-                                                                Text(
-                                                                    text = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(fileItem.lastModified)),
-                                                                    fontSize = 10.sp,
-                                                                    color = TextMuted
-                                                                )
-                                                            }
-                                                        }
-                                                        Box {
-                                                            var menuOpen by remember { mutableStateOf(false) }
-                                                            IconButton(
-                                                                onClick = { menuOpen = true },
-                                                                modifier = Modifier.size(32.dp)
-                                                            ) {
-                                                                Icon(Icons.Default.MoreVert, contentDescription = "Opções", tint = TextMuted, modifier = Modifier.size(16.dp))
-                                                            }
-                                                            DropdownMenu(
-                                                                expanded = menuOpen,
-                                                                onDismissRequest = { menuOpen = false },
-                                                                modifier = Modifier.background(DarkSurfaceVariant)
-                                                            ) {
-                                                                DropdownMenuItem(
-                                                                    text = { Text("Compartilhar", fontSize = 12.sp, color = TextPrimary) },
-                                                                    leadingIcon = { Icon(Icons.Default.Share, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(16.dp)) },
-                                                                    onClick = {
-                                                                        menuOpen = false
-                                                                        try {
-                                                                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                                                                type = "*/*"
-                                                                                val uri = try {
-                                                                                    FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", fileItem.file)
-                                                                                } catch (_: Exception) {
-                                                                                    Uri.fromFile(fileItem.file)
-                                                                                }
-                                                                                putExtra(Intent.EXTRA_STREAM, uri)
-                                                                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                                                            }
-                                                                            context.startActivity(Intent.createChooser(shareIntent, "Compartilhar ${fileItem.name}"))
-                                                                        } catch (_: Exception) {
-                                                                            Toast.makeText(context, "Não foi possível compartilhar o arquivo", Toast.LENGTH_SHORT).show()
-                                                                        }
-                                                                    }
-                                                                )
-                                                                DropdownMenuItem(
-                                                                    text = { Text("Backup", fontSize = 12.sp, color = TextPrimary) },
-                                                                    leadingIcon = { Icon(Icons.Default.Save, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(16.dp)) },
-                                                                    onClick = {
-                                                                        menuOpen = false
-                                                                        fileForBackup = fileItem
-                                                                        showBackupChoiceDialog = true
-                                                                    }
-                                                                )
-                                                                DropdownMenuItem(
-                                                                    text = { Text("Excluir", fontSize = 12.sp, color = StatusError) },
-                                                                    leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = StatusError, modifier = Modifier.size(16.dp)) },
-                                                                    onClick = {
-                                                                        menuOpen = false
-                                                                        fileToDelete = fileItem
-                                                                    }
-                                                                )
-                                                            }
-                                                        }
-                                                    }
+                                                RealAppIcon(packageName = app.packageName, size = 32.dp)
+                                                Spacer(modifier = Modifier.width(10.dp))
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(text = app.appName, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                    Text(text = app.packageName, fontSize = 9.5.sp, color = TextMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                                 }
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text(text = FormatUtils.formatBytes(app.sizeBytes), fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = catObj?.color ?: MaterialTheme.colorScheme.primary)
                                             }
-                                        }
-
-                                        Spacer(modifier = Modifier.height(6.dp))
-                                        OutlinedButton(
-                                            onClick = { expandedCategories = expandedCategories - cat.name },
-                                            modifier = Modifier.fillMaxWidth().height(32.dp),
-                                            shape = RoundedCornerShape(8.dp),
-                                            border = BorderStroke(1.dp, DarkCardBorder),
-                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                                        ) {
-                                            Icon(Icons.Default.KeyboardArrowUp, contentDescription = null, tint = TextMuted, modifier = Modifier.size(14.dp))
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text("Recolher", fontSize = 11.sp, color = TextSecondary)
                                         }
                                     }
-                                }
+                                } else {
+                                    val files = categoryFilesMap[selectedCatName]
+                                    if (files.isNullOrEmpty()) {
+                                        Text("Nenhum arquivo encontrado.", fontSize = 11.sp, color = TextMuted, modifier = Modifier.padding(vertical = 8.dp))
+                                    } else {
+                                        LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            items(files.take(15), key = { it.path }) { fItem ->
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Icon(imageVector = catObj?.icon ?: Icons.Default.Folder, contentDescription = null, tint = catObj?.color ?: MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                                                    Spacer(modifier = Modifier.width(8.dp))
+                                                    Column(modifier = Modifier.weight(1f)) {
+                                                        Text(text = fItem.name, fontSize = 11.5.sp, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                        Text(text = fItem.parentFolder, fontSize = 9.5.sp, color = TextSecondary, maxLines = 1)
+                                                    }
+                                                    Text(text = FormatUtils.formatBytes(fItem.sizeBytes), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = catObj?.color ?: MaterialTheme.colorScheme.primary)
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -916,116 +1259,130 @@ fun StorageDetailsScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
             // ==========================================
-            // 3) TOP 10 MAIORES APLICATIVOS (MANTIDO)
+            // 4) TOP 5 MAIORES APLICATIVOS (FOTO 1)
             // ==========================================
-            Text(
-                text = "TOP 10 MAIORES APLICATIVOS",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp,
-                color = TextSecondary,
-                modifier = Modifier.padding(start = 2.dp, bottom = 8.dp)
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 2.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text(
+                        text = "TOP 5 MAIORES APLICATIVOS",
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = "Ordenado pelo volume em disco",
+                        fontSize = 11.sp,
+                        color = TextMuted
+                    )
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+                ) {
+                    Text(
+                        text = "Total: ${FormatUtils.formatBytes(top5TotalBytes)}",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(16.dp))
-                    .border(1.dp, DarkCardBorder, RoundedCornerShape(16.dp)),
-                colors = CardDefaults.cardColors(containerColor = DarkSurfaceVariant)
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp)),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
-                    if (isLoadingApps && topApps.isEmpty()) {
+                    if (top5Apps.isEmpty()) {
                         Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 20.dp),
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                CircularProgressIndicator(modifier = Modifier.size(18.dp), color = primaryAccent, strokeWidth = 2.dp)
-                                Spacer(modifier = Modifier.width(10.dp))
-                                Text("Calculando maiores aplicativos...", fontSize = 12.sp, color = TextMuted)
-                            }
-                        }
-                    } else if (topApps.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 20.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("Nenhum aplicativo listado ainda.", fontSize = 12.sp, color = TextMuted)
-                                Spacer(modifier = Modifier.height(6.dp))
-                                TextButton(onClick = { viewModel.refreshInstalledApps(force = true) }) {
-                                    Text("Atualizar Lista", color = primaryAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
+                            Text("Nenhum aplicativo analisado ainda.", fontSize = 12.sp, color = TextMuted)
                         }
                     } else {
-                        for ((index, app) in topApps.withIndex()) {
+                        top5Apps.forEachIndexed { index, app ->
                             if (index > 0) {
-                                HorizontalDivider(color = DarkCardBorder.copy(alpha = 0.5f), modifier = Modifier.padding(vertical = 6.dp))
+                                HorizontalDivider(color = Color(0xFF1E283D).copy(alpha = 0.6f), modifier = Modifier.padding(vertical = 8.dp))
                             }
+
+                            val rankColor = when (index) {
+                                0, 1, 2 -> Color(0xFFFFA726)
+                                3 -> Color(0xFF00D2FF)
+                                else -> Color(0xFFFF3B47)
+                            }
+
+                            val appCache = appCacheList.find { it.app.packageName == app.packageName }?.cacheBytes ?: 0L
+
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable { onNavigateToAppDetail(app) }
-                                    .padding(vertical = 4.dp),
+                                    .padding(vertical = 2.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = if (index < 3) primaryAccent.copy(alpha = 0.18f) else DarkBg,
-                                    border = BorderStroke(1.dp, if (index < 3) primaryAccent.copy(alpha = 0.5f) else DarkCardBorder),
-                                    modifier = Modifier.size(24.dp)
-                                ) {
-                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                        Text(
-                                            text = "${index + 1}",
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (index < 3) primaryAccent else TextMuted
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = "${index + 1}",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = rankColor,
+                                    modifier = Modifier.width(18.dp)
+                                )
+
+                                Spacer(modifier = Modifier.width(8.dp))
+
                                 RealAppIcon(
                                     packageName = app.packageName,
-                                    size = 36.dp
+                                    size = 38.dp
                                 )
-                                Spacer(modifier = Modifier.width(10.dp))
+
+                                Spacer(modifier = Modifier.width(12.dp))
+
                                 Column(modifier = Modifier.weight(1f)) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
                                             text = app.appName,
-                                            fontSize = 12.5.sp,
-                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
                                             color = TextPrimary,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
                                             modifier = Modifier.weight(1f, fill = false)
                                         )
-                                        if (app.isSystemApp) {
+                                        if (appCache > 0L) {
                                             Spacer(modifier = Modifier.width(6.dp))
                                             Surface(
                                                 shape = RoundedCornerShape(4.dp),
-                                                color = DarkBg,
-                                                border = BorderStroke(0.5.dp, DarkCardBorder)
+                                                color = Color(0xFF16233B),
+                                                border = BorderStroke(0.5.dp, Color(0xFF23395F))
                                             ) {
                                                 Text(
-                                                    text = "Sistema",
+                                                    text = "${FormatUtils.formatBytes(appCache)} cache",
                                                     fontSize = 9.sp,
-                                                    color = TextMuted,
+                                                    color = Color(0xFF60A5FA),
                                                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
                                                 )
                                             }
                                         }
                                     }
+                                    Spacer(modifier = Modifier.height(2.dp))
                                     Text(
                                         text = app.packageName,
                                         fontSize = 10.sp,
@@ -1034,14 +1391,209 @@ fun StorageDetailsScreen(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                 }
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = FormatUtils.formatBytes(app.sizeBytes),
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (index < 3) primaryAccent else TextPrimary
-                                )
+
+                                Spacer(modifier = Modifier.width(10.dp))
+
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text(
+                                        text = FormatUtils.formatBytes(app.sizeBytes),
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = rankColor
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .width(42.dp)
+                                            .height(3.dp)
+                                            .clip(RoundedCornerShape(1.5.dp))
+                                            .background(rankColor)
+                                    )
+                                }
                             }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // ==========================================
+            // 5) APLICAÇÕES COM MAIOR CACHE (FOTO 1)
+            // ==========================================
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 2.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFFF7A00))
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Aplicações com Maior Cache",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                }
+
+                Text(
+                    text = "Limpeza individual",
+                    fontSize = 11.sp,
+                    color = TextMuted
+                )
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .border(1.dp, Color(0xFF1E283D), RoundedCornerShape(16.dp)),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF0E1422))
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    if (appsWithLargestCache.isEmpty()) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("Nenhum aplicativo com cache pendente.", fontSize = 12.sp, color = TextMuted)
+                        }
+                    } else {
+                        appsWithLargestCache.forEachIndexed { index, item ->
+                            if (index > 0) {
+                                HorizontalDivider(color = Color(0xFF1E283D).copy(alpha = 0.6f), modifier = Modifier.padding(vertical = 8.dp))
+                            }
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    RealAppIcon(packageName = item.app.packageName, size = 36.dp)
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column {
+                                        Text(
+                                            text = item.app.appName,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = TextPrimary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            text = "Cache: ${FormatUtils.formatBytes(item.cacheBytes)}",
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Color(0xFFFFA726)
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.width(10.dp))
+
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color(0xFF192336),
+                                    border = BorderStroke(1.dp, Color(0xFF2B3A54)),
+                                    modifier = Modifier.clickable {
+                                        viewModel.clearSingleAppCache(item)
+                                    }
+                                ) {
+                                    Text(
+                                        text = "Limpar",
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFD1D5DB),
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // ==========================================
+            // 6) BANNER: OTIMIZADOR (FOTO 1)
+            // ==========================================
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .border(1.dp, Color(0xFF183B5E), RoundedCornerShape(16.dp)),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF0D1525))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0xFF08263E)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Bolt,
+                                contentDescription = null,
+                                tint = Color(0xFF00E5FF),
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "OTIMIZADOR",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp,
+                                color = TextMuted
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = if (totalAppCacheBytes > 0) "Libere até ${FormatUtils.formatBytes(totalAppCacheBytes)}" else "Sistema Otimizado",
+                                fontSize = 13.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                        }
+                    }
+
+                    Button(
+                        onClick = onNavigateToStorageCache,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF)),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                        modifier = Modifier.height(38.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("Otimizar Agora", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
                         }
                     }
                 }
