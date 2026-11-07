@@ -119,8 +119,17 @@ fun RestoreSelectionScreen(
     var detailSearchQuery by remember { mutableStateOf("") }
     var showLogDialog by remember { mutableStateOf(false) }
 
+    LaunchedEffect(backup.id) {
+        if (executionState == RestoreExecutionState.COMPLETED || executionState == RestoreExecutionState.ERROR) {
+            viewModel.resetRestoreState()
+        }
+    }
+
     BackHandler(enabled = true) {
-        if (exclusiveCategoryMode) {
+        if (executionState == RestoreExecutionState.COMPLETED || executionState == RestoreExecutionState.ERROR) {
+            viewModel.resetRestoreState()
+            onBack()
+        } else if (exclusiveCategoryMode) {
             onBack()
         } else if (activeCategoryDetail != null) {
             activeCategoryDetail = null
@@ -430,7 +439,7 @@ fun RestoreSelectionScreen(
     }
 
     val isRestoring = executionState != RestoreExecutionState.IDLE && executionState != RestoreExecutionState.COMPLETED && executionState != RestoreExecutionState.ERROR && executionState != RestoreExecutionState.CANCELLED
-    val isFinished = executionState == RestoreExecutionState.COMPLETED || executionState == RestoreExecutionState.ERROR || (restoreProgress?.isFinished == true)
+    val isFinished = (executionState == RestoreExecutionState.COMPLETED || executionState == RestoreExecutionState.ERROR) && (restoreProgress?.isFinished == true)
 
     // Evita que o banner de progresso do MainActivity cubra os botões desta tela
     val bannerBottomPadding = LocalBannerHeight.current
@@ -459,7 +468,10 @@ fun RestoreSelectionScreen(
                     },
                     navigationIcon = {
                         IconButton(onClick = {
-                            if (exclusiveCategoryMode) {
+                            if (isFinished) {
+                                viewModel.resetRestoreState()
+                                onBack()
+                            } else if (exclusiveCategoryMode) {
                                 onBack()
                             } else if (activeCategoryDetail != null) {
                                 activeCategoryDetail = null
@@ -774,6 +786,7 @@ fun RestoreSelectionScreen(
                                     val chosenBtKeys = if (selectedBtKeys.isNotEmpty()) {
                                         selectedBtKeys.filter { it.value }.keys
                                     } else null
+                                    viewModel.resetRestoreState()
                                     viewModel.launchRestore(
                                         record = backup,
                                         selectedItemIds = allTargetItemIds,
@@ -1101,6 +1114,25 @@ fun RestoreSelectionScreen(
                                         }
                                     }
                                 }
+                            }
+                        }
+
+                        item {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Button(
+                                onClick = {
+                                    viewModel.resetRestoreState()
+                                    onBack()
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(48.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = primaryAccent),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Concluir e Voltar", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
                             }
                         }
                     }

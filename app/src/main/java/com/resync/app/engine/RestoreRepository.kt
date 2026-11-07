@@ -95,6 +95,25 @@ object RestoreRepository {
 
     fun isRestoreRunning(): Boolean = isRestoreActive()
 
+    fun resetRestoreState() {
+        activeRestoreJob?.cancel()
+        activeRestoreJob = null
+        currentRestoreEngine = null
+        currentDriveProvider = null
+        _executionState.value = RestoreExecutionState.IDLE
+        _restoreProgress.value = null
+        _restoreSummary.value = null
+        _isRestorePaused.value = false
+        prefs?.edit()
+            ?.remove(KEY_EXEC_STATE)
+            ?.remove(KEY_STAGE)
+            ?.remove(KEY_ITEM)
+            ?.remove(KEY_PROGRESS)
+            ?.remove(KEY_IS_FINISHED)
+            ?.remove(KEY_ERROR)
+            ?.apply()
+    }
+
     // Hold last used parameters to allow retry
     private var lastLocalFile: File? = null
     private var lastRemoteDriveFileId: String? = null

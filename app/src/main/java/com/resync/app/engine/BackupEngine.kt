@@ -1843,7 +1843,17 @@ class BackupEngine(private val context: Context) {
                 val src = entry.sourceFile
                 if (src != null && src.exists()) {
                     val srcCanonical = src.canonicalPath
-                    if (srcCanonical.startsWith(stagingCanonical + File.separator) && srcCanonical != stagingFile.canonicalPath) {
+                    val isUserStorage = srcCanonical.startsWith("/storage/") ||
+                                        srcCanonical.startsWith("/sdcard/") ||
+                                        srcCanonical.startsWith("/data/media/") ||
+                                        selectedFilesAndFolders.any { p ->
+                                            if (p.isBlank()) false
+                                            else {
+                                                val pCanon = File(p).canonicalPath
+                                                srcCanonical == pCanon || srcCanonical.startsWith(pCanon + File.separator)
+                                            }
+                                        }
+                    if (!isUserStorage && srcCanonical.startsWith(stagingCanonical + File.separator) && srcCanonical != stagingFile.canonicalPath) {
                         try { src.delete() } catch (_: Throwable) {}
                     }
                 }
@@ -2208,6 +2218,10 @@ class BackupEngine(private val context: Context) {
             val targetCanon = dir.canonicalFile
             if (!targetCanon.path.startsWith(resyncTmpCanon.path + File.separator)) {
                 com.resync.app.util.AppLogger.e("Security", "Tentativa de exclusão bloqueada: caminho $targetCanon fora de $resyncTmpCanon")
+                return
+            }
+            if (targetCanon.path.startsWith("/storage/") || targetCanon.path.startsWith("/sdcard/") || targetCanon.path.startsWith("/data/media/")) {
+                com.resync.app.util.AppLogger.e("Security", "Tentativa de exclusão bloqueada: caminho $targetCanon em armazenamento do usuário")
                 return
             }
             for (p in protectedPaths) {

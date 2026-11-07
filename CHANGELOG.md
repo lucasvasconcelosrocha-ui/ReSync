@@ -4,6 +4,26 @@ Todas as mudanças notáveis deste projeto são documentadas neste arquivo.
 
 ---
 
+## [1.0.33] - 2026-11-07
+
+### 🛡️ Correções Finais de Integridade de Backup e Restauração
+- **Blindagem Contra Exclusão da Origem (Defesa em Profundidade):**
+  - Checagem canônica explícita impedindo exclusão de quaisquer arquivos residentes em `/storage/`, `/sdcard/`, `/data/media/` ou caminhos selecionados pelo usuário.
+  - Eliminação de qualquer deleção de arquivos de entrada pós-empacotamento.
+- **Restauração Completa e Unificada de Pastas:**
+  - Resolução simultânea de arquivos soltos na raiz da pasta e de todas as suas subpastas (resolvendo o problema de arquivos como `Download/arquivo.mp3` ignorados quando coexistiam com subpastas).
+  - Emissão dinâmica e granular de progresso arquivo a arquivo na tela de restauração.
+  - Gravação de streams bufferizados de 64 KB com criação automática de diretórios-pai no modo Sem Root.
+  - Execução segura via `cp -f` no modo Root aguardando término (`waitFor`/`exec`) e validação de tamanho de arquivo.
+- **Reinicialização de Estado Residual na UI:**
+  - Implementação de `resetRestoreState()` no `RestoreRepository` e `MainViewModel` para limpar SharedPreferences e `StateFlow`.
+  - Correção da flag `isFinished` para prevenir que telas de restaurações anteriores apareçam prematuramente.
+  - Adição do botão "Concluir e Voltar" na tela de resumo da restauração.
+- **Testes Unitários:**
+  - Novos testes automatizados cobrindo recuperação unificada de arquivos soltos e subpastas de backups legados e gravação via streams.
+
+---
+
 ## [1.0.32] - 2026-11-06
 
 ### 🛡️ Correções Críticas de Segurança & Integridade de Pastas

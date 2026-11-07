@@ -1,23 +1,23 @@
-🚀 **O QUE HÁ DE NOVO NESTA VERSÃO (v1.0.32):**
+🚀 **O QUE HÁ DE NOVO NESTA VERSÃO (v1.0.33):**
 
 🛡️ **Proteção Total da Pasta de Origem (Prevenção Absoluta de Perda de Dados)**
-• **Origem 100% Intacta:** Corrigida rotina de higiene pós-empacotamento que excluía arquivos de origem em backups de diretórios locais (`/sdcard/...`, `ksu`, `Documents`). A origem nunca é modificada ou excluída.
-• **Isolamento Estrito em `cacheDir/resync_tmp`:** Todas as operações temporárias de staging e extração residem estritamente dentro do diretório temporário exclusivo do app, com blindagem canônica contra exclusão externa.
-• **Validação Canônica `safeDeleteStaging`:** Bloqueio definitivo contra exclusão acidental de caminhos protegidos ou diretórios raiz do usuário.
+• **Origem 100% Intacta:** Blindagem canônica reforçada contra exclusão pós-empacotamento de qualquer arquivo residente em `/storage/`, `/sdcard/`, `/data/media/` ou caminhos selecionados pelo usuário.
+• **Isolamento Estrito em `cacheDir/resync_tmp`:** Todas as operações temporárias de staging e extração residem estritamente dentro do diretório temporário exclusivo do app, com validação canônica antes de qualquer limpeza.
+• **Validação Canônica `safeDeleteStaging`:** Bloqueio definitivo contra exclusão acidental de caminhos protegidos, origens selecionadas ou diretórios externos ao sandbox temporário.
 
-📂 **Restauração de Pastas Sem Duplicação de Subpasta**
-• **Estrutura Idêntica ao Original:** Padronização completa na criação de containers e extração direta sem criação de subpastas aninhadas redundantes (`ksu/ksu/...`).
-• **Retrocompatibilidade com Backups Legados:** Detecção automática e desembrulho de arquivos legados que possuíam pasta raiz duplicada.
-• **Eliminação de Wipes Destrutivos:** Remoção completa de `find -mindepth 1 -delete` para diretórios de usuário: restauração atômica via mesclagem segura sem apagar arquivos preexistentes não relacionados.
+📂 **Restauração Completa e Unificada de Pastas**
+• **Resolução Simultânea de Raiz e Subpastas:** Resolução de arquivos soltos na raiz da pasta e de todas as suas subpastas (resolvendo o problema de arquivos soltos ignorados quando coexistiam com subpastas em backups legados e novos).
+• **Progresso Dinâmico Arquivo a Arquivo:** Exibição em tempo real do arquivo sendo restaurado e contador de progresso na interface.
+• **Gravação Bufferizada Sem Root:** Gravação via `FileInputStream` e `FileOutputStream` com buffers de 64 KB e criação automática de diretórios-pai (`parentFile?.mkdirs()`).
+• **Fallback Root Seguro:** Execução via shell `cp -f` aguardando conclusão síncrona, validação de exit code (`isSuccess`) e verificação de integridade e tamanho do arquivo gravado.
 
-🧪 **Suíte de Testes Automatizados de Pastas**
-• Adição de testes unitários automatizados cobrindo preservação integral da origem pós-backup, bloqueio de exclusões fora do sandbox temporário e ausência de subpastas aninhadas na restauração.
+🔄 **Correção de Gestão de Estado na Interface (UI)**
+• **Reinicialização de Estado Residual:** Implementação de `resetRestoreState()` no `RestoreRepository` e `MainViewModel` para limpar SharedPreferences e `StateFlow` ao clicar em "RESTAURAR" ou inspecionar um backup.
+• **Correção da Flag `isFinished`:** Eliminação da transição prematura de 1s para o resumo de restauração por estado residual de operações anteriores.
+• **Botão "Concluir e Voltar":** Adição de botão explícito de fechamento na tela de resultado da restauração com limpeza garantida de estado.
 
-🎨 **Nova Interface Bento UI (Dark Minimalista & OLED)**
-• **Redesign Visual Completo:** Nova arquitetura visual em todas as telas do aplicativo com fundo Preto OLED profundo (`#05070A`), cards modulares Bento (`#0E121A`), bordas finas (*hairline*) e micro-interações fluidas.
-• **Sincronização Global de Cores e Temas:** Padronização completa do `MaterialTheme` em 100% das telas, botões, indicadores e barras de progresso para respeitar dinamicamente a cor de tema escolhida pelo usuário.
-• **Foto de Perfil Integrada:** Carregamento automático do avatar real da conta Google logada na barra superior em todo o aplicativo.
+🧪 **Suíte de Testes Automatizados**
+• Adição de testes unitários em `FolderBackupRestoreTest` cobrindo restauração simultânea de arquivos soltos na raiz e subpastas em backups legados, gravação bufferizada e preservação de integridade de hashes SHA-256.
 
-⚡ **Motor Universal de Backup & Nuvem Turbo**
-• **Detecção Inteligente de Privilégios:** Alternância transparente e automática entre `RootBackupEngine` e `NonRootBackupEngine` conforme os acessos concedidos pelo usuário.
-• **Google Drive Turbo:** Upload e download otimizados em blocos de 64 KB com chunks de 4 MB a 16 MB, conexão HTTP/2 unificada, cache persistente de pastas e verificação de integridade SHA-256.
+🎨 **Interface Bento UI (Dark Minimalista & OLED)**
+• Fundo Preto OLED profundo (`#05070A`), cards modulares Bento (`#0E121A`), bordas finas e sincronização com `MaterialTheme`.

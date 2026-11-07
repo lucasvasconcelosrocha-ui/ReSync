@@ -37,8 +37,11 @@ import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.io.BufferedInputStream
+import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileInputStream
+import java.io.FileOutputStream
 
 data class RestoreProgress(
     val stage: String,
@@ -482,7 +485,20 @@ class RestoreEngine(private val context: Context) {
                         itemOutcome = restoreFile(tempRestoreDir, item)
                     }
                     BackupItemType.FOLDER -> {
-                        itemOutcome = restoreFolder(tempRestoreDir, item, manifest.items)
+                        itemOutcome = restoreFolder(tempRestoreDir, item, manifest.items) { filesDone, totalInFolder, currentFileName ->
+                            val folderStepPercent = stepPercent.coerceAtMost(0.98f)
+                            send(
+                                RestoreProgress(
+                                    stage = "Restaurando Pasta",
+                                    currentItemName = "${item.name}: $currentFileName ($filesDone/$totalInFolder)",
+                                    progressPercent = folderStepPercent,
+                                    currentItemIndex = currentItemIdx,
+                                    totalItems = totalRestoreItems,
+                                    currentItemType = item.type,
+                                    completedItems = completedItemsList.toList()
+                                )
+                            )
+                        }
                     }
                     BackupItemType.WALLPAPER,
                     BackupItemType.WALLPAPER_LOCK -> {
@@ -1050,51 +1066,92 @@ class RestoreEngine(private val context: Context) {
         metadata: Map<String, String>? = null
     ): Boolean = withContext(Dispatchers.IO) {
         try {
-            val isOutsideInternal = !destination.absolutePath.startsWith("/storage/emulated/0")
-            val hasRoot = Shell.isAppGrantedRoot() == true
+            if (!extractedFile.exists() || !extractedFile.isFile) return@withContext false
 
+            val hasRoot = Shell.isAppGrantedRoot() == true
+            val isOutsideInternal = !destination.absolutePath.startsWith("/storage/emulated/0")
+
+            var writeSuccess = false
+
+            // Se for fora do armazenamento do usuário e temos root, priorizar root shell para preservar permissões e SELinux
             if (isOutsideInternal && hasRoot) {
-                destination.parentFile?.mkdirs()
-                val escapedParent = shellEscape(destination.parentFile?.absolutePath ?: destination.absolutePath)
-                val escapedExtracted = shellEscape(extractedFile.absolutePath)
-                val escapedDest = shellEscape(destination.absolutePath)
-                val mkdirCmd = "mkdir -p $escapedParent"
-                val cpCmd = "cp -a $escapedExtracted $escapedDest"
-                Shell.cmd(mkdirCmd, cpCmd).exec()
-                val selinuxCtx = metadata?.get("selinux")
-                if (!selinuxCtx.isNullOrBlank()) {
-                    val escapedCtx = shellEscape(selinuxCtx)
-                    Shell.cmd("chcon $escapedCtx $escapedDest 2>/dev/null").exec()
-                } else {
-                    Shell.cmd("restorecon -R $escapedDest 2>/dev/null").exec()
-                }
-                val mode = metadata?.get("mode")
-                if (!mode.isNullOrBlank()) {
-                    val escapedMode = shellEscape(mode)
-                    Shell.cmd("chmod $escapedMode $escapedDest 2>/dev/null").exec()
-                }
-                val owner = metadata?.get("owner")
-                if (!owner.isNullOrBlank()) {
-                    val escapedOwner = shellEscape(owner)
-                    Shell.cmd("chown $escapedOwner $escapedDest 2>/dev/null").exec()
-                }
+                writeSuccess = writeViaRootShell(extractedFile, destination, metadata)
             } else {
+                // Modo padrão / Sem Root: Streams com buffers de 64KB
                 try {
-                    destination.parentFile?.mkdirs()
-                    extractedFile.copyTo(destination, overwrite = true)
-                } catch (writeEx: Exception) {
+                    val parent = destination.parentFile
+                    if (parent != null && !parent.exists()) {
+                        parent.mkdirs()
+                    }
+                    if (destination.exists() && !destination.canWrite() && hasRoot) {
+                        writeSuccess = writeViaRootShell(extractedFile, destination, metadata)
+                    } else {
+                        FileInputStream(extractedFile).use { fis ->
+                            BufferedInputStream(fis, 65536).use { bis ->
+                                FileOutputStream(destination, false).use { fos ->
+                                    BufferedOutputStream(fos, 65536).use { bos ->
+                                        val buffer = ByteArray(65536)
+                                        var bytesRead: Int
+                                        while (bis.read(buffer).also { bytesRead = it } != -1) {
+                                            bos.write(buffer, 0, bytesRead)
+                                        }
+                                        bos.flush()
+                                    }
+                                }
+                            }
+                        }
+                        writeSuccess = destination.exists() && (extractedFile.length() == 0L || destination.length() == extractedFile.length())
+                    }
+                } catch (ioEx: Exception) {
                     if (hasRoot) {
-                        val escapedParent = shellEscape(destination.parentFile?.absolutePath ?: destination.absolutePath)
-                        val escapedExtracted = shellEscape(extractedFile.absolutePath)
-                        val escapedDest = shellEscape(destination.absolutePath)
-                        val mkdirCmd = "mkdir -p $escapedParent"
-                        val cpCmd = "cp -a $escapedExtracted $escapedDest"
-                        Shell.cmd(mkdirCmd, cpCmd).exec()
-                        Shell.cmd("restorecon -R $escapedDest 2>/dev/null").exec()
-                    } else throw writeEx
+                        writeSuccess = writeViaRootShell(extractedFile, destination, metadata)
+                    } else {
+                        com.resync.app.util.AppLogger.e("RestoreEngine", "Falha de I/O ao restaurar ${destination.name}: ${ioEx.message}")
+                        writeSuccess = false
+                    }
                 }
             }
-            destination.exists() && destination.length() == extractedFile.length()
+
+            writeSuccess
+        } catch (t: Throwable) {
+            com.resync.app.util.AppLogger.e("RestoreEngine", "Erro crítico ao gravar arquivo restaurado: ${t.message}")
+            false
+        }
+    }
+
+    private fun writeViaRootShell(extractedFile: File, destination: File, metadata: Map<String, String>?): Boolean {
+        return try {
+            val parentPath = destination.parentFile?.absolutePath ?: destination.absolutePath
+            val escapedParent = shellEscape(parentPath)
+            val escapedExtracted = shellEscape(extractedFile.absolutePath)
+            val escapedDest = shellEscape(destination.absolutePath)
+
+            val mkdirCmd = "mkdir -p $escapedParent"
+            val cpCmd = "cp -f $escapedExtracted $escapedDest"
+            val cmdResult = Shell.cmd(mkdirCmd, cpCmd).exec()
+
+            if (!cmdResult.isSuccess) {
+                return false
+            }
+
+            val selinuxCtx = metadata?.get("selinux")
+            if (!selinuxCtx.isNullOrBlank()) {
+                Shell.cmd("chcon ${shellEscape(selinuxCtx)} $escapedDest 2>/dev/null").exec()
+            } else {
+                Shell.cmd("restorecon -R $escapedDest 2>/dev/null").exec()
+            }
+            val mode = metadata?.get("mode")
+            if (!mode.isNullOrBlank()) {
+                Shell.cmd("chmod ${shellEscape(mode)} $escapedDest 2>/dev/null").exec()
+            }
+            val owner = metadata?.get("owner")
+            if (!owner.isNullOrBlank()) {
+                Shell.cmd("chown ${shellEscape(owner)} $escapedDest 2>/dev/null").exec()
+            }
+
+            val checkResult = Shell.cmd("test -f $escapedDest && stat -c %s $escapedDest 2>/dev/null || wc -c < $escapedDest 2>/dev/null").exec()
+            val sizeOnDisk = checkResult.out.firstOrNull()?.trim()?.toLongOrNull() ?: destination.length()
+            extractedFile.length() == 0L || sizeOnDisk == extractedFile.length()
         } catch (_: Throwable) {
             false
         }
@@ -1125,10 +1182,17 @@ class RestoreEngine(private val context: Context) {
         }
     }
 
+    private data class FolderRestoreTarget(
+        val relPath: String,
+        val sourceFile: File,
+        val metadata: Map<String, String>? = null
+    )
+
     private suspend fun restoreFolder(
         tempDir: File,
         folderItem: ManifestItem,
-        allManifestItems: List<ManifestItem>
+        allManifestItems: List<ManifestItem>,
+        onProgressUpdate: (suspend (filesDone: Int, totalInFolder: Int, currentFileName: String) -> Unit)? = null
     ): ItemRestoreOutcome = withContext(Dispatchers.IO) {
         try {
             val extractedFolder = File(tempDir, folderItem.archiveEntryPath)
@@ -1139,12 +1203,9 @@ class RestoreEngine(private val context: Context) {
             val childItems = allManifestItems.filter { child ->
                 child.id != folderItem.id &&
                 (child.archiveEntryPath.startsWith(folderItem.archiveEntryPath.trimEnd('/') + "/") ||
-                 (folderItem.originalPath.isNotBlank() && child.originalPath.startsWith(folderItem.originalPath.trimEnd('/') + "/")))
+                 (folderItem.originalPath.isNotBlank() && child.originalPath.startsWith(folderItem.originalPath.trimEnd('/') + "/")) ||
+                 child.archiveEntryPath.startsWith("files/${folderItem.name}/"))
             }
-
-            var filesRestored = 0
-            var bytesRestored = 0L
-            val failedFiles = mutableListOf<String>()
 
             if (!destinationFolder.exists()) {
                 if (!destinationFolder.mkdirs() && Shell.isAppGrantedRoot() == true) {
@@ -1155,56 +1216,82 @@ class RestoreEngine(private val context: Context) {
 
             val effectiveSourceFolder = resolveFolderContentRoot(extractedFolder, folderItem.name, destinationFolder.name)
 
+            // Mapa unificado de itens a restaurar indexado pelo caminho relativo dentro de destinationFolder
+            val targetsToRestore = mutableMapOf<String, FolderRestoreTarget>()
+
+            // 1. Processar itens declarados no manifesto (childItems)
+            for (child in childItems) {
+                var rel = if (folderItem.originalPath.isNotBlank() && child.originalPath.startsWith(folderItem.originalPath.trimEnd('/') + "/")) {
+                    child.originalPath.removePrefix(folderItem.originalPath.trimEnd('/') + "/")
+                } else if (child.archiveEntryPath.startsWith(folderItem.archiveEntryPath.trimEnd('/') + "/")) {
+                    child.archiveEntryPath.removePrefix(folderItem.archiveEntryPath.trimEnd('/') + "/")
+                } else if (child.archiveEntryPath.startsWith("files/${folderItem.name}/")) {
+                    child.archiveEntryPath.removePrefix("files/${folderItem.name}/")
+                } else {
+                    child.name
+                }
+                rel = rel.trimStart('/')
+                // Desduplicação retrocompatível no caminho relativo
+                if (rel.startsWith("${folderItem.name}/", ignoreCase = true)) {
+                    rel = rel.substring(folderItem.name.length + 1).trimStart('/')
+                } else if (rel.startsWith("${destinationFolder.name}/", ignoreCase = true)) {
+                    rel = rel.substring(destinationFolder.name.length + 1).trimStart('/')
+                }
+                if (rel.isBlank()) continue
+
+                // Localizar arquivo descompactado no disco temporário
+                val candidate1 = File(tempDir, child.archiveEntryPath)
+                val candidate2 = File(effectiveSourceFolder, rel)
+                val candidate3 = File(extractedFolder, rel)
+                val candidate4 = File(tempDir, "files/$rel")
+
+                val validSrc = listOf(candidate1, candidate2, candidate3, candidate4).firstOrNull { it.exists() && it.isFile }
+                if (validSrc != null) {
+                    targetsToRestore[rel] = FolderRestoreTarget(rel, validSrc, child.metadata)
+                }
+            }
+
+            // 2. Processar quaisquer arquivos presentes em effectiveSourceFolder no disco
             if (effectiveSourceFolder.exists() && effectiveSourceFolder.isDirectory) {
                 effectiveSourceFolder.walkTopDown().filter { it.isFile }.forEach { file ->
-                    val relPath = file.relativeTo(effectiveSourceFolder).path
-                    val destFile = File(destinationFolder, relPath)
-                    // Proteção contra Path Traversal (Zip Slip)
-                    val destCanonical = destFile.canonicalPath
-                    val targetCanonical = destinationFolder.canonicalPath
-                    if (!destCanonical.startsWith(targetCanonical + File.separator) && destCanonical != targetCanonical) {
-                        throw SecurityException("Tentativa de Path Traversal bloqueada: $relPath fora de $targetCanonical")
+                    var rel = file.relativeTo(effectiveSourceFolder).path.replace('\\', '/').trimStart('/')
+                    if (rel.startsWith("${folderItem.name}/", ignoreCase = true)) {
+                        rel = rel.substring(folderItem.name.length + 1).trimStart('/')
+                    } else if (rel.startsWith("${destinationFolder.name}/", ignoreCase = true)) {
+                        rel = rel.substring(destinationFolder.name.length + 1).trimStart('/')
                     }
-                    val matchingChildItem = childItems.firstOrNull { it.archiveEntryPath.endsWith(relPath) }
-                    val ok = writeRestoredFile(file, destFile, matchingChildItem?.metadata)
-                    if (ok) {
-                        filesRestored++
-                        bytesRestored += destFile.length()
-                    } else {
-                        failedFiles.add(relPath)
+                    if (rel.isNotBlank() && !targetsToRestore.containsKey(rel)) {
+                        val matchingChild = childItems.firstOrNull { it.archiveEntryPath.endsWith(rel) || it.name == file.name }
+                        targetsToRestore[rel] = FolderRestoreTarget(rel, file, matchingChild?.metadata)
                     }
                 }
-            } else if (childItems.isNotEmpty()) {
-                for (child in childItems) {
-                    val src = File(tempDir, child.archiveEntryPath)
-                    if (src.exists() && src.isFile) {
-                        var rel = if (child.archiveEntryPath.startsWith(folderItem.archiveEntryPath.trimEnd('/') + "/")) {
-                            child.archiveEntryPath.removePrefix(folderItem.archiveEntryPath.trimEnd('/') + "/")
-                        } else if (folderItem.originalPath.isNotBlank() && child.originalPath.startsWith(folderItem.originalPath.trimEnd('/') + "/")) {
-                            child.originalPath.removePrefix(folderItem.originalPath.trimEnd('/') + "/")
-                        } else {
-                            src.name
-                        }
-                        // Desduplicação retrocompatível no caminho relativo
-                        if (rel.startsWith("${folderItem.name}/", ignoreCase = true)) {
-                            rel = rel.substring(folderItem.name.length + 1)
-                        } else if (rel.startsWith("${destinationFolder.name}/", ignoreCase = true)) {
-                            rel = rel.substring(destinationFolder.name.length + 1)
-                        }
-                        val dest = File(destinationFolder, rel)
-                        val destCanonical = dest.canonicalPath
-                        val targetCanonical = destinationFolder.canonicalPath
-                        if (!destCanonical.startsWith(targetCanonical + File.separator) && destCanonical != targetCanonical) {
-                            throw SecurityException("Tentativa de Path Traversal bloqueada: ${child.name} fora de $targetCanonical")
-                        }
-                        val ok = writeRestoredFile(src, dest, child.metadata)
-                        if (ok) {
-                            filesRestored++
-                            bytesRestored += dest.length()
-                        } else {
-                            failedFiles.add(child.name)
-                        }
-                    }
+            }
+
+            // 3. Executar a restauração física e segura de cada arquivo
+            var filesRestored = 0
+            var bytesRestored = 0L
+            val failedFiles = mutableListOf<String>()
+            val totalInFolder = targetsToRestore.size
+
+            for ((idx, target) in targetsToRestore.values.withIndex()) {
+                checkPauseAndCancel()
+                val destFile = File(destinationFolder, target.relPath)
+
+                // Proteção contra Path Traversal (Zip Slip)
+                val destCanonical = destFile.canonicalPath
+                val targetCanonical = destinationFolder.canonicalPath
+                if (!destCanonical.startsWith(targetCanonical + File.separator) && destCanonical != targetCanonical) {
+                    throw SecurityException("Tentativa de Path Traversal bloqueada: ${target.relPath} fora de $targetCanonical")
+                }
+
+                onProgressUpdate?.invoke(idx + 1, totalInFolder, target.relPath)
+
+                val ok = writeRestoredFile(target.sourceFile, destFile, target.metadata)
+                if (ok) {
+                    filesRestored++
+                    bytesRestored += destFile.length()
+                } else {
+                    failedFiles.add(target.relPath)
                 }
             }
 

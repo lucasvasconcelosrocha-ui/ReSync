@@ -250,4 +250,167 @@ class FolderBackupRestoreTest {
         assertEquals("DOCUMENTO DO USUARIO", existingUserFile.readText())
         assertTrue("Arquivo restaurado deve coexistir", incomingFile.exists())
     }
+
+    @Test
+    fun testLegacyBackupWithLooseRootFilesAndSubfoldersRestoresAllFilesProperly() {
+        // Simular o cenário exato do Bug 1 e Bug 2:
+        // No backup legado, arquivos soltos na raiz de Download foram gravados em files/<nome>,
+        // enquanto arquivos de subpastas foram gravados em files/Download/AyuGram/<nome>.
+        val tempRestoreDir = File(resyncTmpDir, "legacy_download_test_${UUID.randomUUID()}").apply { mkdirs() }
+        val tempFilesDir = File(tempRestoreDir, "files").apply { mkdirs() }
+
+        // 1. Arquivo solto na raiz gravado como files/top_gear_frankfurt.mp3
+        val looseArchiveFile = File(tempFilesDir, "top_gear_frankfurt.mp3").apply { writeText("AUDIO_DATA_MP3") }
+
+        // 2. Subpasta descompactada em files/Download/AyuGram/
+        val downloadFolderInTemp = File(tempFilesDir, "Download").apply { mkdirs() }
+        val ayugramDir = File(downloadFolderInTemp, "AyuGram").apply { mkdirs() }
+        val subfolderArchiveFile = File(ayugramDir, "photo.jpg").apply { writeText("PHOTO_DATA_JPG") }
+
+        val destinationFolder = tempFolder.newFolder("Download")
+
+        val folderItem = ManifestItem(
+            id = "folder_download_1",
+            type = BackupItemType.FOLDER,
+            name = "Download",
+            originalPath = destinationFolder.absolutePath,
+            archiveEntryPath = "files/Download",
+            sizeBytes = 1000L,
+            sha256Checksum = ""
+        )
+
+        val childLooseItem = ManifestItem(
+            id = "file_loose_1",
+            type = BackupItemType.FILE,
+            name = "top_gear_frankfurt.mp3",
+            originalPath = File(destinationFolder, "top_gear_frankfurt.mp3").absolutePath,
+            archiveEntryPath = "files/top_gear_frankfurt.mp3",
+            sizeBytes = looseArchiveFile.length(),
+            sha256Checksum = ""
+        )
+
+        val childSubfolderItem = ManifestItem(
+            id = "file_sub_1",
+            type = BackupItemType.FILE,
+            name = "photo.jpg",
+            originalPath = File(destinationFolder, "AyuGram/photo.jpg").absolutePath,
+            archiveEntryPath = "files/Download/AyuGram/photo.jpg",
+            sizeBytes = subfolderArchiveFile.length(),
+            sha256Checksum = ""
+        )
+
+        val allManifestItems = listOf(folderItem, childLooseItem, childSubfolderItem)
+
+        // Executar a mesma resolução unificada de alvos implementada no RestoreEngine
+        val extractedFolder = File(tempRestoreDir, folderItem.archiveEntryPath)
+        val childItems = allManifestItems.filter { child ->
+            child.id != folderItem.id &&
+            (child.archiveEntryPath.startsWith(folderItem.archiveEntryPath.trimEnd('/') + "/") ||
+             (folderItem.originalPath.isNotBlank() && child.originalPath.startsWith(folderItem.originalPath.trimEnd('/') + "/")) ||
+             child.archiveEntryPath.startsWith("files/${folderItem.name}/"))
+        }
+
+        val effectiveSourceFolder = RestoreEngine.resolveFolderContentRoot(extractedFolder, folderItem.name, destinationFolder.name)
+
+        data class Target(val relPath: String, val src: File)
+        val targets = mutableMapOf<String, Target>()
+
+        // 1. Processar childItems do manifesto
+        for (child in childItems) {
+            var rel = if (folderItem.originalPath.isNotBlank() && child.originalPath.startsWith(folderItem.originalPath.trimEnd('/') + "/")) {
+                child.originalPath.removePrefix(folderItem.originalPath.trimEnd('/') + "/")
+            } else if (child.archiveEntryPath.startsWith(folderItem.archiveEntryPath.trimEnd('/') + "/")) {
+                child.archiveEntryPath.removePrefix(folderItem.archiveEntryPath.trimEnd('/') + "/")
+            } else if (child.archiveEntryPath.startsWith("files/${folderItem.name}/")) {
+                child.archiveEntryPath.removePrefix("files/${folderItem.name}/")
+            } else {
+                child.name
+            }
+            rel = rel.trimStart('/')
+            if (rel.startsWith("${folderItem.name}/", ignoreCase = true)) {
+                rel = rel.substring(folderItem.name.length + 1).trimStart('/')
+            }
+            if (rel.isBlank()) continue
+
+            val candidate1 = File(tempRestoreDir, child.archiveEntryPath)
+            val candidate2 = File(effectiveSourceFolder, rel)
+            val candidate3 = File(extractedFolder, rel)
+            val candidate4 = File(tempRestoreDir, "files/$rel")
+
+            val validSrc = listOf(candidate1, candidate2, candidate3, candidate4).firstOrNull { it.exists() && it.isFile }
+            if (validSrc != null) {
+                targets[rel] = Target(rel, validSrc)
+            }
+        }
+
+        // 2. Processar arquivos no disco sob effectiveSourceFolder
+        if (effectiveSourceFolder.exists() && effectiveSourceFolder.isDirectory) {
+            effectiveSourceFolder.walkTopDown().filter { it.isFile }.forEach { file ->
+                var rel = file.relativeTo(effectiveSourceFolder).path.replace('\\', '/').trimStart('/')
+                if (rel.startsWith("${folderItem.name}/", ignoreCase = true)) {
+                    rel = rel.substring(folderItem.name.length + 1).trimStart('/')
+                }
+                if (rel.isNotBlank() && !targets.containsKey(rel)) {
+                    targets[rel] = Target(rel, file)
+                }
+            }
+        }
+
+        // 3. Gravar arquivos em destino
+        var restoredCount = 0
+        for (target in targets.values) {
+            val destFile = File(destinationFolder, target.relPath)
+            destFile.parentFile?.mkdirs()
+            target.src.copyTo(destFile, overwrite = true)
+            restoredCount++
+        }
+
+        // Validações Absolutas:
+        assertEquals("Devem ser restaurados exatamente 2 arquivos (o solto na raiz e o da subpasta)", 2, restoredCount)
+
+        val restoredLoose = File(destinationFolder, "top_gear_frankfurt.mp3")
+        assertTrue("Arquivo solto na raiz DEVE existir em Download/top_gear_frankfurt.mp3", restoredLoose.exists())
+        assertEquals("AUDIO_DATA_MP3", restoredLoose.readText())
+
+        val restoredSubfolder = File(destinationFolder, "AyuGram/photo.jpg")
+        assertTrue("Arquivo da subpasta DEVE existir em Download/AyuGram/photo.jpg", restoredSubfolder.exists())
+        assertEquals("PHOTO_DATA_JPG", restoredSubfolder.readText())
+
+        val duplicateDownload = File(destinationFolder, "Download")
+        assertFalse("NÃO pode criar subpasta aninhada Download/Download!", duplicateDownload.exists())
+    }
+
+    @Test
+    fun testBufferedStreamFileWritingWithParentCreation() {
+        val srcDir = tempFolder.newFolder("stream_src")
+        val srcFile = File(srcDir, "sample.bin").apply { writeBytes(ByteArray(128 * 1024) { (it % 127).toByte() }) }
+
+        val destDir = tempFolder.newFolder("stream_dest")
+        val destFile = File(destDir, "nested/sub/folder/sample.bin")
+
+        // Executar gravação com streams bufferizados de 64KB e criação de pais
+        val parent = destFile.parentFile
+        if (parent != null && !parent.exists()) {
+            parent.mkdirs()
+        }
+
+        java.io.FileInputStream(srcFile).use { fis ->
+            java.io.BufferedInputStream(fis, 65536).use { bis ->
+                java.io.FileOutputStream(destFile, false).use { fos ->
+                    java.io.BufferedOutputStream(fos, 65536).use { bos ->
+                        val buffer = ByteArray(65536)
+                        var bytesRead: Int
+                        while (bis.read(buffer).also { bytesRead = it } != -1) {
+                            bos.write(buffer, 0, bytesRead)
+                        }
+                        bos.flush()
+                    }
+                }
+            }
+        }
+
+        assertTrue("Arquivo gravado via stream deve existir no destino aninhado", destFile.exists())
+        assertEquals("Tamanho deve ser exatamente igual ao arquivo de origem (128 KB)", srcFile.length(), destFile.length())
+        assertEquals("Hash SHA-256 deve coincidir perfeitamente", sha256(srcFile), sha256(destFile))
+    }
 }

@@ -171,7 +171,7 @@ fun DashboardScreen(
     var showSecurityModal by remember { mutableStateOf(false) }
     val changelogPrefs = remember { context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE) }
     var showChangelogModal by remember {
-        mutableStateOf(changelogPrefs.getString("last_seen_changelog_version", "") != "1.0.32")
+        mutableStateOf(changelogPrefs.getString("last_seen_changelog_version", "") != "1.0.33")
     }
     val scrollState = rememberScrollState()
     var isPullRefreshing by remember { mutableStateOf(false) }
@@ -1473,16 +1473,16 @@ fun DashboardScreen(
         )
     }
 
-    // Modal Automático de Novidades (Changelog v1.0.32)
+    // Modal Automático de Novidades (Changelog v1.0.33)
     if (showChangelogModal) {
         ChangelogModal(
-            versionName = "1.0.32",
+            versionName = "1.0.33",
             primaryAccent = primaryAccent,
             onDismiss = {
                 showChangelogModal = false
             },
             onConfirm = {
-                changelogPrefs.edit().putString("last_seen_changelog_version", "1.0.32").apply()
+                changelogPrefs.edit().putString("last_seen_changelog_version", "1.0.33").apply()
                 showChangelogModal = false
             }
         )
@@ -2418,8 +2418,8 @@ private fun ChangelogModal(
                 ChangelogPillarCard(
                     icon = Icons.Default.FolderSpecial,
                     accentColor = Color(0xFF00E676),
-                    title = "Segurança Máxima de Pastas & Restauração Direta",
-                    description = "Blindagem total contra modificação de pastas de origem durante backups (locais e Google Drive), isolamento de arquivos temporários em resync_tmp e restauração direta sem criação de subpastas aninhadas (ksu/ksu).",
+                    title = "Segurança Máxima de Pastas & Restauração Completa",
+                    description = "Blindagem total contra modificação de pastas de origem durante backups (locais e Google Drive), isolamento em resync_tmp, extração direta sem subpastas aninhadas, restauração unificada de arquivos soltos na raiz e subpastas, e reinicialização de estado residual na UI.",
                     cardBg = bentoCard,
                     borderColor = bentoBorder
                 )

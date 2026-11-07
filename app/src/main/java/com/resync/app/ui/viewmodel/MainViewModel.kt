@@ -1845,6 +1845,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         return null
     }
 
+    fun resetRestoreState() {
+        RestoreRepository.resetRestoreState()
+    }
+
     fun launchRestore(
         record: BackupRecord,
         selectedItemIds: Set<String>,
@@ -1856,6 +1860,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         selectedWifiKeys: Set<String>? = null,
         selectedBtKeys: Set<String>? = null
     ) {
+        resetRestoreState()
         val file = downloadedCacheFile?.takeIf { it.exists() && it.length() > 0L }
             ?: com.resync.app.data.model.BackupPaths.findLocalMirrorFile(record.filePath, record.title)
             ?: File(record.filePath)
