@@ -327,7 +327,7 @@ class ReSyncApplication : Application() {
                 val nowStr = dateFormat.format(java.util.Date())
 
                 val crashLogContent = buildString {
-                    appendLine("=== SWIFTVAULT CRASH LOG ===")
+                    appendLine("=== RESYNC CRASH LOG ===")
                     appendLine("Data/Hora: $nowStr")
                     appendLine("Versão do App: $versionName (Build $versionCode)")
                     appendLine("Dispositivo: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} (Android ${android.os.Build.VERSION.RELEASE}, API ${android.os.Build.VERSION.SDK_INT})")
@@ -395,7 +395,7 @@ class ReSyncApplication : Application() {
         try {
             workManager.cancelUniqueWork("SwiftVaultDailyBackup")
             workManager.cancelUniqueWork("SwiftVaultCloudSync")
-            workManager.cancelAllWorkByTag(com.resync.app.worker.BackupSafetyWorker.WORK_TAG)
+            workManager.cancelAllWorkByTag("BackupSafetyWorker")
         } catch (_: Throwable) {}
 
         // Sincroniza agendamentos: cancela tudo se o usuário não tiver ativado explicitamente

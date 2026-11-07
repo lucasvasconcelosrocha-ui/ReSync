@@ -37,11 +37,11 @@ object CloudThermalGovernor {
                     _thermalStatus.value = status
                     when (status) {
                         PowerManager.THERMAL_STATUS_NONE, PowerManager.THERMAL_STATUS_LIGHT -> {
-                            cloudParallelWorkers.set(3)
+                            cloudParallelWorkers.set(6)
                             AppLogger.i(TAG, "Status térmico normalizado (${status}). Nuvem em velocidade máxima.")
                         }
                         PowerManager.THERMAL_STATUS_MODERATE -> {
-                            cloudParallelWorkers.set(1)
+                            cloudParallelWorkers.set(3)
                             AppLogger.w(TAG, "Status térmico MODERADO detectado. Reduzindo paralelismo e tamanho de chunks da nuvem.")
                         }
                         PowerManager.THERMAL_STATUS_SEVERE, PowerManager.THERMAL_STATUS_CRITICAL -> {
@@ -60,16 +60,16 @@ object CloudThermalGovernor {
     fun getRecommendedChunkSize(baseChunkBytes: Int): Int {
         return when (_thermalStatus.value) {
             PowerManager.THERMAL_STATUS_SEVERE, PowerManager.THERMAL_STATUS_CRITICAL -> 4 * 1024 * 1024 // 4 MiB
-            PowerManager.THERMAL_STATUS_MODERATE -> 8 * 1024 * 1024 // 8 MiB
-            else -> baseChunkBytes // 16 to 32 MiB
+            PowerManager.THERMAL_STATUS_MODERATE -> 16 * 1024 * 1024 // 16 MiB
+            else -> baseChunkBytes // 32 MiB (Wi-Fi fast)
         }
     }
 
     fun getParallelDownloadConnections(maxConnections: Int): Int {
         return when (_thermalStatus.value) {
             PowerManager.THERMAL_STATUS_SEVERE, PowerManager.THERMAL_STATUS_CRITICAL -> 1
-            PowerManager.THERMAL_STATUS_MODERATE -> 2
-            else -> maxConnections
+            PowerManager.THERMAL_STATUS_MODERATE -> 3
+            else -> 6 // Max 6 parallel connections on fast Wi-Fi / normal thermal state
         }
     }
 

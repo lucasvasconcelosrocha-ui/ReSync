@@ -58,6 +58,7 @@ import com.resync.app.engine.FileCategory
 import com.resync.app.engine.GlobalFileScanner
 import com.resync.app.engine.ScannedItem
 import com.resync.app.engine.StorageRepository
+import com.resync.app.util.ShellSecurityUtils
 import com.resync.app.ui.components.CloudAccountPickerModal
 import com.resync.app.ui.components.CompletionAnimation
 import com.resync.app.ui.components.CompletionAnimationSize
@@ -500,7 +501,7 @@ fun FileExplorerScreen(
             // 2. ELEVATED FALLBACK: Usar root em partições de sistema ou caso a leitura direta venha vazia
             if (resultList.isEmpty() && (isRootActive || isSystemPath)) {
                 try {
-                    val shellResult = Shell.cmd("ls -la \"$path\"").exec()
+                    val shellResult = Shell.cmd("ls -la ${ShellSecurityUtils.shellEscape(path)}").exec()
                     if (shellResult.isSuccess && shellResult.out.isNotEmpty()) {
                         for (line in shellResult.out) {
                             val parsed = parseLsOutputLine(line, path)
@@ -1051,15 +1052,17 @@ fun FileExplorerScreen(
                                         val clip = clipboard!!
                                         coroutineScope.launch {
                                             withContext(Dispatchers.IO) {
+                                                val srcEsc = ShellSecurityUtils.shellEscape(clip.sourcePath)
+                                                val destEsc = ShellSecurityUtils.shellEscape("$currentPath/")
                                                 if (clip.isMove) {
                                                     if (isRootActive || isSystemCriticalPath(currentPath) || isSystemCriticalPath(clip.sourcePath)) {
-                                                        Shell.cmd("mv \"${clip.sourcePath}\" \"$currentPath/\"").exec()
+                                                        Shell.cmd("mv $srcEsc $destEsc").exec()
                                                     } else {
                                                         File(clip.sourcePath).renameTo(File(currentPath, clip.itemName))
                                                     }
                                                 } else {
                                                     if (isRootActive || isSystemCriticalPath(currentPath) || isSystemCriticalPath(clip.sourcePath)) {
-                                                        Shell.cmd("cp -r \"${clip.sourcePath}\" \"$currentPath/\"").exec()
+                                                        Shell.cmd("cp -r $srcEsc $destEsc").exec()
                                                     } else {
                                                         File(clip.sourcePath).copyRecursively(File(currentPath, clip.itemName), overwrite = true)
                                                     }
@@ -2124,7 +2127,9 @@ fun FileExplorerScreen(
                                                         val previewDir = File(context.cacheDir, "previews").apply { mkdirs() }
                                                         val previewFile = File(previewDir, item.name)
                                                         withContext(Dispatchers.IO) {
-                                                            Shell.cmd("cp \"${item.path}\" \"${previewFile.absolutePath}\"", "chmod 644 \"${previewFile.absolutePath}\"").exec()
+                                                            val srcEsc = ShellSecurityUtils.shellEscape(item.path)
+                                                            val destEsc = ShellSecurityUtils.shellEscape(previewFile.absolutePath)
+                                                            Shell.cmd("cp $srcEsc $destEsc", "chmod 644 $destEsc").exec()
                                                         }
                                                         if (previewFile.exists()) {
                                                             openFile(context, previewFile)
@@ -2349,8 +2354,9 @@ fun FileExplorerScreen(
                     onClick = {
                         coroutineScope.launch {
                             val target = if (currentPath == "/") "/" else currentPath
+                            val targetEsc = ShellSecurityUtils.shellEscape(target)
                             val result = withContext(Dispatchers.IO) {
-                                Shell.cmd("mount -o remount,rw /", "mount -o remount,rw \"$target\"").exec()
+                                Shell.cmd("mount -o remount,rw /", "mount -o remount,rw $targetEsc").exec()
                             }
                             if (result.isSuccess) {
                                 Toast.makeText(context, "Partição remontada como Leitura/Escrita!", Toast.LENGTH_SHORT).show()
@@ -2403,7 +2409,9 @@ fun FileExplorerScreen(
                                 val targetPath = if (parent.endsWith("/")) parent + renameInput.trim() else "$parent/${renameInput.trim()}"
                                 val success = withContext(Dispatchers.IO) {
                                     if (isRootActive || isSystemCriticalPath(item.path)) {
-                                        Shell.cmd("mv \"${item.path}\" \"$targetPath\"").exec().isSuccess
+                                        val srcEsc = ShellSecurityUtils.shellEscape(item.path)
+                                        val destEsc = ShellSecurityUtils.shellEscape(targetPath)
+                                        Shell.cmd("mv $srcEsc $destEsc").exec().isSuccess
                                     } else {
                                         item.file.renameTo(File(targetPath))
                                     }
@@ -2549,7 +2557,8 @@ fun FileExplorerScreen(
                                 val success = withContext(Dispatchers.IO) {
                                     if (isRootActive || isCritical) {
                                         try {
-                                            Shell.cmd("rm -rf \"${item.path}\"").exec().isSuccess
+                                            val pathEsc = ShellSecurityUtils.shellEscape(item.path)
+                                            Shell.cmd("rm -rf $pathEsc").exec().isSuccess
                                         } catch (_: Exception) {
                                             false
                                         }

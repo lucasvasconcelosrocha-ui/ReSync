@@ -8,6 +8,7 @@ import android.os.storage.StorageManager
 import android.os.storage.StorageVolume
 import android.util.Log
 import androidx.core.content.ContextCompat
+import com.resync.app.util.ShellSecurityUtils
 import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -232,8 +233,8 @@ object StorageRepository {
         // Root fallback via Shell if direct access returned null or empty
         if (isRootActive) {
             try {
-                val escapedPath = directory.absolutePath.replace("\"", "\\\"")
-                val output = Shell.cmd("ls -1p \"$escapedPath\"").exec().out
+                val escapedPath = ShellSecurityUtils.shellEscape(directory.absolutePath)
+                val output = Shell.cmd("ls -1p $escapedPath").exec().out
                 val results = mutableListOf<StorageItem>()
                 for (entry in output) {
                     val isDir = entry.endsWith("/")
@@ -311,16 +312,16 @@ object StorageRepository {
         // Fast path with Root: direct single du command on folder with 1.5s timeout
         if (isRootActive) {
             try {
-                val escaped = path.replace("\"", "\\\"")
+                val escaped = ShellSecurityUtils.shellEscape(path)
                 val out = withTimeoutOrNull(1500L) {
-                    Shell.cmd("du -sb \"$escaped\" 2>/dev/null || du -sk \"$escaped\" 2>/dev/null").exec().out
+                    Shell.cmd("du -sb $escaped 2>/dev/null || du -sk $escaped 2>/dev/null").exec().out
                 }
                 val firstLine = out?.firstOrNull()?.trim()
                 if (!firstLine.isNullOrBlank()) {
                     val tokens = firstLine.split(Regex("\\s+"))
                     val rawSize = tokens.firstOrNull()?.toLongOrNull()
                     if (rawSize != null) {
-                        val totalBytes = if (firstLine.contains(escaped) && rawSize > 0) {
+                        val totalBytes = if (firstLine.contains(path) && rawSize > 0) {
                             rawSize
                         } else {
                             rawSize * 1024L
@@ -371,9 +372,9 @@ object StorageRepository {
 
         if (isRootActive) {
             try {
-                val escaped = file.absolutePath.replace("\"", "\\\"")
+                val escaped = ShellSecurityUtils.shellEscape(file.absolutePath)
                 val out = withTimeoutOrNull(1000L) {
-                    Shell.cmd("stat -c %s \"$escaped\" 2>/dev/null || wc -c < \"$escaped\" 2>/dev/null").exec().out
+                    Shell.cmd("stat -c %s $escaped 2>/dev/null || wc -c < $escaped 2>/dev/null").exec().out
                 }
                 val raw = out?.firstOrNull()?.trim()
                 val parsed = raw?.toLongOrNull()

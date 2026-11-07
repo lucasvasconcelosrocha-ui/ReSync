@@ -56,9 +56,13 @@ class DownloadManager(private val oAuthManager: OAuthManager) {
     @Volatile
     private var pauseDeferred: CompletableDeferred<Unit>? = null
 
+    // SQLite write throttle — cap Room DB updates to once per 1500ms per download session
+    // to prevent WAL contention when parallel parts flood the DAO with concurrent writes.
+    private val lastDbUpdateMs = java.util.concurrent.atomic.AtomicLong(0L)
+
     companion object {
         private const val TAG = "DownloadManager"
-        private const val BUFFER_SIZE = 128 * 1024 // 128 KB buffer
+        private const val BUFFER_SIZE = 256 * 1024 // 256 KB buffer — optimal for large Drive downloads
     }
 
     fun pause() {
@@ -219,10 +223,11 @@ class DownloadManager(private val oAuthManager: OAuthManager) {
             )
         )
 
-        var lastEmitTimeMono = 0L
+        var lastUiReportTimeMono = 0L
         var accumulatedActiveTimeMs = savedRecord?.activeTimeMs ?: 0L
         var accumulatedIdleTimeMs = savedRecord?.idleTimeMs ?: 0L
         var downloadStartMono = SystemClock.elapsedRealtime()
+        lastDbUpdateMs.set(0L)
 
         fun reportProgress(isFinished: Boolean = false, stageName: String? = null) {
             val nowMono = SystemClock.elapsedRealtime()
@@ -274,8 +279,17 @@ class DownloadManager(private val oAuthManager: OAuthManager) {
                             accountEmail = accountEmail,
                             onChunkWritten = { read ->
                                 val nowMono = SystemClock.elapsedRealtime()
-                                if (nowMono - lastEmitTimeMono >= 500L) { // Throttled to ~2x/s
-                                    lastEmitTimeMono = nowMono
+                                val nowEpoch = System.currentTimeMillis()
+
+                                // 1. Separate UI reporting: throttled to 250 ms
+                                if (nowMono - lastUiReportTimeMono >= 250L) {
+                                    lastUiReportTimeMono = nowMono
+                                    reportProgress()
+                                }
+
+                                // 2. Separate SQLite/Room write: throttled to 1500 ms via shared AtomicLong
+                                val lastDb = lastDbUpdateMs.get()
+                                if (nowEpoch - lastDb >= 1500L && lastDbUpdateMs.compareAndSet(lastDb, nowEpoch)) {
                                     accumulatedActiveTimeMs += (nowMono - downloadStartMono)
                                     downloadStartMono = nowMono
 
@@ -286,10 +300,9 @@ class DownloadManager(private val oAuthManager: OAuthManager) {
                                             activeMs = accumulatedActiveTimeMs,
                                             idleMs = accumulatedIdleTimeMs,
                                             speed = parts.sumOf { it.currentSpeedMBps.toDouble() }.toFloat(),
-                                            updatedAt = System.currentTimeMillis()
+                                            updatedAt = nowEpoch
                                         )
                                     }
-                                    reportProgress()
                                 }
                             }
                         )

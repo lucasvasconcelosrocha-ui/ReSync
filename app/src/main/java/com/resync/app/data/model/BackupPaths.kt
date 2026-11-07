@@ -252,4 +252,30 @@ object BackupPaths {
         // 5. Absolute fallback: newest container file
         return candidateFiles.maxByOrNull { it.lastModified() }
     }
+
+    /**
+     * Limpeza preventiva de arquivos residuais e órfãos na pasta temporária (resync_tmp).
+     * Exclui arquivos *.part, *.tmp, pastas staging_* ou itens com mais de 1 hora de inatividade
+     * deixados por processos ou crashes anteriores antes de calcular espaço livre via StatFs.
+     */
+    fun cleanupOrphanTempFiles(context: Context) {
+        try {
+            val tmpDir = File(context.cacheDir, "resync_tmp")
+            if (!tmpDir.exists() || !tmpDir.isDirectory) return
+            val oneHourAgo = System.currentTimeMillis() - (60L * 60L * 1000L)
+            tmpDir.listFiles()?.forEach { file ->
+                try {
+                    val name = file.name
+                    val isResidualName = name.endsWith(".part", ignoreCase = true) ||
+                            name.endsWith(".tmp", ignoreCase = true) ||
+                            name.startsWith("staging_", ignoreCase = true) ||
+                            name.startsWith("restore_", ignoreCase = true)
+                    val isOlderThanOneHour = file.lastModified() < oneHourAgo
+                    if (isResidualName || isOlderThanOneHour) {
+                        if (file.isDirectory) file.deleteRecursively() else file.delete()
+                    }
+                } catch (_: Throwable) {}
+            }
+        } catch (_: Throwable) {}
+    }
 }

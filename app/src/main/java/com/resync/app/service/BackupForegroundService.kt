@@ -146,9 +146,9 @@ class BackupForegroundService : Service() {
     private val activeConcurrencyLimit = AtomicInteger(com.resync.app.engine.PerformanceConfig.maxWorkers)
     @Volatile private var thermalCooldownDelayMs = 0L
 
-    // Notification throttling (minimum 1000ms between calls to avoid freezing System UI)
+    // Notification throttling (minimum 500ms between calls to avoid freezing System UI)
     private var lastNotifTimeMs = 0L
-    private val NOTIF_THROTTLE_MS = 1000L
+    private val NOTIF_THROTTLE_MS = 500L
 
     override fun onCreate() {
         super.onCreate()

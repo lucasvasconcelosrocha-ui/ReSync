@@ -995,6 +995,9 @@ class BackupEngine(private val context: Context) {
                 }
             }
 
+            // Limpeza preventiva de arquivos órfãos em resync_tmp antes do cheque StatFs
+            com.resync.app.data.model.BackupPaths.cleanupOrphanTempFiles(context)
+
             // Check free space on internal storage before proceeding
             val internalRoot = android.os.Environment.getExternalStorageDirectory()
             val freeBytes = try {
@@ -1974,7 +1977,7 @@ class BackupEngine(private val context: Context) {
                     syncStatus = SyncStatus.UPLOADING
                 )
                 dbHelper.insertBackupRecord(record)
-                dbHelper.insertLog(LogLevel.INFO, "BackupEngine", "Backup SOMENTE_DRIVE gerado em staging temporário: ${driveStagingFile.name} (${driveStagingFile.length() / (1024 * 1024)} MB). Nenhuma cópia gravada em SwiftVaultBackups.")
+                dbHelper.insertLog(LogLevel.INFO, "BackupEngine", "Backup SOMENTE_DRIVE gerado em staging temporário: ${driveStagingFile.name} (${driveStagingFile.length() / (1024 * 1024)} MB). Nenhuma cópia local gravada em ReSyncBackups.")
                 cpuGovernor.endProfiling()
 
                 val failedCount = completedItemsList.count { !it.success && !it.isIgnored }
@@ -3191,7 +3194,7 @@ class BackupEngine(private val context: Context) {
         // 2. Human-readable text report
         val txtBuilder = java.lang.StringBuilder()
         txtBuilder.appendLine("==================================================")
-        txtBuilder.appendLine("SWIFTVAULT - RELATÓRIO DE DISPOSITIVOS BLUETOOTH")
+        txtBuilder.appendLine("RESYNC - RELATÓRIO DE DISPOSITIVOS BLUETOOTH")
         txtBuilder.appendLine("==================================================")
         txtBuilder.appendLine("Data do Backup: ${SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault()).format(Date())}")
         txtBuilder.appendLine("Dispositivos Pareados: ${bondedRecords.size}")

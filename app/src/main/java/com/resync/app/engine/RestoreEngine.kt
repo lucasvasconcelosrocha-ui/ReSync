@@ -176,6 +176,8 @@ class RestoreEngine(private val context: Context) {
             android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
         } catch (_: Throwable) {}
 
+        // Limpeza preventiva de arquivos órfãos em resync_tmp antes do cheque StatFs
+        com.resync.app.data.model.BackupPaths.cleanupOrphanTempFiles(context)
         val tempRestoreBase = File(context.cacheDir, "resync_tmp").apply { mkdirs() }
         val tempRestoreDir = File(tempRestoreBase, "restore_${UUID.randomUUID()}").apply { mkdirs() }
 
@@ -214,6 +216,21 @@ class RestoreEngine(private val context: Context) {
         var currentItemIdx = 0
 
         try {
+            // Cheque de espaço livre na partição temporária via StatFs
+            val freeBytes = try {
+                android.os.StatFs(tempRestoreBase.absolutePath).availableBytes
+            } catch (_: Exception) {
+                Long.MAX_VALUE
+            }
+            val requiredMargin = itemsToRestore.sumOf { it.sizeBytes } + (50L * 1024 * 1024)
+            if (freeBytes < requiredMargin) {
+                val spaceErr = "Espaço insuficiente no cache interno para descompactação. Necessário: ${(requiredMargin / (1024 * 1024))} MB. Disponível: ${(freeBytes / (1024 * 1024))} MB."
+                dbHelper.insertLog(LogLevel.ERROR, "RestoreEngine", spaceErr)
+                send(RestoreProgress("Erro", spaceErr, 1.0f, isFinished = true, error = spaceErr))
+                tempRestoreDir.deleteRecursively()
+                return@channelFlow
+            }
+
             // Unpack selected files from container
             val archivePaths = itemsToRestore.map { it.archiveEntryPath }.toSet()
 

@@ -235,12 +235,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          gh release delete "$TAG_NAME" --yes || true
           gh release create "$TAG_NAME" \
             "ReSync-${TAG_NAME}.apk" \
             "ReSync-${TAG_NAME}.apk.sha256" \
             "version.json" \
             --title "ReSync ${TAG_NAME}" \
-            --notes-file release_notes.md
+            --notes-file release_notes.md \
+            --clobber
 
       - name: Clean Up Keystore
         if: always()

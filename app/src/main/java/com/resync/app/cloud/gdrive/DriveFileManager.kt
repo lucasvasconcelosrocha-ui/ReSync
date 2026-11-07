@@ -915,7 +915,7 @@ class DriveFileManager(private val oAuthManager: OAuthManager) {
                     }
                 }
             } else {
-                val boundary = "-------SwiftVaultBoundary" + System.currentTimeMillis()
+                val boundary = "-------ReSyncBoundary" + System.currentTimeMillis()
                 val url = "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart"
                 val metaObj = JsonObject().apply {
                     addProperty("name", name)

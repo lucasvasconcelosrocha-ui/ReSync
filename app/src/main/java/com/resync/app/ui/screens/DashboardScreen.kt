@@ -171,7 +171,7 @@ fun DashboardScreen(
     var showSecurityModal by remember { mutableStateOf(false) }
     val changelogPrefs = remember { context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE) }
     var showChangelogModal by remember {
-        mutableStateOf(changelogPrefs.getString("last_seen_changelog_version", "") != "1.0.33")
+        mutableStateOf(changelogPrefs.getString("last_seen_changelog_version", "") != "1.0.34")
     }
     val scrollState = rememberScrollState()
     var isPullRefreshing by remember { mutableStateOf(false) }
@@ -1473,16 +1473,16 @@ fun DashboardScreen(
         )
     }
 
-    // Modal Automático de Novidades (Changelog v1.0.33)
+    // Modal Automático de Novidades (Changelog v1.0.34)
     if (showChangelogModal) {
         ChangelogModal(
-            versionName = "1.0.33",
+            versionName = "1.0.34",
             primaryAccent = primaryAccent,
             onDismiss = {
                 showChangelogModal = false
             },
             onConfirm = {
-                changelogPrefs.edit().putString("last_seen_changelog_version", "1.0.33").apply()
+                changelogPrefs.edit().putString("last_seen_changelog_version", "1.0.34").apply()
                 showChangelogModal = false
             }
         )
@@ -2400,7 +2400,7 @@ private fun ChangelogModal(
                 color = TextPrimary
             )
             Text(
-                text = "Motor universal, streaming de alta velocidade e experiência refinada",
+                text = "Google Drive Turbo 2.0, Shell Hardening e Arquitetura Refinada",
                 fontSize = 12.5.sp,
                 color = TextSecondary
             )
@@ -2416,55 +2416,46 @@ private fun ChangelogModal(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 ChangelogPillarCard(
-                    icon = Icons.Default.FolderSpecial,
-                    accentColor = Color(0xFF00E676),
-                    title = "Segurança Máxima de Pastas & Restauração Completa",
-                    description = "Blindagem total contra modificação de pastas de origem durante backups (locais e Google Drive), isolamento em resync_tmp, extração direta sem subpastas aninhadas, restauração unificada de arquivos soltos na raiz e subpastas, e reinicialização de estado residual na UI.",
-                    cardBg = bentoCard,
-                    borderColor = bentoBorder
-                )
-
-                ChangelogPillarCard(
                     icon = Icons.Default.CloudSync,
                     accentColor = AccentElectricCyan,
-                    title = "Google Drive Turbo",
-                    description = "Streaming direto em blocos de 64 KB com chunks de 4 MB a 16 MB, conexão HTTP/2 unificada e cache persistente de pastas.",
-                    cardBg = bentoCard,
-                    borderColor = bentoBorder
-                )
-
-                ChangelogPillarCard(
-                    icon = Icons.Default.Shield,
-                    accentColor = StatusSuccess,
-                    title = "Suporte Universal Sem Root",
-                    description = "Extração e restauração de APKs base, splits e mídias públicas via userspace nativo; fallbacks com cópia para Área de Transferência e atalho para configurações em DNS, Wi-Fi e Bluetooth.",
-                    cardBg = bentoCard,
-                    borderColor = bentoBorder
-                )
-
-                ChangelogPillarCard(
-                    icon = Icons.Default.Terminal,
-                    accentColor = Color(0xFFA855F7),
-                    title = "Gestão Root & Sessão Persistente libsu",
-                    description = "Inicialização mestre com FLAG_MOUNT_MASTER no startup, eliminando reinicializações frequentes de shell e atritos com sucompat.",
+                    title = "Google Drive Turbo 2.0 (Upload Acelerado)",
+                    description = "Streaming de 256 KB com flush terminal único, MD5 em passagem única inline (sem releitura de disco) e chunks dinâmicos escaláveis de até 32 MB em Wi-Fi rápido.",
                     cardBg = bentoCard,
                     borderColor = bentoBorder
                 )
 
                 ChangelogPillarCard(
                     icon = Icons.Default.Speed,
+                    accentColor = AccentElectricCyan,
+                    title = "Download Paralelo 6x & HTTP/2",
+                    description = "6 fluxos simultâneos de download em estado térmico normal, buffer de 256 KB, contenção reduzida no SQLite Room e migração completa de índices para HTTP/2.",
+                    cardBg = bentoCard,
+                    borderColor = bentoBorder
+                )
+
+                ChangelogPillarCard(
+                    icon = Icons.Default.Shield,
+                    accentColor = Color(0xFF00E676),
+                    title = "Shell Hardening no Explorer",
+                    description = "Sanitização rigorosa com ShellSecurityUtils.shellEscape em todas as operações root (mv, cp, rm, mount) no explorador de arquivos e repositório de armazenamento.",
+                    cardBg = bentoCard,
+                    borderColor = bentoBorder
+                )
+
+                ChangelogPillarCard(
+                    icon = Icons.Default.CleaningServices,
                     accentColor = Color(0xFFFFA726),
-                    title = "Otimização Térmica e de Hardware",
-                    description = "Leitura direta em sysfs com throttle de 3s e blindagem contra injeção de comandos em rotinas de verificação SHA-256.",
+                    title = "Limpeza Preventiva de Temporários",
+                    description = "Varredura automática e expurgo de arquivos e pastas residuais em resync_tmp antes do cálculo StatFs, eliminando falsos positivos de espaço insuficiente.",
                     cardBg = bentoCard,
                     borderColor = bentoBorder
                 )
 
                 ChangelogPillarCard(
                     icon = Icons.Default.AutoAwesome,
-                    accentColor = Color(0xFF00E676),
-                    title = "Pacote Mais Leve",
-                    description = "Redução de mais de 750 KB no APK com exclusão de dependências órfãs e localização restrita ao português.",
+                    accentColor = Color(0xFFA855F7),
+                    title = "Arquitetura Unificada & Limpeza de Código",
+                    description = "Remoção de classes e motores órfãos legados (UniversalRestoreManager, BackupSafetyWorker, IBackupEngine/Root/Normal), além de deduplicação de assets de imagem.",
                     cardBg = bentoCard,
                     borderColor = bentoBorder
                 )

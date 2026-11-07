@@ -4,6 +4,43 @@ Todas as mudanças notáveis deste projeto são documentadas neste arquivo.
 
 ---
 
+## [1.0.34] - 2026-11-07
+
+### ⚡ Google Drive Turbo 2.0 (Velocidade Máxima Upload & Download)
+- **Upload com Streaming Otimizado & Flush Terminal Único:**
+  - Buffer de leitura de streaming aumentado para **256 KB** (`262_144` bytes) em `StreamingFileRequestBody`.
+  - Removida a chamada `sink.flush()` de dentro do loop `while` de leitura, eliminando a fragmentação de quadros HTTP/2 e pacotes TLS. Chamada única terminal ao final da transmissão do chunk.
+  - Throttle de progresso implementado com janela de 200 ms (`SystemClock.elapsedRealtime()`), eliminando milhares de recomposições e callbacks desnecessários por chunk.
+- **MD5 em Passagem Única (Single-Pass) & Chunks de até 32 MB:**
+  - Eliminação da releitura de disco pós-chunk: o hash MD5 agora é calculado inline em passagem única (`chunkDigest.update()`) dentro do próprio loop de envio, sincronizando o digest ao confirmar o status HTTP 308.
+  - Elevação do tamanho máximo do chunk dinâmico para **32 MB** em Wi-Fi de alta velocidade sem restrição térmica (16 MB em Wi-Fi moderado e 4 MB em dados móveis/restrição térmica via `CloudThermalGovernor`).
+- **Download Paralelo 6x & Redução de Contenção SQLite:**
+  - Aumento das conexões simultâneas de download em estado térmico normal de 4 para **6 fluxos paralelos**.
+  - Buffer de leitura de download ampliado para **256 KB**.
+  - Separação entre a frequência de atualização da UI (250 ms) e a frequência de persistência no Room (`cloudTransferDao.updateProgress`), limitada a cada 1500 ms com `AtomicLong` compartilhado, extinguindo a disputa de I/O de disco entre as corrotinas de download e o SQLite.
+- **Migração Completa do `BackupIndexManager` para HTTP/2:**
+  - Substituição de todas as chamadas legadas `HttpURLConnection` nos métodos `downloadRemoteIndexBytes`, `fetchRemoteRangeBytes`, `findEntryInRemoteCentralDirectory` e `fetchDriveFileMetadata` por chamadas `okhttp3.Request` executadas via pool compartilhado `GDriveNetworkClient.client`.
+  - Configuração de alta vazão no OkHttp Dispatcher: `maxRequests = 64` e `maxRequestsPerHost = 32`.
+
+### 🛡️ Shell Hardening & Blindagem no Explorer
+- **Sanitização Universal com `ShellSecurityUtils.shellEscape`:**
+  - Uniformização de toda e qualquer interpolação de caminho de arquivos e diretórios enviada para execução root (`su -c`) em `FileExplorerScreen.kt`, `StorageExplorerListComponent.kt` e `StorageRepository.kt`.
+  - Prevenção absoluta contra falhas em diretórios com espaços, parênteses, apóstrofos ou metacaracteres shell.
+
+### 🧹 Higiene de Disco & Prevenção de Falsos-Positivos
+- **Limpeza Preventiva em `resync_tmp` antes do cálculo `StatFs`:**
+  - Varredura e expurgo automático de arquivos residuais e órfãos (`*.part`, `*.tmp`, `staging_*`, `restore_*`) criados há mais de 1 hora na pasta `cacheDir/resync_tmp` em `BackupEngine` e `RestoreEngine` antes da verificação de espaço disponível via `StatFs`.
+
+### 📦 Refinamento Geral, Remoção de Código Morto & Assets
+- **Expurgo de Motores e Provedores Órfãos:**
+  - Remoção definitiva de `UniversalRestoreManager`, `BackupSafetyWorker`, `IBackupEngine`, `RootBackupEngine`, `NormalBackupEngine`, `BackupEngineFactory` e provedores legados desacoplados.
+- **Deduplicação de Imagens PNG:**
+  - Exclusão de cópias redundantes de ícones em `drawable-nodpi`.
+- **Limpeza de Textos Residuais:**
+  - Atualização de textos e logs legados com o nome "SwiftVault" para "ReSync", preservando chaves criptográficas e banco Room retrocompatíveis.
+
+---
+
 ## [1.0.33] - 2026-11-07
 
 ### 🛡️ Correções Finais de Integridade de Backup e Restauração

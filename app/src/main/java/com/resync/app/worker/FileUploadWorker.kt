@@ -268,6 +268,9 @@ class FileUploadWorker(
                 updateRequest.mediaHttpUploader.apply {
                     isDirectUploadEnabled = false
                     chunkSize = com.resync.app.engine.PerformanceConfig.uploadChunkBytes
+                    // Disable google-api-client GZIP re-compression: .resync containers are already
+                    // ZIP/DEFLATE-compressed; re-compressing adds CPU overhead without size reduction.
+                    setDisableGZipContent(true)
                     setProgressListener { u -> progressCallback(u) }
                 }
                 try {

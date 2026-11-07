@@ -33,8 +33,6 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.InputStreamReader
 import java.io.RandomAccessFile
-import java.net.HttpURLConnection
-import java.net.URL
 import java.net.URLEncoder
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -412,23 +410,24 @@ class BackupIndexManager(
             ?: return@withContext Result.failure(GoogleDriveSessionExpiredException("Não autenticado", 401))
 
         for (attempt in 1..maxRetries) {
-            var conn: HttpURLConnection? = null
+            var currentResp: okhttp3.Response? = null
             try {
-                val url = URL("https://www.googleapis.com/drive/v3/files/$indexFileId?alt=media&supportsAllDrives=true")
-                conn = (url.openConnection() as HttpURLConnection).apply {
-                    requestMethod = "GET"
-                    setRequestProperty("Authorization", "Bearer $currentToken")
-                    setRequestProperty("Accept-Encoding", "identity")
-                    connectTimeout = 15000
-                    readTimeout = 20000
-                }
+                val url = "https://www.googleapis.com/drive/v3/files/$indexFileId?alt=media&supportsAllDrives=true"
+                val request = okhttp3.Request.Builder()
+                    .url(url)
+                    .header("Authorization", "Bearer $currentToken")
+                    .header("Accept-Encoding", "identity")
+                    .build()
 
-                val code = conn.responseCode
-                val contentType = conn.contentType ?: ""
-                val contentRange = conn.getHeaderField("Content-Range") ?: "N/A"
+                val response = GDriveNetworkClient.client.newCall(request).execute()
+                currentResp = response
+
+                val code = response.code
+                val contentType = response.header("Content-Type") ?: ""
+                val contentRange = response.header("Content-Range") ?: "N/A"
 
                 if (code == 401) {
-                    conn.disconnect()
+                    response.close()
                     val refreshed = oAuthManager.forceRefreshToken(accountEmail = accountEmail)
                     if (refreshed.isSuccess) {
                         currentToken = refreshed.getOrThrow()
@@ -438,25 +437,27 @@ class BackupIndexManager(
                 }
 
                 if (code == 429 || code in 500..599) {
-                    conn.disconnect()
+                    response.close()
                     delay(1000L * (1L shl (attempt - 1)))
                     continue
                 }
 
                 if (code != 200 && code != 206) {
-                    val err = conn.errorStream?.bufferedReader()?.use { it.readText() } ?: ""
+                    val err = response.body?.string() ?: ""
+                    response.close()
                     logRestoreIndexDiagnostic(indexFileId, indexName, 0L, code, contentType, contentRange, ByteArray(0))
                     return@withContext Result.failure(GoogleDriveApiException(code, "HTTP $code ao baixar índice: $err"))
                 }
 
-                val bytes = conn.inputStream.use { it.readBytes() }
+                val bytes = response.body?.bytes() ?: ByteArray(0)
+                response.close()
                 logRestoreIndexDiagnostic(indexFileId, indexName, bytes.size.toLong(), code, contentType, contentRange, bytes)
                 return@withContext Result.success(bytes)
             } catch (e: Exception) {
                 if (attempt == maxRetries) return@withContext Result.failure(e)
                 delay(1000L)
             } finally {
-                conn?.disconnect()
+                currentResp?.close()
             }
         }
         Result.failure(IOException("Falha ao baixar índice após $maxRetries tentativas."))
@@ -669,25 +670,26 @@ class BackupIndexManager(
                 delay(delayMs)
             }
 
-            var conn: HttpURLConnection? = null
+            var currentResp: okhttp3.Response? = null
             try {
-                val url = URL("https://www.googleapis.com/drive/v3/files/$fileId?alt=media&supportsAllDrives=true")
-                conn = (url.openConnection() as HttpURLConnection).apply {
-                    requestMethod = "GET"
-                    setRequestProperty("Authorization", "Bearer $currentToken")
-                    setRequestProperty("Accept-Encoding", "identity")
-                    setRequestProperty("Range", "bytes=$startByte-$endByte")
-                    connectTimeout = 15000
-                    readTimeout = 25000
-                }
+                val url = "https://www.googleapis.com/drive/v3/files/$fileId?alt=media&supportsAllDrives=true"
+                val request = okhttp3.Request.Builder()
+                    .url(url)
+                    .header("Authorization", "Bearer $currentToken")
+                    .header("Accept-Encoding", "identity")
+                    .header("Range", "bytes=$startByte-$endByte")
+                    .build()
 
-                val code = conn.responseCode
-                val contentType = conn.contentType ?: ""
-                val contentRange = conn.getHeaderField("Content-Range") ?: "N/A"
+                val response = GDriveNetworkClient.client.newCall(request).execute()
+                currentResp = response
+
+                val code = response.code
+                val contentType = response.header("Content-Type") ?: ""
+                val contentRange = response.header("Content-Range") ?: "N/A"
 
                 // Em 401: renovar token e tentar novamente
                 if (code == 401) {
-                    conn.disconnect()
+                    response.close()
                     val refreshed = oAuthManager.forceRefreshToken(accountEmail = accountEmail)
                     if (refreshed.isSuccess) {
                         currentToken = refreshed.getOrThrow()
@@ -698,15 +700,16 @@ class BackupIndexManager(
 
                 // Em 429 ou 5xx: retry com backoff exponencial
                 if (code == 429 || code in 500..599) {
-                    conn.disconnect()
+                    response.close()
                     lastException = GoogleDriveApiException(code, "Google Drive retornou HTTP $code (Rate limit / Servidor)")
                     continue
                 }
 
                 // Ler corpo da resposta ou stream de erro
-                val stream: InputStream = if (code in 200..299) conn.inputStream else (conn.errorStream ?: conn.inputStream)
+                val stream: InputStream = response.body?.byteStream() ?: ByteArrayInputStream(ByteArray(0))
                 val maxBody = if (code in 200..299) expectedLen.toInt() else MAX_ERROR_BODY
                 val bodyBytes = stream.use { it.readAtMost(maxBody) }
+                response.close()
 
                 // Item A do diagnóstico: Registrar log RESTORE_INDEX obrigatório
                 logRestoreIndexDiagnostic(fileId, fileName, expectedTotalSize, code, contentType, contentRange, bodyBytes)
@@ -745,7 +748,7 @@ class BackupIndexManager(
             } catch (e: Exception) {
                 lastException = e
             } finally {
-                conn?.disconnect()
+                currentResp?.close()
             }
         }
 
@@ -794,22 +797,22 @@ class BackupIndexManager(
     ): Result<CdEntry?> = withContext(Dispatchers.IO) {
         var token = oAuthManager.getValidAccessToken(accountEmail)
             ?: return@withContext Result.failure(GoogleDriveSessionExpiredException("Usuário não autenticado", 401))
-        var conn: HttpURLConnection? = null
+        var currentResponse: okhttp3.Response? = null
         try {
             var refreshed = false
             while (true) {
-                val url = URL("https://www.googleapis.com/drive/v3/files/$fileId?alt=media&supportsAllDrives=true")
-                conn = (url.openConnection() as HttpURLConnection).apply {
-                    requestMethod = "GET"
-                    setRequestProperty("Authorization", "Bearer $token")
-                    setRequestProperty("Accept-Encoding", "identity")
-                    setRequestProperty("Range", "bytes=$cdOffset-${cdOffset + cdSize - 1}")
-                    connectTimeout = 15000
-                    readTimeout = 30000
-                }
-                val code = conn.responseCode
+                val url = "https://www.googleapis.com/drive/v3/files/$fileId?alt=media&supportsAllDrives=true"
+                val request = okhttp3.Request.Builder()
+                    .url(url)
+                    .header("Authorization", "Bearer $token")
+                    .header("Accept-Encoding", "identity")
+                    .header("Range", "bytes=$cdOffset-${cdOffset + cdSize - 1}")
+                    .build()
+                val resp = GDriveNetworkClient.client.newCall(request).execute()
+                currentResponse = resp
+                val code = resp.code
                 if (code == 401 && !refreshed) {
-                    conn.disconnect()
+                    resp.close()
                     val r = oAuthManager.forceRefreshToken(accountEmail = accountEmail)
                     if (r.isFailure) return@withContext Result.failure(GoogleDriveSessionExpiredException("Sessão expirada no Google Drive (HTTP 401)", 401))
                     token = r.getOrThrow()
@@ -817,6 +820,7 @@ class BackupIndexManager(
                     continue
                 }
                 if (code != 206) {
+                    resp.close()
                     return@withContext Result.failure(
                         GoogleDriveApiException(code, "Leitura do Diretório Central exige HTTP 206 (recebido $code)")
                     )
@@ -824,7 +828,8 @@ class BackupIndexManager(
                 break
             }
 
-            val input = java.io.DataInputStream(java.io.BufferedInputStream(conn!!.inputStream, 64 * 1024))
+            val body = currentResponse?.body ?: return@withContext Result.failure(IOException("Corpo de resposta vazio ao ler Diretório Central"))
+            val input = java.io.DataInputStream(java.io.BufferedInputStream(body.byteStream(), 64 * 1024))
             val fixed = ByteArray(46)
             var consumed = 0L
             var lastReport = 0L
@@ -883,7 +888,7 @@ class BackupIndexManager(
         } catch (e: Exception) {
             Result.failure(e)
         } finally {
-            conn?.disconnect()
+            currentResponse?.close()
         }
     }
 
@@ -1100,35 +1105,37 @@ class BackupIndexManager(
     private fun fetchDriveFileMetadata(fileId: String, token: String): Result<DriveFileMetadata> {
         return try {
             val fields = URLEncoder.encode("id,name,size,createdTime,modifiedTime,md5Checksum,mimeType,appProperties", "UTF-8")
-            val url = URL("https://www.googleapis.com/drive/v3/files/$fileId?fields=$fields&supportsAllDrives=true")
-            val conn = url.openConnection() as HttpURLConnection
-            conn.requestMethod = "GET"
-            conn.setRequestProperty("Authorization", "Bearer $token")
-            conn.connectTimeout = 12000
-            conn.readTimeout = 12000
+            val url = "https://www.googleapis.com/drive/v3/files/$fileId?fields=$fields&supportsAllDrives=true"
+            val request = okhttp3.Request.Builder()
+                .url(url)
+                .header("Authorization", "Bearer $token")
+                .build()
+            val response = GDriveNetworkClient.client.newCall(request).execute()
+            response.use { resp ->
+                val code = resp.code
+                if (code == 401) {
+                    return Result.failure(GoogleDriveSessionExpiredException("Sessão expirada", 401))
+                }
+                if (code !in 200..299) {
+                    return Result.failure(GoogleDriveApiException(code, "Falha ao obter metadados (HTTP $code)"))
+                }
 
-            val code = conn.responseCode
-            if (code == 401) {
-                return Result.failure(GoogleDriveSessionExpiredException("Sessão expirada", 401))
-            }
-            if (code !in 200..299) {
-                return Result.failure(GoogleDriveApiException(code, "Falha ao obter metadados (HTTP $code)"))
-            }
+                val body = resp.body ?: return Result.failure(IOException("Corpo da resposta vazio ao buscar metadados"))
+                val json = InputStreamReader(body.byteStream(), Charsets.UTF_8).use {
+                    gson.fromJson(it, JsonObject::class.java)
+                }
 
-            val json = InputStreamReader(conn.inputStream, Charsets.UTF_8).use {
-                gson.fromJson(it, JsonObject::class.java)
+                val meta = DriveFileMetadata(
+                    id = json.get("id").asString,
+                    name = json.get("name")?.asString ?: "",
+                    sizeBytes = json.get("size")?.asLong ?: 0L,
+                    createdTime = System.currentTimeMillis(),
+                    modifiedTime = System.currentTimeMillis(),
+                    md5Checksum = json.get("md5Checksum")?.asString,
+                    mimeType = json.get("mimeType")?.asString ?: "application/octet-stream"
+                )
+                Result.success(meta)
             }
-
-            val meta = DriveFileMetadata(
-                id = json.get("id").asString,
-                name = json.get("name")?.asString ?: "",
-                sizeBytes = json.get("size")?.asLong ?: 0L,
-                createdTime = System.currentTimeMillis(),
-                modifiedTime = System.currentTimeMillis(),
-                md5Checksum = json.get("md5Checksum")?.asString,
-                mimeType = json.get("mimeType")?.asString ?: "application/octet-stream"
-            )
-            Result.success(meta)
         } catch (e: Exception) {
             Result.failure(e)
         }

@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.resync.app.engine.StorageRepository
+import com.resync.app.util.ShellSecurityUtils
 import com.resync.app.ui.screens.ExplorerItem
 import com.resync.app.ui.screens.isReadOnlyPartition
 import com.resync.app.ui.screens.isSystemCriticalPath
@@ -171,10 +172,11 @@ fun StorageExplorerListComponent(
 
             // 2. ROOT / ELEVATED FALLBACK: Usar root em partições de sistema ou caso a leitura direta venha vazia
             if (resultList.isEmpty() && (isRootActive || isSystemPath)) {
+                val escapedPath = ShellSecurityUtils.shellEscape(path)
                 // 1. Tentar execução prioritária com ls -la para obter metadados e tamanhos reais
                 try {
                     val shellResult = withTimeoutOrNull(2500L) {
-                        Shell.cmd("ls -la \"$path\"").exec()
+                        Shell.cmd("ls -la $escapedPath").exec()
                     }
                     if (shellResult != null && shellResult.isSuccess && shellResult.out.isNotEmpty()) {
                         for (line in shellResult.out) {
@@ -191,7 +193,7 @@ fun StorageExplorerListComponent(
                 if (resultList.isEmpty() && isSystemPath) {
                     try {
                         val lines = withTimeoutOrNull(2500L) {
-                            val shellRes = Shell.cmd("ls -la \"$path\"").exec()
+                            val shellRes = Shell.cmd("ls -la $escapedPath").exec()
                             if (shellRes.isSuccess) shellRes.out else emptyList()
                         }
                         if (lines != null && lines.isNotEmpty()) {
@@ -210,7 +212,7 @@ fun StorageExplorerListComponent(
                 if (resultList.isEmpty() && isSystemPath) {
                     try {
                         val shellResult = withTimeoutOrNull(2500L) {
-                            Shell.cmd("ls -lan \"$path\"").exec()
+                            Shell.cmd("ls -lan $escapedPath").exec()
                         }
                         if (shellResult != null && shellResult.isSuccess && shellResult.out.isNotEmpty()) {
                             for (line in shellResult.out) {
@@ -228,7 +230,7 @@ fun StorageExplorerListComponent(
                 if (resultList.isEmpty() && isSystemPath) {
                     try {
                         val shellResult = withTimeoutOrNull(2000L) {
-                            Shell.cmd("ls -1pa \"$path\"").exec()
+                            Shell.cmd("ls -1pa $escapedPath").exec()
                         }
                         if (shellResult != null && shellResult.isSuccess && shellResult.out.isNotEmpty()) {
                             for (raw in shellResult.out) {
