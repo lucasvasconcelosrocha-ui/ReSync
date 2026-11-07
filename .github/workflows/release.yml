@@ -241,7 +241,7 @@ jobs:
             "ReSync-${TAG_NAME}.apk.sha256" \
             "version.json" \
             --title "ReSync ${TAG_NAME}" \
-            --notes-file release_notes.md
+            --notes-file "release_notes.md"
 
       - name: Clean Up Keystore
         if: always()
