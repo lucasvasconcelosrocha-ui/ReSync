@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:shrinkMode="strict"
+    tools:keep="@layout/notification_*,@id/notif_*"
+    tools:discard="@layout/ime_base_split_test_activity,@layout/ime_secondary_split_test_activity,@drawable/abc_vector_test" />
