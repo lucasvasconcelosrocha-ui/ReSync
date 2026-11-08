@@ -244,10 +244,16 @@ class BackupForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Blindagem Android 14/15: startForeground e locks DEVEM ser a primeira linha absoluta sem timeout
+        acquireLocks()
+        val title = intent?.getStringExtra(EXTRA_TITLE) ?: getString(R.string.backup_in_progress)
+        ensureForegroundStarted(title)
+
         val action = intent?.action
         android.util.Log.d("BackupOrigin", "BackupForegroundService.onStartCommand: action=$action, startId=$startId, flags=$flags")
         if (action == null) {
             android.util.Log.d("BackupOrigin", "BackupForegroundService: intent ou action nula. Finalizando serviço com stopSelf().")
+            releaseLocks()
             stopForeground(STOP_FOREGROUND_REMOVE)
             val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.cancel(NOTIFICATION_ID)
@@ -256,7 +262,6 @@ class BackupForegroundService : Service() {
         }
         when (action) {
             ACTION_START, ACTION_START_LEGACY -> {
-                val title = intent.getStringExtra(EXTRA_TITLE) ?: getString(R.string.backup_in_progress)
                 if (!BackupRepository.isBackupActive()) {
                     android.util.Log.w("BackupOrigin", "BackupForegroundService: ACTION_START recebido mas nenhum backup está ativo no BackupRepository. Encerrando serviço e limpando notificações órfãs.")
                     isFinishedOrCancelled = true
@@ -269,7 +274,6 @@ class BackupForegroundService : Service() {
                     return START_NOT_STICKY
                 }
                 isFinishedOrCancelled = false
-                acquireLocks()
                 startBackupProcess(title)
             }
             ACTION_PAUSE_RESUME -> togglePauseResume()
@@ -290,6 +294,34 @@ class BackupForegroundService : Service() {
         return START_NOT_STICKY
     }
 
+    private fun ensureForegroundStarted(title: String) {
+        val isDriveUpload = title.contains("Drive", ignoreCase = true)
+        val destStr = when {
+            title.contains("Ambos", ignoreCase = true) -> "Ambos"
+            isDriveUpload -> "Drive"
+            else -> "Local"
+        }
+        val initialTitle = if (isDriveUpload) "Enviando ao Drive (0%)" else "Realizando Backup (0%)"
+        val initialNotification = buildNotification(
+            title = initialTitle,
+            progress = 0,
+            sizeDest = "0 B • $destStr",
+            batchRate = "Lote: 0/0 • Taxa: 0%",
+            speed = "Velocidade: 0,0 MB/s",
+            subText = "Preparando transferência...",
+            paused = false
+        )
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, initialNotification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            } else {
+                startForeground(NOTIFICATION_ID, initialNotification)
+            }
+        } catch (t: Throwable) {
+            android.util.Log.e("ReSyncNotif", "BackupForegroundService: Falha ao executar startForeground inicial: ${t.message}", t)
+        }
+    }
+
     private fun startBackupProcess(title: String = "Backup") {
         val isDriveUpload = title.contains("Drive", ignoreCase = true)
         val destStr = when {
@@ -306,7 +338,7 @@ class BackupForegroundService : Service() {
         val tempStr = com.resync.app.util.DeviceThermalHelper.getFormattedHighestTemp(this)
         val initialSpeedStr = if (tempStr.isNotBlank()) "Velocidade: 0,0 MB/s • 🌡 $tempStr" else "Velocidade: 0,0 MB/s"
         val initialTitle = if (isDriveUpload) "Enviando ao Drive (0%)" else "Realizando Backup (0%)"
-        val initialNotification = buildNotification(
+        val notification = buildNotification(
             title = initialTitle,
             progress = 0,
             sizeDest = "0 B • $destStr",
@@ -317,16 +349,10 @@ class BackupForegroundService : Service() {
         )
 
         try {
-            HyperFocusNotificationHelper.logNotificationStatus(this, CHANNEL_ID, "BackupForegroundService: BEFORE startForeground")
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(NOTIFICATION_ID, initialNotification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-            } else {
-                startForeground(NOTIFICATION_ID, initialNotification)
-            }
-            HyperFocusNotificationHelper.logNotificationStatus(this, CHANNEL_ID, "BackupForegroundService: AFTER startForeground")
-            android.util.Log.d("ReSyncNotif", "BackupForegroundService: startForeground executado com sucesso no canal $CHANNEL_ID")
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.notify(NOTIFICATION_ID, notification)
         } catch (t: Throwable) {
-            android.util.Log.e("ReSyncNotif", "BackupForegroundService: Falha ao executar startForeground: ${t.message}", t)
+            android.util.Log.e("ReSyncNotif", "BackupForegroundService: Falha ao atualizar notificação inicial: ${t.message}", t)
         }
     }
 

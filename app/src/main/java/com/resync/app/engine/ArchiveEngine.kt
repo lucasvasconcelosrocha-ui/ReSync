@@ -6,6 +6,10 @@ import com.resync.app.data.model.BackupManifest
 import com.resync.app.data.model.BackupPartInfo
 import com.resync.app.data.model.ManifestItem
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry
 import org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream
@@ -30,8 +34,8 @@ object ArchiveEngine {
     val SVB_MAGIC = byteArrayOf(0x53, 0x56, 0x42, 0x01) // "SVB1"
     val ZIP_LOCAL_HEADER = byteArrayOf(0x50, 0x4B, 0x03, 0x04) // "PK\x03\x04"
     private val gson = Gson()
-    // Buffer fixo de 1 MB para compactação/descompactação em streaming eficiente com baixo consumo de memória
-    private const val BUFFER_SIZE = 1024 * 1024
+    // Buffer otimizado de 256 KB para I/O em streaming de alta velocidade sem sobrecarga do GC da JVM
+    private const val BUFFER_SIZE = BufferPool.BUFFER_SIZE_256K
 
     data class PackEntry(
         val entryName: String,
@@ -73,80 +77,101 @@ object ArchiveEngine {
             zos.setUseZip64(org.apache.commons.compress.archivers.zip.Zip64Mode.AsNeeded)
 
             val totalEntriesCount = entries.size
-            // Reutilizar o buffer de 1 MB para todas as entradas e evitar alocação excessiva no heap/GC
-            val sharedBuffer = ByteArray(BUFFER_SIZE)
+            // Reutilizar o buffer de 256 KB do BufferPool para todas as entradas e evitar alocação excessiva no heap/GC
+            val sharedBuffer = BufferPool.acquire256k()
 
-            for ((index, entry) in entries.withIndex()) {
-                checkPauseAndCancel?.invoke()
-                val itemName = entry.manifestItem.name
-                val itemType = entry.manifestItem.type
-                val itemIndex = index + 1
-                onItemProgress?.invoke(totalBytesWritten, totalBytesToPack, itemName, itemIndex, totalEntriesCount, itemType)
+            try {
+                for ((index, entry) in entries.withIndex()) {
+                    checkPauseAndCancel?.invoke()
+                    val itemName = entry.manifestItem.name
+                    val itemType = entry.manifestItem.type
+                    val itemIndex = index + 1
+                    onItemProgress?.invoke(totalBytesWritten, totalBytesToPack, itemName, itemIndex, totalEntriesCount, itemType)
 
-                val zipEntry = ZipArchiveEntry(entry.entryName)
-                zipEntry.time = System.currentTimeMillis()
+                    val zipEntry = ZipArchiveEntry(entry.entryName)
+                    zipEntry.time = System.currentTimeMillis()
 
-                val isPreCompressed = HighSpeedStreamingEngine.shouldBypassCompression(entry.entryName)
+                    val isPreCompressed = HighSpeedStreamingEngine.shouldBypassCompression(entry.entryName)
 
-                val isBypassedFromEncryption = entry.manifestItem.type == BackupItemType.APP_APK ||
-                        entry.manifestItem.type == BackupItemType.WALLPAPER ||
-                        entry.entryName.endsWith(".apk") ||
-                        entry.entryName.startsWith("wallpapers/")
-                val shouldEncrypt = !isBypassedFromEncryption || !encryptionPassword.isNullOrEmpty()
+                    val isBypassedFromEncryption = entry.manifestItem.type == BackupItemType.APP_APK ||
+                            entry.manifestItem.type == BackupItemType.WALLPAPER ||
+                            entry.entryName.endsWith(".apk") ||
+                            entry.entryName.startsWith("wallpapers/")
+                    val shouldEncrypt = !isBypassedFromEncryption || !encryptionPassword.isNullOrEmpty()
 
-                val shouldStore = entry.isStoreOnly ||
-                        entry.manifestItem.compressionMethod == "STORED" ||
-                        isPreCompressed ||
-                        shouldEncrypt
+                    val shouldStore = entry.isStoreOnly ||
+                            entry.manifestItem.compressionMethod == "STORED" ||
+                            isPreCompressed ||
+                            shouldEncrypt
 
-                if (shouldStore) {
-                    zipEntry.method = ZipEntry.STORED
-                } else {
-                    zipEntry.method = ZipEntry.DEFLATED
-                    // Nível 1 (BEST_SPEED) minimiza consumo de CPU durante compressão; nunca usar nível máximo
-                    zos.setLevel(Deflater.BEST_SPEED)
-                }
-
-                zos.putArchiveEntry(zipEntry)
-
-                val entryInputStream: InputStream = if (entry.rawData != null) {
-                    ByteArrayInputStream(entry.rawData)
-                } else if (entry.sourceFile != null && entry.sourceFile.exists()) {
-                    FileInputStream(entry.sourceFile)
-                } else {
-                    ByteArrayInputStream(ByteArray(0))
-                }
-
-                entryInputStream.use { input ->
-                    var lastProgressReportMs = 0L
-                    if (shouldEncrypt) {
-                        SecurityManager.encryptStreamChunked(input, zos, encryptionPassword, accountEmail) { written ->
-                            totalBytesWritten += written
-                            val now = System.currentTimeMillis()
-                            if (now - lastProgressReportMs >= 250L || totalBytesWritten >= totalBytesToPack) {
-                                lastProgressReportMs = now
-                                checkPauseAndCancel?.let { kotlinx.coroutines.runBlocking { it.invoke() } }
-                                onProgress?.let { kotlinx.coroutines.runBlocking { it.invoke(totalBytesWritten, totalBytesToPack) } }
-                                onItemProgress?.let { kotlinx.coroutines.runBlocking { it.invoke(totalBytesWritten, totalBytesToPack, itemName, itemIndex, totalEntriesCount, itemType) } }
-                            }
-                        }
+                    if (shouldStore) {
+                        zipEntry.method = ZipEntry.STORED
                     } else {
-                        var read: Int
-                        while (input.read(sharedBuffer).also { read = it } != -1) {
-                            checkPauseAndCancel?.invoke()
-                            zos.write(sharedBuffer, 0, read)
-                            totalBytesWritten += read
-                            val now = System.currentTimeMillis()
-                            if (now - lastProgressReportMs >= 250L || totalBytesWritten >= totalBytesToPack) {
-                                lastProgressReportMs = now
-                                onProgress?.invoke(totalBytesWritten, totalBytesToPack)
-                                onItemProgress?.invoke(totalBytesWritten, totalBytesToPack, itemName, itemIndex, totalEntriesCount, itemType)
+                        zipEntry.method = ZipEntry.DEFLATED
+                        // Nível 1 (BEST_SPEED) minimiza consumo de CPU durante compressão; nunca usar nível máximo
+                        zos.setLevel(Deflater.BEST_SPEED)
+                    }
+
+                    zos.putArchiveEntry(zipEntry)
+
+                    val entryInputStream: InputStream = if (entry.rawData != null) {
+                        ByteArrayInputStream(entry.rawData)
+                    } else if (entry.sourceFile != null && entry.sourceFile.exists()) {
+                        FileInputStream(entry.sourceFile)
+                    } else {
+                        ByteArrayInputStream(ByteArray(0))
+                    }
+
+                    entryInputStream.use { input ->
+                        var lastProgressReportMs = 0L
+                        if (shouldEncrypt) {
+                            SecurityManager.encryptStreamChunked(input, zos, encryptionPassword, accountEmail) { written ->
+                                totalBytesWritten += written
+                                val now = System.currentTimeMillis()
+                                if (now - lastProgressReportMs >= 200L || totalBytesWritten >= totalBytesToPack) {
+                                    lastProgressReportMs = now
+                                    checkPauseAndCancel?.let { kotlinx.coroutines.runBlocking { it.invoke() } }
+                                    onProgress?.let { kotlinx.coroutines.runBlocking { it.invoke(totalBytesWritten, totalBytesToPack) } }
+                                    onItemProgress?.let { kotlinx.coroutines.runBlocking { it.invoke(totalBytesWritten, totalBytesToPack, itemName, itemIndex, totalEntriesCount, itemType) } }
+                                }
+                            }
+                        } else if (entry.sourceFile != null && entry.sourceFile.length() > 2 * 1024 * 1024L) {
+                            // Pipeline Assíncrono Produtor/Consumidor com Channel para arquivos grandes (> 2 MB)
+                            streamEntryAsyncChannel(
+                                input = input,
+                                zos = zos,
+                                totalBytesToPack = totalBytesToPack,
+                                itemName = itemName,
+                                itemIndex = itemIndex,
+                                totalEntriesCount = totalEntriesCount,
+                                itemType = itemType,
+                                onProgress = onProgress,
+                                onItemProgress = onItemProgress,
+                                checkPauseAndCancel = checkPauseAndCancel
+                            ) { bytesRead ->
+                                totalBytesWritten += bytesRead
+                                totalBytesWritten
+                            }
+                        } else {
+                            var read: Int
+                            while (input.read(sharedBuffer).also { read = it } != -1) {
+                                checkPauseAndCancel?.invoke()
+                                zos.write(sharedBuffer, 0, read)
+                                totalBytesWritten += read
+                                val now = System.currentTimeMillis()
+                                if (now - lastProgressReportMs >= 200L || totalBytesWritten >= totalBytesToPack) {
+                                    lastProgressReportMs = now
+                                    onProgress?.invoke(totalBytesWritten, totalBytesToPack)
+                                    onItemProgress?.invoke(totalBytesWritten, totalBytesToPack, itemName, itemIndex, totalEntriesCount, itemType)
+                                }
                             }
                         }
                     }
-                }
 
-                zos.closeArchiveEntry()
+                    zos.closeArchiveEntry()
+                }
+            } finally {
+                BufferPool.release256k(sharedBuffer)
             }
 
             // 2. Write manifest.json at root of zip
@@ -180,6 +205,63 @@ object ArchiveEngine {
         }
     }
 
+    /**
+     * Pipeline Assíncrono Produtor/Consumidor com Coroutine Channels:
+     * - Thread A (Produtor no Dispatchers.IO): lê blocos de 256 KB do disco para buffers reciclados do pool.
+     * - Thread B (Consumidor): consome os blocos, grava no ZipArchiveOutputStream e devolve os buffers ao pool.
+     * Desacopla o I/O de armazenamento UFS/eMMC do processamento de compactação.
+     */
+    private suspend fun streamEntryAsyncChannel(
+        input: InputStream,
+        zos: OutputStream,
+        totalBytesToPack: Long,
+        itemName: String,
+        itemIndex: Int,
+        totalEntriesCount: Int,
+        itemType: BackupItemType,
+        onProgress: (suspend (bytesWritten: Long, totalEstimatedBytes: Long) -> Unit)?,
+        onItemProgress: (suspend (bytesWritten: Long, totalEstimatedBytes: Long, currentItemName: String, itemIndex: Int, totalItems: Int, itemType: BackupItemType) -> Unit)?,
+        checkPauseAndCancel: (suspend () -> Unit)?,
+        onBytesWritten: (Int) -> Long
+    ) = coroutineScope {
+        data class BufferChunk(val buffer: ByteArray, val count: Int)
+        val channel = Channel<BufferChunk>(capacity = 4)
+
+        val producer = launch(Dispatchers.IO) {
+            try {
+                while (isActive) {
+                    val buf = BufferPool.acquire256k()
+                    val r = input.read(buf, 0, buf.size)
+                    if (r == -1) {
+                        BufferPool.release256k(buf)
+                        break
+                    }
+                    channel.send(BufferChunk(buf, r))
+                }
+            } finally {
+                channel.close()
+            }
+        }
+
+        var lastProgressReportMs = 0L
+        for (chunk in channel) {
+            try {
+                checkPauseAndCancel?.invoke()
+                zos.write(chunk.buffer, 0, chunk.count)
+                val totalWritten = onBytesWritten(chunk.count)
+                val now = System.currentTimeMillis()
+                if (now - lastProgressReportMs >= 200L || totalWritten >= totalBytesToPack) {
+                    lastProgressReportMs = now
+                    onProgress?.invoke(totalWritten, totalBytesToPack)
+                    onItemProgress?.invoke(totalWritten, totalBytesToPack, itemName, itemIndex, totalEntriesCount, itemType)
+                }
+            } finally {
+                BufferPool.release256k(chunk.buffer)
+            }
+        }
+        producer.join()
+    }
+
     private fun splitFileIntoParts(
         sourceFile: File,
         baseOutputFile: File,
@@ -195,42 +277,46 @@ object ArchiveEngine {
         val totalLength = sourceFile.length()
         var currentOffset = 0L
         var partIndex = 1
-        val buffer = ByteArray(1024 * 1024) // 1MB buffer
+        val buffer = BufferPool.acquire256k()
 
-        FileInputStream(sourceFile).use { fis ->
-            while (currentOffset < totalLength) {
-                val partFileName = String.format(java.util.Locale.US, "%s.%03d", baseName, partIndex)
-                val partFile = File(baseOutputFile.parentFile, partFileName)
-                val bytesToReadThisPart = minOf(partSizeBytes, totalLength - currentOffset)
-                var bytesWrittenThisPart = 0L
+        try {
+            FileInputStream(sourceFile).use { fis ->
+                while (currentOffset < totalLength) {
+                    val partFileName = String.format(java.util.Locale.US, "%s.%03d", baseName, partIndex)
+                    val partFile = File(baseOutputFile.parentFile, partFileName)
+                    val bytesToReadThisPart = minOf(partSizeBytes, totalLength - currentOffset)
+                    var bytesWrittenThisPart = 0L
 
-                val digest = java.security.MessageDigest.getInstance("SHA-256")
-                FileOutputStream(partFile).use { fos ->
-                    while (bytesWrittenThisPart < bytesToReadThisPart) {
-                        val toRead = minOf(buffer.size.toLong(), bytesToReadThisPart - bytesWrittenThisPart).toInt()
-                        val r = fis.read(buffer, 0, toRead)
-                        if (r == -1) break
-                        fos.write(buffer, 0, r)
-                        digest.update(buffer, 0, r)
-                        bytesWrittenThisPart += r
+                    val digest = java.security.MessageDigest.getInstance("SHA-256")
+                    FileOutputStream(partFile).use { fos ->
+                        while (bytesWrittenThisPart < bytesToReadThisPart) {
+                            val toRead = minOf(buffer.size.toLong(), bytesToReadThisPart - bytesWrittenThisPart).toInt()
+                            val r = fis.read(buffer, 0, toRead)
+                            if (r == -1) break
+                            fos.write(buffer, 0, r)
+                            digest.update(buffer, 0, r)
+                            bytesWrittenThisPart += r
+                        }
                     }
-                }
 
-                val partSha256 = digest.digest().joinToString("") { "%02x".format(it) }
-                parts.add(
-                    BackupPartInfo(
-                        partIndex = partIndex,
-                        fileName = partFileName,
-                        sizeBytes = partFile.length(),
-                        sha256Checksum = partSha256,
-                        startByte = currentOffset,
-                        endByte = currentOffset + bytesWrittenThisPart - 1
+                    val partSha256 = digest.digest().joinToString("") { "%02x".format(it) }
+                    parts.add(
+                        BackupPartInfo(
+                            partIndex = partIndex,
+                            fileName = partFileName,
+                            sizeBytes = partFile.length(),
+                            sha256Checksum = partSha256,
+                            startByte = currentOffset,
+                            endByte = currentOffset + bytesWrittenThisPart - 1
+                        )
                     )
-                )
 
-                currentOffset += bytesWrittenThisPart
-                partIndex++
+                    currentOffset += bytesWrittenThisPart
+                    partIndex++
+                }
             }
+        } finally {
+            BufferPool.release256k(buffer)
         }
         return parts
     }
@@ -459,49 +545,51 @@ object ArchiveEngine {
         val activeManifest = manifest ?: readManifest(containerFile)
         val totalSize = activeManifest.totalSizeBytes
         var bytesRestored = 0L
-        val buffer = ByteArray(BUFFER_SIZE)
+        val buffer = BufferPool.acquire256k()
 
-        MultiPartSeekableByteChannel(files).use { channel ->
-            ZipFile.builder().setSeekableByteChannel(channel).get().use { zipFile ->
-                val entries = zipFile.entries
-                while (entries.hasMoreElements()) {
-                    val entry = entries.nextElement()
-                    if (entry.name == "manifest.json" || entry.isDirectory) continue
+        try {
+            MultiPartSeekableByteChannel(files).use { channel ->
+                ZipFile.builder().setSeekableByteChannel(channel).get().use { zipFile ->
+                    val entries = zipFile.entries
+                    while (entries.hasMoreElements()) {
+                        val entry = entries.nextElement()
+                        if (entry.name == "manifest.json" || entry.isDirectory) continue
 
-                    val shouldExtract = selectedArchivePaths == null || selectedArchivePaths.any { path ->
-                        entry.name == path ||
-                        entry.name.startsWith(path.trimEnd('/') + "/") ||
-                        path.startsWith(entry.name.trimEnd('/') + "/")
-                    }
-                    if (shouldExtract) {
-                        val outFile = File(targetOutputDir, entry.name)
-                        // Anti-Path-Traversal check
-                        val destCanonical = targetOutputDir.canonicalPath
-                        val outCanonical = outFile.canonicalPath
-                        if (!outCanonical.startsWith(destCanonical + File.separator) && outCanonical != destCanonical) {
-                            throw SecurityException("Tentativa de Path Traversal bloqueada: ${entry.name}")
+                        val shouldExtract = selectedArchivePaths == null || selectedArchivePaths.any { path ->
+                            entry.name == path ||
+                            entry.name.startsWith(path.trimEnd('/') + "/") ||
+                            path.startsWith(entry.name.trimEnd('/') + "/")
                         }
-                        onItemProgress?.invoke(bytesRestored, totalSize, entry.name)
-                        outFile.parentFile?.mkdirs()
+                        if (shouldExtract) {
+                            val outFile = File(targetOutputDir, entry.name)
+                            // Anti-Path-Traversal check
+                            val destCanonical = targetOutputDir.canonicalPath
+                            val outCanonical = outFile.canonicalPath
+                            if (!outCanonical.startsWith(destCanonical + File.separator) && outCanonical != destCanonical) {
+                                throw SecurityException("Tentativa de Path Traversal bloqueada: ${entry.name}")
+                            }
+                            onItemProgress?.invoke(bytesRestored, totalSize, entry.name)
+                            outFile.parentFile?.mkdirs()
 
-                        zipFile.getInputStream(entry).use { rawIn ->
-                            BufferedInputStream(rawIn, BUFFER_SIZE).use { bis ->
-                                FileOutputStream(outFile).use { fos ->
-                                    if (SecurityManager.isChunkedEncryptedStream(bis)) {
-                                        SecurityManager.decryptStreamChunked(bis, fos, decryptionPassword, accountEmail) { written ->
-                                            bytesRestored += written
-                                            kotlinx.coroutines.runBlocking {
+                            zipFile.getInputStream(entry).use { rawIn ->
+                                BufferedInputStream(rawIn, BUFFER_SIZE).use { bis ->
+                                    FileOutputStream(outFile).use { fos ->
+                                        if (SecurityManager.isChunkedEncryptedStream(bis)) {
+                                            SecurityManager.decryptStreamChunked(bis, fos, decryptionPassword, accountEmail) { written ->
+                                                bytesRestored += written
+                                                kotlinx.coroutines.runBlocking {
+                                                    onProgress?.invoke(bytesRestored, totalSize)
+                                                    onItemProgress?.invoke(bytesRestored, totalSize, entry.name)
+                                                }
+                                            }
+                                        } else {
+                                            var read: Int
+                                            while (bis.read(buffer).also { read = it } != -1) {
+                                                fos.write(buffer, 0, read)
+                                                bytesRestored += read
                                                 onProgress?.invoke(bytesRestored, totalSize)
                                                 onItemProgress?.invoke(bytesRestored, totalSize, entry.name)
                                             }
-                                        }
-                                    } else {
-                                        var read: Int
-                                        while (bis.read(buffer).also { read = it } != -1) {
-                                            fos.write(buffer, 0, read)
-                                            bytesRestored += read
-                                            onProgress?.invoke(bytesRestored, totalSize)
-                                            onItemProgress?.invoke(bytesRestored, totalSize, entry.name)
                                         }
                                     }
                                 }
@@ -510,6 +598,8 @@ object ArchiveEngine {
                     }
                 }
             }
+        } finally {
+            BufferPool.release256k(buffer)
         }
     }
 
@@ -541,34 +631,38 @@ object ArchiveEngine {
 
                 val totalSize = activeManifest.totalSizeBytes
                 var bytesRestored = 0L
-                val buffer = ByteArray(BUFFER_SIZE)
+                val buffer = BufferPool.acquire256k()
 
-                ZipInputStream(BufferedInputStream(payloadStream, BUFFER_SIZE)).use { zis ->
-                    var entry: ZipEntry? = zis.nextEntry
-                    while (entry != null) {
-                        val entryName = entry.name
-                        if (selectedArchivePaths == null || selectedArchivePaths.contains(entryName)) {
-                            val outFile = File(targetOutputDir, entryName)
-                            val destCanonical = targetOutputDir.canonicalPath
-                            val outCanonical = outFile.canonicalPath
-                            if (!outCanonical.startsWith(destCanonical + File.separator) && outCanonical != destCanonical) {
-                                throw SecurityException("Tentativa de Path Traversal bloqueada: $entryName")
-                            }
+                try {
+                    ZipInputStream(BufferedInputStream(payloadStream, BUFFER_SIZE)).use { zis ->
+                        var entry: ZipEntry? = zis.nextEntry
+                        while (entry != null) {
+                            val entryName = entry.name
+                            if (selectedArchivePaths == null || selectedArchivePaths.contains(entryName)) {
+                                val outFile = File(targetOutputDir, entryName)
+                                val destCanonical = targetOutputDir.canonicalPath
+                                val outCanonical = outFile.canonicalPath
+                                if (!outCanonical.startsWith(destCanonical + File.separator) && outCanonical != destCanonical) {
+                                    throw SecurityException("Tentativa de Path Traversal bloqueada: $entryName")
+                                }
 
-                            outFile.parentFile?.mkdirs()
+                                outFile.parentFile?.mkdirs()
 
-                            FileOutputStream(outFile).use { fos ->
-                                var read: Int
-                                while (zis.read(buffer).also { read = it } != -1) {
-                                    fos.write(buffer, 0, read)
-                                    bytesRestored += read
-                                    onProgress(bytesRestored, totalSize)
+                                FileOutputStream(outFile).use { fos ->
+                                    var read: Int
+                                    while (zis.read(buffer).also { read = it } != -1) {
+                                        fos.write(buffer, 0, read)
+                                        bytesRestored += read
+                                        onProgress(bytesRestored, totalSize)
+                                    }
                                 }
                             }
+                            zis.closeEntry()
+                            entry = zis.nextEntry
                         }
-                        zis.closeEntry()
-                        entry = zis.nextEntry
                     }
+                } finally {
+                    BufferPool.release256k(buffer)
                 }
             }
         }
@@ -607,30 +701,34 @@ object ArchiveEngine {
 
                 ZipOutputStream(BufferedOutputStream(targetStream, BUFFER_SIZE)).use { zos ->
                     zos.setLevel(1)
-                    val buffer = ByteArray(BUFFER_SIZE)
+                    val buffer = BufferPool.acquire256k()
 
-                    for (entry in entries) {
-                        val zipEntry = ZipEntry(entry.entryName)
-                        zipEntry.time = System.currentTimeMillis()
-                        zos.putNextEntry(zipEntry)
+                    try {
+                        for (entry in entries) {
+                            val zipEntry = ZipEntry(entry.entryName)
+                            zipEntry.time = System.currentTimeMillis()
+                            zos.putNextEntry(zipEntry)
 
-                        if (entry.rawData != null) {
-                            zos.write(entry.rawData)
-                            totalBytesWritten += entry.rawData.size
-                            onProgress(totalBytesWritten, totalBytesToPack)
-                        } else if (entry.sourceFile != null && entry.sourceFile.exists()) {
-                            if (entry.sourceFile.isFile) {
-                                FileInputStream(entry.sourceFile).use { fis ->
-                                    var read: Int
-                                    while (fis.read(buffer).also { read = it } != -1) {
-                                        zos.write(buffer, 0, read)
-                                        totalBytesWritten += read
-                                        onProgress(totalBytesWritten, totalBytesToPack)
+                            if (entry.rawData != null) {
+                                zos.write(entry.rawData)
+                                totalBytesWritten += entry.rawData.size
+                                onProgress(totalBytesWritten, totalBytesToPack)
+                            } else if (entry.sourceFile != null && entry.sourceFile.exists()) {
+                                if (entry.sourceFile.isFile) {
+                                    FileInputStream(entry.sourceFile).use { fis ->
+                                        var read: Int
+                                        while (fis.read(buffer).also { read = it } != -1) {
+                                            zos.write(buffer, 0, read)
+                                            totalBytesWritten += read
+                                            onProgress(totalBytesWritten, totalBytesToPack)
+                                        }
                                     }
                                 }
                             }
+                            zos.closeEntry()
                         }
-                        zos.closeEntry()
+                    } finally {
+                        BufferPool.release256k(buffer)
                     }
                     zos.finish()
                     zos.flush()

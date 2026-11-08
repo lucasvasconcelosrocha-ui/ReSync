@@ -188,9 +188,9 @@ class DownloadManager(private val oAuthManager: OAuthManager) {
             RandomAccessFile(partFile, "rw").use { it.setLength(totalBytes) }
         }
 
-        // 4. Number of parallel range parts (up to 4, dynamically adapted by thermal status)
-        val maxConnections = if (totalBytes < 32L * 1024 * 1024) 1 else 3
-        val parallelConnections = CloudThermalGovernor.getParallelDownloadConnections(maxConnections)
+        // 4. Number of parallel range parts (up to 4 connections for files > 20 MB)
+        val maxConnections = if (totalBytes < 20L * 1024 * 1024) 1 else 4
+        val parallelConnections = CloudThermalGovernor.getParallelDownloadConnections(maxConnections).coerceAtMost(maxConnections).coerceAtLeast(1)
 
         // 5. Restore or initialize parts state from Room
         var savedRecord = transferDao.getTransfer(jobId)
@@ -375,14 +375,15 @@ class DownloadManager(private val oAuthManager: OAuthManager) {
         if (!remoteMd5.isNullOrBlank()) {
             reportProgress(stageName = "Verificando integridade MD5...")
             val digest = MessageDigest.getInstance("MD5")
-            val buf = ByteArray(1024 * 1024)
-            FileInputStream(partFile).use { fis ->
-                var r: Int
-                while (fis.read(buf).also { r = it } != -1) {
-                    digest.update(buf, 0, r)
+            val computedMd5 = com.resync.app.engine.BufferPool.use256k { buf ->
+                FileInputStream(partFile).use { fis ->
+                    var r: Int
+                    while (fis.read(buf).also { r = it } != -1) {
+                        digest.update(buf, 0, r)
+                    }
                 }
+                digest.digest().joinToString("") { "%02x".format(it) }
             }
-            val computedMd5 = digest.digest().joinToString("") { "%02x".format(it) }
             if (!computedMd5.equals(remoteMd5, ignoreCase = true)) {
                 partFile.delete()
                 val md5Err = "Falha de integridade: MD5 baixado ($computedMd5) diverge da nuvem ($remoteMd5)."
@@ -494,9 +495,11 @@ class DownloadManager(private val oAuthManager: OAuthManager) {
                     val inputStream = body.byteStream()
 
                     RandomAccessFile(partFile, "rw").use { raf ->
-                        raf.seek(rangeStart)
+                        val channel = raf.channel
                         val buffer = ByteArray(BUFFER_SIZE)
+                        val byteBuf = java.nio.ByteBuffer.wrap(buffer)
                         var read: Int
+                        var writePos = rangeStart
 
                         while (inputStream.read(buffer).also { read = it } != -1) {
                             while (isPaused.get() && !isCancelled.get()) {
@@ -507,7 +510,11 @@ class DownloadManager(private val oAuthManager: OAuthManager) {
                                 return@withContext Result.failure(CancellationException("Download cancelado."))
                             }
 
-                            raf.write(buffer, 0, read)
+                            byteBuf.position(0)
+                            byteBuf.limit(read)
+                            while (byteBuf.hasRemaining()) {
+                                writePos += channel.write(byteBuf, writePos)
+                            }
                             part.bytesDownloaded += read
 
                             val elapsed = ((SystemClock.elapsedRealtime() - partStartMono) / 1000.0).coerceAtLeast(0.1)

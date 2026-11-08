@@ -1,23 +1,21 @@
-🚀 **O QUE HÁ DE NOVO NESTA VERSÃO (v1.0.33):**
+🚀 **O QUE HÁ DE NOVO NESTA VERSÃO (v1.0.35):**
 
-🛡️ **Proteção Total da Pasta de Origem (Prevenção Absoluta de Perda de Dados)**
-• **Origem 100% Intacta:** Blindagem canônica reforçada contra exclusão pós-empacotamento de qualquer arquivo residente em `/storage/`, `/sdcard/`, `/data/media/` ou caminhos selecionados pelo usuário.
-• **Isolamento Estrito em `cacheDir/resync_tmp`:** Todas as operações temporárias de staging e extração residem estritamente dentro do diretório temporário exclusivo do app, com validação canônica antes de qualquer limpeza.
-• **Validação Canônica `safeDeleteStaging`:** Bloqueio definitivo contra exclusão acidental de caminhos protegidos, origens selecionadas ou diretórios externos ao sandbox temporário.
+🔥 **Google Drive Turbo 2.0 (Velocidade Máxima de Transferência)**
+• **OkHttp3 HTTP/2 Puro & Socket Buffers de 512 KB:** Substituição do cliente legado por conexão persistente HTTP/2 com pool de conexões (16 idle, 5 min keep-alive) e buffers de socket de 512 KB com TCP_NODELAY.
+• **Download Paralelo Multi-Range:** Downloads divididos em até 4 conexões simultâneas via `Range: bytes=start-end` gravando diretamente nas posições exatas via `FileChannel` em arquivo pré-alocado.
+• **Upload Resumable com Single-Pass MD5:** Streaming direto sem flush por bloco e cálculo de integridade MD5 em passagem única inline, eliminando a releitura redundante de disco e utilizando chunks dinâmicos de até 32 MB.
+• **Zero Overhead GZIP:** Header `Accept-Encoding: identity` para transferir containers `.resync` sem dupla compressão.
 
-📂 **Restauração Completa e Unificada de Pastas**
-• **Resolução Simultânea de Raiz e Subpastas:** Resolução de arquivos soltos na raiz da pasta e de todas as suas subpastas (resolvendo o problema de arquivos soltos ignorados quando coexistiam com subpastas em backups legados e novos).
-• **Progresso Dinâmico Arquivo a Arquivo:** Exibição em tempo real do arquivo sendo restaurado e contador de progresso na interface.
-• **Gravação Bufferizada Sem Root:** Gravação via `FileInputStream` e `FileOutputStream` com buffers de 64 KB e criação automática de diretórios-pai (`parentFile?.mkdirs()`).
-• **Fallback Root Seguro:** Execução via shell `cp -f` aguardando conclusão síncrona, validação de exit code (`isSuccess`) e verificação de integridade e tamanho do arquivo gravado.
+⚡ **Pipeline Assíncrono de Compactação & Criptografia (Zero Bottleneck)**
+• **BufferPool Thread-Safe:** Reutilização contínua de buffers de 128 KB e 256 KB (`ConcurrentLinkedQueue`), eliminando pausas de Garbage Collection (GC) e alocações repetitivas no heap.
+• **Produtor/Consumidor com Coroutine Channels:** I/O de armazenamento desacoplado do empacotamento Zip/Deflater e da cifragem AES-256-GCM para arquivos pesados (> 2 MB), saturando I/O e núcleos ARM64 em paralelo.
 
-🔄 **Correção de Gestão de Estado na Interface (UI)**
-• **Reinicialização de Estado Residual:** Implementação de `resetRestoreState()` no `RestoreRepository` e `MainViewModel` para limpar SharedPreferences e `StateFlow` ao clicar em "RESTAURAR" ou inspecionar um backup.
-• **Correção da Flag `isFinished`:** Eliminação da transição prematura de 1s para o resumo de restauração por estado residual de operações anteriores.
-• **Botão "Concluir e Voltar":** Adição de botão explícito de fechamento na tela de resultado da restauração com limpeza garantida de estado.
+🛡️ **Blindagem dos Foreground Services (Android 14/15)**
+• **Zero Timeout no `startForeground()`:** Invocação de `startForeground()` e aquisição de locks como a primeira linha síncrona absoluta de `onStartCommand()`, eliminando `ForegroundServiceDidNotStartInTimeException`.
+• **WakeLock & WifiLock de Alta Performance:** Locks imediatos com `WIFI_MODE_FULL_LOW_LATENCY` e `PARTIAL_WAKE_LOCK` para impedir que o rádio Wi-Fi e os clocks da CPU entrem em economia de energia durante transferências com tela apagada.
 
-🧪 **Suíte de Testes Automatizados**
-• Adição de testes unitários em `FolderBackupRestoreTest` cobrindo restauração simultânea de arquivos soltos na raiz e subpastas em backups legados, gravação bufferizada e preservação de integridade de hashes SHA-256.
-
-🎨 **Interface Bento UI (Dark Minimalista & OLED)**
-• Fundo Preto OLED profundo (`#05070A`), cards modulares Bento (`#0E121A`), bordas finas e sincronização com `MaterialTheme`.
+📦 **Desbaste Agressivo de Bloat e Redução Estrutural do APK**
+• **Material Icons Subset:** Remoção do JAR de 84 MB do `material-icons-extended`, substituído por um subset sob medida de 2.4 MB contendo exclusivamente os 170 ícones utilizados no app e os metadados `.kotlin_module`.
+• **Remoção de Dependências Mortas:** Removido `androidx.appcompat:appcompat` e excluído `org.apache.httpcomponents`.
+• **Arquitetura 64-bit Exclusiva:** Filtrado NDK para `arm64-v8a` e descarte de arquivos de metadados inúteis.
+• **APK de Apenas 4.8 MB:** Redução drástica no peso do binário com R8 minification e shrinkResources ativos.

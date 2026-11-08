@@ -19,11 +19,11 @@ android {
     val vCode = (System.getenv("VERSION_CODE")
         ?: project.findProperty("versionCode")?.toString()
         ?: versionProperties.getProperty("versionCode")
-        ?: "34").toInt()
+        ?: "35").toInt()
     val vName = System.getenv("VERSION_NAME")
         ?: project.findProperty("versionName")?.toString()
         ?: versionProperties.getProperty("versionName")
-        ?: "1.0.34"
+        ?: "1.0.35"
 
     defaultConfig {
         applicationId = "com.resync.app"
@@ -37,7 +37,8 @@ android {
             useSupportLibrary = true
         }
         ndk {
-            abiFilters.addAll(listOf("arm64-v8a", "armeabi-v7a"))
+            abiFilters.clear()
+            abiFilters.add("arm64-v8a")
         }
         resourceConfigurations += listOf("pt", "pt-rBR")
     }
@@ -121,6 +122,10 @@ android {
             excludes += listOf(
                 "/META-INF/{AL2.0,LGPL2.1}",
                 "META-INF/DEPENDENCIES",
+                "META-INF/com/android/build/gradle/app-metadata.properties",
+                "META-INF/*.version",
+                "kotlin-tooling-metadata.json",
+                "org/apache/http/**",
                 "win/**",
                 "win32/**",
                 "win64/**",
@@ -175,6 +180,10 @@ android {
     }
 }
 
+configurations.all {
+    exclude(group = "org.apache.httpcomponents")
+}
+
 dependencies {
     // Room Database
     val roomVersion = "2.6.1"
@@ -190,7 +199,6 @@ dependencies {
     implementation("com.google.android.gms:play-services-base:18.5.0")
     // AndroidX Core & Lifecycle
     implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.documentfile:documentfile:1.0.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.6")
@@ -210,7 +218,8 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.material:material-icons-extended")
+    // Lightweight custom Material Icons subset (replaces 84 MB material-icons-extended bloat)
+    implementation(files("libs/material-icons-subset.jar"))
     implementation("io.coil-kt:coil-compose:2.7.0")
 
     // WorkManager for background and scheduled backups

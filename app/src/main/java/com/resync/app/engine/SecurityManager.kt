@@ -45,32 +45,34 @@ object SecurityManager {
     private val secureRandom = SecureRandom()
 
     /**
-     * Compute SHA-256 hash of an InputStream in a streaming fashion with 1 MB buffer.
+     * Compute SHA-256 hash of an InputStream in a streaming fashion with pooled 256 KB buffer.
      */
     fun computeSha256(inputStream: InputStream): String {
         val digest = MessageDigest.getInstance("SHA-256")
-        val buffer = ByteArray(1024 * 1024) // 1 MB buffer
-        var read: Int
-        while (inputStream.read(buffer).also { read = it } != -1) {
-            digest.update(buffer, 0, read)
+        return BufferPool.use256k { buffer ->
+            var read: Int
+            while (inputStream.read(buffer).also { read = it } != -1) {
+                digest.update(buffer, 0, read)
+            }
+            digest.digest().joinToString("") { "%02x".format(it) }
         }
-        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
     /**
-     * Compute MD5 hash of a local File for Google Drive md5Checksum verification.
+     * Compute MD5 hash of a local File for Google Drive md5Checksum verification using pooled 256 KB buffer.
      */
     fun computeFileMd5(file: java.io.File): String {
         if (!file.exists() || file.length() == 0L) return ""
         val digest = MessageDigest.getInstance("MD5")
-        file.inputStream().use { input ->
-            val buffer = ByteArray(1024 * 1024)
-            var read: Int
-            while (input.read(buffer).also { read = it } != -1) {
-                digest.update(buffer, 0, read)
+        return BufferPool.use256k { buffer ->
+            file.inputStream().use { input ->
+                var read: Int
+                while (input.read(buffer).also { read = it } != -1) {
+                    digest.update(buffer, 0, read)
+                }
             }
+            digest.digest().joinToString("") { "%02x".format(it) }
         }
-        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
     /**
@@ -217,7 +219,7 @@ object SecurityManager {
     const val STRATEGY_ACCOUNT: Byte = 0x01
     const val STRATEGY_ADVANCED: Byte = 0x02
     const val PBKDF2_MILITARY_ITERATIONS = 600_000
-    const val DEFAULT_CHUNK_SIZE = 64 * 1024
+    const val DEFAULT_CHUNK_SIZE = BufferPool.BUFFER_SIZE_256K
 
     fun zeroByteArray(array: ByteArray?) {
         if (array != null) java.util.Arrays.fill(array, 0.toByte())
@@ -283,7 +285,13 @@ object SecurityManager {
         outputStream.write(salt)
         outputStream.write(java.nio.ByteBuffer.allocate(4).putInt(chunkSize).array())
 
-        val buffer = ByteArray(chunkSize)
+        val buffer = if (chunkSize == BufferPool.BUFFER_SIZE_256K) {
+            BufferPool.acquire256k()
+        } else if (chunkSize == BufferPool.BUFFER_SIZE_128K) {
+            BufferPool.acquire128k()
+        } else {
+            ByteArray(chunkSize)
+        }
         var totalBytesRead = 0L
 
         try {
@@ -318,6 +326,11 @@ object SecurityManager {
             outputStream.flush()
         } finally {
             zeroByteArray(buffer)
+            if (chunkSize == BufferPool.BUFFER_SIZE_256K) {
+                BufferPool.release256k(buffer)
+            } else if (chunkSize == BufferPool.BUFFER_SIZE_128K) {
+                BufferPool.release128k(buffer)
+            }
         }
     }
 

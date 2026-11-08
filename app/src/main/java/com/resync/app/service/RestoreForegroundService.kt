@@ -125,6 +125,20 @@ class RestoreForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Blindagem Android 14/15: startForeground e locks DEVEM ser a primeira linha absoluta sem timeout
+        acquireLocks()
+        val title = intent?.getStringExtra(EXTRA_TITLE) ?: "Restauração de Backup"
+        val notification = buildInitialNotification(title)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        } catch (t: Throwable) {
+            android.util.Log.e("ReSyncNotif", "Erro no startForeground da restauração: ${t.message}", t)
+        }
+
         val action = intent?.action
         serviceScope.launch(Dispatchers.IO) {
             try {
@@ -137,26 +151,12 @@ class RestoreForegroundService : Service() {
             ACTION_START -> {
                 if (!RestoreRepository.isRestoreActive()) {
                     android.util.Log.w("RestoreService", "RestoreForegroundService: ACTION_START recebido mas nenhuma restauração está ativa no RestoreRepository. Encerrando serviço.")
+                    releaseLocks()
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     notificationManager?.cancel(NOTIFICATION_ID)
                     stopSelf()
                     return START_NOT_STICKY
                 }
-                val title = intent?.getStringExtra(EXTRA_TITLE) ?: "Restauração de Backup"
-                val notification = buildInitialNotification(title)
-                try {
-                    HyperFocusNotificationHelper.logNotificationStatus(this, CHANNEL_ID, "RestoreForegroundService: BEFORE startForeground")
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-                    } else {
-                        startForeground(NOTIFICATION_ID, notification)
-                    }
-                    HyperFocusNotificationHelper.logNotificationStatus(this, CHANNEL_ID, "RestoreForegroundService: AFTER startForeground")
-                    android.util.Log.d("ReSyncNotif", "RestoreForegroundService startForeground chamado com sucesso no canal $CHANNEL_ID")
-                } catch (t: Throwable) {
-                    android.util.Log.e("ReSyncNotif", "Erro no startForeground da restauração: ${t.message}", t)
-                }
-                acquireLocks()
                 return START_NOT_STICKY
             }
             ACTION_PAUSE -> {
