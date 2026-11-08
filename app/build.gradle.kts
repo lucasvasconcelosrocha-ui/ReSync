@@ -19,11 +19,11 @@ android {
     val vCode = (System.getenv("VERSION_CODE")
         ?: project.findProperty("versionCode")?.toString()
         ?: versionProperties.getProperty("versionCode")
-        ?: "35").toInt()
+        ?: "36").toInt()
     val vName = System.getenv("VERSION_NAME")
         ?: project.findProperty("versionName")?.toString()
         ?: versionProperties.getProperty("versionName")
-        ?: "1.0.35"
+        ?: "1.0.36"
 
     defaultConfig {
         applicationId = "com.resync.app"
@@ -83,6 +83,11 @@ android {
         }
     }
 
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -92,6 +97,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            vcsInfo {
+                include = false
+            }
         }
         debug {
             isMinifyEnabled = false
@@ -119,12 +127,18 @@ android {
 
     packaging {
         resources {
-            excludes += listOf(
-                "/META-INF/{AL2.0,LGPL2.1}",
-                "META-INF/DEPENDENCIES",
+            excludes += setOf(
+                "META-INF/version-control-info.textproto",
                 "META-INF/com/android/build/gradle/app-metadata.properties",
-                "META-INF/*.version",
                 "kotlin-tooling-metadata.json",
+                "META-INF/*.version",
+                "META-INF/DEPENDENCIES",
+                "META-INF/LICENSE*",
+                "META-INF/NOTICE*",
+                "kotlin/reflect/reflect.kotlin_builtins",
+                "**/*.kotlin_builtins",
+                "com/google/api/client/**",
+                "/META-INF/{AL2.0,LGPL2.1}",
                 "org/apache/http/**",
                 "win/**",
                 "win32/**",
@@ -138,14 +152,12 @@ android {
                 "**/*.dll",
                 "**/*.dylib",
                 "DebugProbesKt.bin",
-                "META-INF/version-control-info.textproto",
                 "META-INF/INDEX.LIST",
                 "META-INF/native-image/**",
                 "org/apache/commons/codec/language/bm/**",
                 "org/apache/commons/codec/language/dmrules.txt",
                 "mozilla/public-suffix-list.txt",
-                "com/google/api/client/googleapis/google.jks",
-                "com/google/api/client/googleapis/google.p12"
+                "kotlin/reflect/**"
             )
         }
         jniLibs {
@@ -180,7 +192,10 @@ android {
     }
 }
 
-configurations.all {
+configurations.configureEach {
+    exclude(group = "org.jetbrains.kotlin", module = "kotlin-reflect")
+    exclude(group = "com.google.api-client", module = "google-api-client")
+    exclude(group = "com.google.http-client", module = "google-http-client")
     exclude(group = "org.apache.httpcomponents")
 }
 
@@ -191,10 +206,7 @@ dependencies {
     implementation("androidx.room:room-ktx:$roomVersion")
     kapt("androidx.room:room-compiler:$roomVersion")
 
-    // Google API Client & Drive API
-    implementation("com.google.api-client:google-api-client-android:2.6.0")
-    implementation("com.google.apis:google-api-services-drive:v3-rev20220815-2.0.0")
-    implementation("com.google.http-client:google-http-client-gson:1.44.1")
+    // Google Play Services Auth
     implementation("com.google.android.gms:play-services-auth:21.2.0")
     implementation("com.google.android.gms:play-services-base:18.5.0")
     // AndroidX Core & Lifecycle
@@ -259,4 +271,20 @@ tasks.register<Exec>("generateAppIcons") {
     workingDir = rootDir
     commandLine("python3", "scripts/generate_icons.py")
 }
+
+tasks.withType<com.android.build.gradle.internal.tasks.AppMetadataTask>().configureEach {
+    enabled = false
+}
+
+tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Resources") }.configureEach {
+    doLast {
+        val dir = file("${project.layout.buildDirectory.get().asFile}/intermediates/app_metadata/release/writeReleaseAppMetadata")
+        dir.mkdirs()
+        val metaFile = File(dir, "app-metadata.properties")
+        if (!metaFile.exists()) {
+            metaFile.createNewFile()
+        }
+    }
+}
+
 

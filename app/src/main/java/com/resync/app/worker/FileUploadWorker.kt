@@ -1,6 +1,5 @@
 package com.resync.app.worker
 
-import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import android.content.pm.ServiceInfo
@@ -12,11 +11,11 @@ import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
-import com.google.api.client.googleapis.media.MediaHttpUploader
-import com.google.api.client.http.FileContent
-import com.google.api.services.drive.model.File as DriveFile
 import com.resync.app.R
+import com.resync.app.cloud.gdrive.DriveFileManager
 import com.resync.app.cloud.gdrive.DriveRepository
+import com.resync.app.cloud.gdrive.OAuthManager
+import com.resync.app.cloud.gdrive.UploadManager
 import com.resync.app.data.database.AppDatabaseHelper
 import com.resync.app.data.model.LogLevel
 import com.resync.app.data.model.QueueStatus
@@ -50,6 +49,8 @@ class FileUploadWorker(
 
     private val dbHelper = AppDatabaseHelper.getInstance(appContext)
     private val driveRepo = DriveRepository(appContext)
+    private val oAuthManager = OAuthManager(appContext)
+    private val uploadManager = UploadManager(oAuthManager)
     private val notificationManager =
         appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
@@ -84,127 +85,106 @@ class FileUploadWorker(
 
             try {
                 val targetEmail = inputData.getString(KEY_ACCOUNT_EMAIL)
-            if (targetEmail.isNullOrBlank()) {
-                val err = "Conta destino ausente no lote de upload."
-                dbHelper.insertLog(LogLevel.ERROR, "UploadWorker", err)
-                if (queueId != null) {
-                    try { dbHelper.updateQueueItemStatus(queueId, QueueStatus.FAILED, 0L, "NO_ACCOUNT", err) } catch (_: Throwable) {}
+                if (targetEmail.isNullOrBlank()) {
+                    val err = "Conta destino ausente no lote de upload."
+                    dbHelper.insertLog(LogLevel.ERROR, "UploadWorker", err)
+                    if (queueId != null) {
+                        try { dbHelper.updateQueueItemStatus(queueId, QueueStatus.FAILED, 0L, "NO_ACCOUNT", err) } catch (_: Throwable) {}
+                    }
+                    return@withContext Result.failure(workDataOf("error" to err))
                 }
-                return@withContext Result.failure(workDataOf("error" to err))
-            }
 
-            val filePath = inputData.getString(KEY_FILE_PATH)
-            if (filePath.isNullOrBlank()) {
-                val err = "Caminho do arquivo local não informado."
-                dbHelper.insertLog(LogLevel.ERROR, "UploadWorker", err)
-                if (queueId != null) {
-                    try { dbHelper.updateQueueItemStatus(queueId, QueueStatus.FAILED, 0L, "NO_FILE_PATH", err) } catch (_: Throwable) {}
+                val filePath = inputData.getString(KEY_FILE_PATH)
+                if (filePath.isNullOrBlank()) {
+                    val err = "Caminho do arquivo local não informado."
+                    dbHelper.insertLog(LogLevel.ERROR, "UploadWorker", err)
+                    if (queueId != null) {
+                        try { dbHelper.updateQueueItemStatus(queueId, QueueStatus.FAILED, 0L, "NO_FILE_PATH", err) } catch (_: Throwable) {}
+                    }
+                    return@withContext Result.failure(workDataOf("error" to err))
                 }
-                return@withContext Result.failure(workDataOf("error" to err))
-            }
 
-            val localFile = File(filePath)
-            if (!localFile.exists() || localFile.length() == 0L) {
-                val err = "Arquivo local não encontrado ou vazio: $filePath"
-                dbHelper.insertLog(LogLevel.ERROR, "UploadWorker", err)
-                if (queueId != null) {
-                    try { dbHelper.updateQueueItemStatus(queueId, QueueStatus.FAILED, 0L, "FILE_NOT_FOUND", err) } catch (_: Throwable) {}
+                val localFile = File(filePath)
+                if (!localFile.exists() || localFile.length() == 0L) {
+                    val err = "Arquivo local não encontrado ou vazio: $filePath"
+                    dbHelper.insertLog(LogLevel.ERROR, "UploadWorker", err)
+                    if (queueId != null) {
+                        try { dbHelper.updateQueueItemStatus(queueId, QueueStatus.FAILED, 0L, "FILE_NOT_FOUND", err) } catch (_: Throwable) {}
+                    }
+                    return@withContext Result.failure(workDataOf("error" to err))
                 }
-                return@withContext Result.failure(workDataOf("error" to err))
-            }
 
-            if (fileName == "arquivo") {
-                fileName = localFile.name
-            }
-            val customFolderId = inputData.getString(KEY_FOLDER_ID)
-            val isContainer = fileName.endsWith(".resync", ignoreCase = true) || fileName.endsWith(".svb", ignoreCase = true) || fileName.endsWith(".zip", ignoreCase = true)
-            val mimeType = if (isContainer) "application/octet-stream" else (inputData.getString(KEY_MIME_TYPE) ?: "application/octet-stream")
+                if (fileName == "arquivo") {
+                    fileName = localFile.name
+                }
+                val customFolderId = inputData.getString(KEY_FOLDER_ID)
+                val isContainer = fileName.endsWith(".resync", ignoreCase = true) || fileName.endsWith(".svb", ignoreCase = true) || fileName.endsWith(".zip", ignoreCase = true)
 
-            // Promoção a Foreground com BigTextStyle (título curto + 2 linhas de detalhes)
-            try {
-                createNotificationChannel()
-                setForeground(
-                    createForegroundInfo(
-                        title = "Enviando ao Google Drive • 0%",
-                        progress = 0,
-                        detailLine1 = "Iniciando envio de $fileName",
-                        detailLine2 = formatBytes(localFile.length())
+                // Promoção a Foreground com BigTextStyle (título curto + 2 linhas de detalhes)
+                try {
+                    createNotificationChannel()
+                    setForeground(
+                        createForegroundInfo(
+                            title = "Enviando ao Google Drive • 0%",
+                            progress = 0,
+                            detailLine1 = "Iniciando envio de $fileName",
+                            detailLine2 = formatBytes(localFile.length())
+                        )
                     )
-                )
-            } catch (t: Throwable) {
-                dbHelper.insertLog(LogLevel.WARN, "UploadWorker", "Executando upload sem notificação de primeiro plano: ${t.message}")
-            }
+                } catch (t: Throwable) {
+                    dbHelper.insertLog(LogLevel.WARN, "UploadWorker", "Executando upload sem notificação de primeiro plano: ${t.message}")
+                }
 
-            val drive = driveRepo.getDriveClientForAccount(targetEmail)
-            val parentFolderId = if (!customFolderId.isNullOrBlank()) {
-                customFolderId
-            } else {
-                val struct = driveRepo.getOrCreateSwiftVaultStructure(targetEmail)
-                if (fileName.endsWith(".resync", ignoreCase = true) || fileName.endsWith(".svb", ignoreCase = true) || fileName.contains("Odin", ignoreCase = true)) {
-                    struct.quickBackupsFolderId
+                val parentFolderId = if (!customFolderId.isNullOrBlank()) {
+                    customFolderId
                 } else {
-                    struct.filesFolderId
+                    val struct = driveRepo.getOrCreateSwiftVaultStructure(targetEmail)
+                    if (fileName.endsWith(".resync", ignoreCase = true) || fileName.endsWith(".svb", ignoreCase = true) || fileName.contains("Odin", ignoreCase = true)) {
+                        struct.quickBackupsFolderId
+                    } else {
+                        struct.filesFolderId
+                    }
                 }
-            }
 
-            if (parentFolderId.isBlank()) {
-                val err = "ID da pasta de destino não resolvido para $fileName. Upload cancelado para impedir envio à raiz."
-                dbHelper.insertLog(LogLevel.ERROR, "UploadWorker", err)
-                dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", err)
-                throw IllegalStateException(err)
-            }
-
-            dbHelper.insertLog(
-                LogLevel.INFO,
-                "GoogleDrive",
-                "Iniciando envio de '$fileName' (${localFile.length()} bytes) para a pasta ID '$parentFolderId' (Conta: $targetEmail)"
-            )
-
-            // Calcular propriedades e categorias do backup para registro no Google Drive
-            val categoryProps = com.resync.app.cloud.gdrive.CloudBackupCategoryHelper.inspectLocalFile(appContext, localFile, fileName)
-
-            // Verificar se o arquivo já existe na pasta destino para reutilizar/atualizar em vez de duplicar
-            val existingFile = driveRepo.findFileInFolder(targetEmail, fileName, parentFolderId)
-            val mediaContent = FileContent(mimeType, localFile)
-
-            val uploadedDriveFile = if (existingFile != null && !existingFile.id.isNullOrBlank()) {
-                // Atualizar / sobrescrever arquivo existente
-                val updateMetadata = DriveFile().apply {
-                    appProperties = categoryProps
+                if (parentFolderId.isBlank()) {
+                    val err = "ID da pasta de destino não resolvido para $fileName. Upload cancelado para impedir envio à raiz."
+                    dbHelper.insertLog(LogLevel.ERROR, "UploadWorker", err)
+                    dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", err)
+                    throw IllegalStateException(err)
                 }
-                val updateRequest = drive.files().update(existingFile.id, updateMetadata, mediaContent)
-                updateRequest.fields = "id, name, size, md5Checksum"
-                val totalFileBytes = localFile.length()
-                var lastProgressBytes = 0L
-                var lastProgressTime = System.currentTimeMillis()
-                var uploadSpeedBytesPerSec = 0L
 
-                val progressCallback: (MediaHttpUploader) -> Unit = { u ->
+                dbHelper.insertLog(
+                    LogLevel.INFO,
+                    "GoogleDrive",
+                    "Iniciando envio de '$fileName' (${localFile.length()} bytes) para a pasta ID '$parentFolderId' (Conta: $targetEmail)"
+                )
+
+                // Calcular propriedades e categorias do backup para registro no Google Drive
+                val categoryProps = com.resync.app.cloud.gdrive.CloudBackupCategoryHelper.inspectLocalFile(appContext, localFile, fileName)
+
+                val uploadResult = uploadManager.executeResumableUpload(
+                    localFile = localFile,
+                    targetFolderId = parentFolderId,
+                    backupMetadata = categoryProps,
+                    accountEmail = targetEmail,
+                    jobId = queueId ?: "upload_${localFile.name}_${System.currentTimeMillis()}"
+                ) { progressInfo ->
                     if (isCancelled.get() || isStopped) {
                         isCancelled.set(true)
+                        uploadManager.cancel()
                         throw CancellationException("Upload cancelado pelo usuário")
                     }
-                    val progressPercent = (u.progress * 100).toInt()
-                    val progressBytes = u.numBytesUploaded
-                    val now = System.currentTimeMillis()
-                    val timeDiff = now - lastProgressTime
-                    if (timeDiff >= 1000L) {
-                        val bytesDiff = (progressBytes - lastProgressBytes).coerceAtLeast(0L)
-                        uploadSpeedBytesPerSec = (bytesDiff * 1000L) / timeDiff
-                        lastProgressBytes = progressBytes
-                        lastProgressTime = now
-                    }
 
-                    val remainingBytes = (totalFileBytes - progressBytes).coerceAtLeast(0L)
-                    val remainingSec = if (uploadSpeedBytesPerSec > 0L) remainingBytes / uploadSpeedBytesPerSec else 0L
-                    val speedMBps = uploadSpeedBytesPerSec.toFloat() / (1024f * 1024f)
-                    val partCount = if (totalFileBytes < 32L * 1024 * 1024) 1 else (totalFileBytes / (16L * 1024 * 1024)).toInt().coerceIn(1, 5)
-                    val partSize = (totalFileBytes / partCount).coerceAtLeast(1L)
-                    val currentPartIdx = (progressBytes / partSize).toInt().coerceIn(0, partCount - 1)
+                    val progressPercent = (progressInfo.progressPercent * 100).toInt().coerceIn(0, 100)
+                    val progressBytes = progressInfo.bytesUploaded
+                    val totalFileBytes = progressInfo.totalBytes
+                    val speedMBps = progressInfo.speedMBps
+                    val remainingSec = progressInfo.estimatedRemainingSeconds
+                    val now = System.currentTimeMillis()
 
                     if (now - lastNotifUpdateMs >= com.resync.app.engine.PerformanceConfig.notifThrottleMs) {
                         lastNotifUpdateMs = now
-                        val speedStr = if (speedMBps >= 1f) String.format(Locale.US, "%.1f MB/s", speedMBps) else String.format(Locale.US, "%.0f KB/s", uploadSpeedBytesPerSec / 1024f)
+                        val speedStr = if (speedMBps >= 1f) String.format(Locale.US, "%.1f MB/s", speedMBps) else String.format(Locale.US, "%.0f KB/s", speedMBps * 1024f)
                         val doneStr = formatBytes(progressBytes)
                         val totalStr = formatBytes(totalFileBytes)
                         val etaStr = if (remainingSec > 0) formatEta(remainingSec) else "Calculando..."
@@ -227,316 +207,95 @@ class FileUploadWorker(
                                 arrayOf(progressBytes, queueId)
                             )
                         } catch (_: Throwable) {}
-                        val partsList = (0 until partCount).map { i ->
-                            val pStart = i * partSize
-                            val pEnd = if (i == partCount - 1) totalFileBytes else (i + 1) * partSize
-                            val pTotal = pEnd - pStart
-                            val pDone = when {
-                                progressBytes >= pEnd -> pTotal
-                                progressBytes <= pStart -> 0L
-                                else -> progressBytes - pStart
-                            }
-                            val pPercent = if (pTotal > 0) (pDone.toFloat() / pTotal.toFloat()).coerceIn(0f, 1f) else 1f
-                            val pSpeed = if (i == currentPartIdx) speedMBps else 0f
-                            com.resync.app.engine.OperationPartInfo(
-                                partIndex = i + 1,
-                                totalParts = partCount,
-                                bytesProcessed = pDone,
-                                totalBytes = pTotal,
-                                progressPercent = pPercent,
-                                speedMBps = pSpeed,
-                                isCompleted = pDone >= pTotal
-                            )
-                        }
 
                         com.resync.app.engine.OperationRepository.updateUploadOperation(
                             operationId = "upload_$queueId",
                             fileName = fileName,
-                            progressPercent = (progressBytes.toFloat() / totalFileBytes.toFloat().coerceAtLeast(1f)).coerceIn(0f, 1f),
+                            progressPercent = progressInfo.progressPercent,
                             bytesProcessed = progressBytes,
                             totalBytesEstimated = totalFileBytes,
                             isFinished = false,
                             status = com.resync.app.engine.OperationStatus.RUNNING,
-                            uploadSpeedBytesPerSec = uploadSpeedBytesPerSec,
+                            uploadSpeedBytesPerSec = (speedMBps * 1024f * 1024f).toLong(),
                             estimatedRemainingSeconds = remainingSec,
                             destination = "Google Drive ($targetEmail)",
-                            parts = partsList
+                            parts = progressInfo.parts
                         )
                     }
                 }
 
-                updateRequest.mediaHttpUploader.apply {
-                    isDirectUploadEnabled = false
-                    chunkSize = com.resync.app.engine.PerformanceConfig.uploadChunkBytes
-                    // Disable google-api-client GZIP re-compression: .resync containers are already
-                    // ZIP/DEFLATE-compressed; re-compressing adds CPU overhead without size reduction.
-                    setDisableGZipContent(true)
-                    setProgressListener { u -> progressCallback(u) }
+                val uploadedDriveFile = uploadResult.getOrThrow()
+
+                // Validar ID e tamanho retornado pelo Google Drive
+                val returnedId = uploadedDriveFile.id
+                val returnedSize = uploadedDriveFile.sizeBytes
+                if (returnedId.isBlank()) {
+                    val err = "Upload no Google Drive falhou: a API não retornou um ID de arquivo válido para $fileName."
+                    dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", err)
+                    throw IllegalStateException(err)
                 }
-                try {
-                    updateRequest.execute()
-                } catch (t: Throwable) {
-                    val is401 = (t is com.google.api.client.googleapis.json.GoogleJsonResponseException && t.statusCode == 401) ||
-                            t.message?.contains("401") == true
-                    if (is401) {
-                        driveRepo.invalidateAccountToken(targetEmail)
-                        val retryDrive = driveRepo.getDriveClientForAccount(targetEmail)
-                        val retryUpdate = retryDrive.files().update(existingFile.id, updateMetadata, mediaContent)
-                        retryUpdate.fields = "id, name, size, md5Checksum"
-                        retryUpdate.mediaHttpUploader.apply {
-                            isDirectUploadEnabled = false
-                            chunkSize = com.resync.app.engine.PerformanceConfig.uploadChunkBytes
-                            setProgressListener { u -> progressCallback(u) }
-                        }
-                        retryUpdate.execute()
-                    } else {
-                        throw t
-                    }
+                if (returnedSize <= 0L || returnedSize != localFile.length()) {
+                    val sizeMismatchErr = "Divergência de tamanho no Google Drive para $fileName: esperado ${localFile.length()} bytes, retornado $returnedSize bytes (0 bytes ou incompleto)."
+                    dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", sizeMismatchErr)
+                    throw IllegalStateException(sizeMismatchErr)
                 }
-            } else {
-                // Criar novo arquivo
-                val fileMetadata = DriveFile().apply {
-                    name = fileName
-                    parents = listOf(parentFolderId)
-                    appProperties = categoryProps
-                }
-                val insertRequest = drive.files().create(fileMetadata, mediaContent)
-                insertRequest.fields = "id, name, size, md5Checksum"
-                val uploader = insertRequest.mediaHttpUploader
-                uploader.isDirectUploadEnabled = false
-                uploader.chunkSize = com.resync.app.engine.PerformanceConfig.uploadChunkBytes
+                dbHelper.insertLog(LogLevel.INFO, "GoogleDrive", "arquivo '$fileName' enviado para pasta '$parentFolderId'")
+                dbHelper.insertLog(LogLevel.INFO, "GoogleDrive", "Arquivo enviado com sucesso ao Google Drive: $fileName (Tamanho: $returnedSize bytes, ID retornado: $returnedId)")
 
-                val totalFileBytes = localFile.length()
-                var lastProgressBytes = 0L
-                var lastProgressTime = System.currentTimeMillis()
-                var uploadSpeedBytesPerSec = 0L
-
-                val progressCallback: (MediaHttpUploader) -> Unit = { u ->
-                    if (isCancelled.get() || isStopped) {
-                        isCancelled.set(true)
-                        throw CancellationException("Upload cancelado pelo usuário")
-                    }
-                    val progressPercent = (u.progress * 100).toInt()
-                    val progressBytes = u.numBytesUploaded
-                    val now = System.currentTimeMillis()
-                    val timeDiff = now - lastProgressTime
-                    if (timeDiff >= 1000L) {
-                        val bytesDiff = (progressBytes - lastProgressBytes).coerceAtLeast(0L)
-                        uploadSpeedBytesPerSec = (bytesDiff * 1000L) / timeDiff
-                        lastProgressBytes = progressBytes
-                        lastProgressTime = now
-                    }
-
-                    val remainingBytes = (totalFileBytes - progressBytes).coerceAtLeast(0L)
-                    val remainingSec = if (uploadSpeedBytesPerSec > 0L) remainingBytes / uploadSpeedBytesPerSec else 0L
-                    val speedMBps = uploadSpeedBytesPerSec.toFloat() / (1024f * 1024f)
-                    val partCount = if (totalFileBytes < 32L * 1024 * 1024) 1 else (totalFileBytes / (16L * 1024 * 1024)).toInt().coerceIn(1, 5)
-                    val partSize = (totalFileBytes / partCount).coerceAtLeast(1L)
-                    val currentPartIdx = (progressBytes / partSize).toInt().coerceIn(0, partCount - 1)
-
-                    if (now - lastNotifUpdateMs >= com.resync.app.engine.PerformanceConfig.notifThrottleMs) {
-                        lastNotifUpdateMs = now
-                        val speedStr = if (speedMBps >= 1f) String.format(Locale.US, "%.1f MB/s", speedMBps) else String.format(Locale.US, "%.0f KB/s", uploadSpeedBytesPerSec / 1024f)
-                        val doneStr = formatBytes(progressBytes)
-                        val totalStr = formatBytes(totalFileBytes)
-                        val etaStr = if (remainingSec > 0) formatEta(remainingSec) else "Calculando..."
-                        try {
-                            setForegroundAsync(
-                                createForegroundInfo(
-                                    title = "Enviando ao Google Drive • $progressPercent%",
-                                    progress = progressPercent,
-                                    detailLine1 = "$doneStr de $totalStr • $speedStr",
-                                    detailLine2 = "Tempo restante: $etaStr • $fileName"
-                                )
-                            )
-                        } catch (_: Throwable) {}
-                    }
-
-                    if (queueId != null) {
-                        try {
-                            dbHelper.writableDatabase.execSQL(
-                                "UPDATE sync_queue SET progress_bytes = ?, status = 'RUNNING' WHERE id = ?",
-                                arrayOf(progressBytes, queueId)
-                            )
-                        } catch (_: Throwable) {}
-                        val partsList = (0 until partCount).map { i ->
-                            val pStart = i * partSize
-                            val pEnd = if (i == partCount - 1) totalFileBytes else (i + 1) * partSize
-                            val pTotal = pEnd - pStart
-                            val pDone = when {
-                                progressBytes >= pEnd -> pTotal
-                                progressBytes <= pStart -> 0L
-                                else -> progressBytes - pStart
-                            }
-                            val pPercent = if (pTotal > 0) (pDone.toFloat() / pTotal.toFloat()).coerceIn(0f, 1f) else 1f
-                            val pSpeed = if (i == currentPartIdx) speedMBps else 0f
-                            com.resync.app.engine.OperationPartInfo(
-                                partIndex = i + 1,
-                                totalParts = partCount,
-                                bytesProcessed = pDone,
-                                totalBytes = pTotal,
-                                progressPercent = pPercent,
-                                speedMBps = pSpeed,
-                                isCompleted = pDone >= pTotal
-                            )
-                        }
-
-                        com.resync.app.engine.OperationRepository.updateUploadOperation(
-                            operationId = "upload_$queueId",
-                            fileName = fileName,
-                            progressPercent = (progressBytes.toFloat() / totalFileBytes.toFloat().coerceAtLeast(1f)).coerceIn(0f, 1f),
-                            bytesProcessed = progressBytes,
-                            totalBytesEstimated = totalFileBytes,
-                            isFinished = false,
-                            status = com.resync.app.engine.OperationStatus.RUNNING,
-                            uploadSpeedBytesPerSec = uploadSpeedBytesPerSec,
-                            estimatedRemainingSeconds = remainingSec,
-                            destination = "Google Drive ($targetEmail)",
-                            parts = partsList
-                        )
-                    }
-                }
-
-                uploader.setProgressListener { u -> progressCallback(u) }
-
-                try {
-                    insertRequest.execute()
-                } catch (t: Throwable) {
-                    val is401 = (t is com.google.api.client.googleapis.json.GoogleJsonResponseException && t.statusCode == 401) ||
-                            t.message?.contains("401") == true
-                    if (is401) {
-                        driveRepo.invalidateAccountToken(targetEmail)
-                        val retryDrive = driveRepo.getDriveClientForAccount(targetEmail)
-                        val retryInsert = retryDrive.files().create(fileMetadata, mediaContent)
-                        retryInsert.fields = "id, name, size, md5Checksum"
-                        retryInsert.mediaHttpUploader.apply {
-                            isDirectUploadEnabled = false
-                            chunkSize = com.resync.app.engine.PerformanceConfig.uploadChunkBytes
-                            setProgressListener { u -> progressCallback(u) }
-                        }
-                        retryInsert.execute()
-                    } else {
-                        throw t
-                    }
-                }
-            }
-
-            // Validar ID e tamanho retornado pelo Google Drive
-            val returnedId = uploadedDriveFile.id.orEmpty()
-            var returnedSize = uploadedDriveFile.size?.toLong() ?: 0L
-            if (returnedId.isBlank()) {
-                val err = "Upload no Google Drive falhou: a API não retornou um ID de arquivo válido para $fileName."
-                dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", err)
-                throw IllegalStateException(err)
-            }
-            if (returnedSize <= 0L) {
-                try {
-                    val meta = drive.files().get(returnedId).setFields("id, size").execute()
-                    returnedSize = meta.size?.toLong() ?: 0L
-                } catch (_: Throwable) {}
-            }
-            if (returnedSize <= 0L || returnedSize != localFile.length()) {
-                val sizeMismatchErr = "Divergência de tamanho no Google Drive para $fileName: esperado ${localFile.length()} bytes, retornado $returnedSize bytes (0 bytes ou incompleto)."
-                dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", sizeMismatchErr)
-                throw IllegalStateException(sizeMismatchErr)
-            }
-            dbHelper.insertLog(LogLevel.INFO, "GoogleDrive", "arquivo '$fileName' enviado para pasta '$parentFolderId'")
-            dbHelper.insertLog(LogLevel.INFO, "GoogleDrive", "Arquivo enviado com sucesso ao Google Drive: $fileName (Tamanho: $returnedSize bytes, ID retornado: $returnedId)")
-
-            // Se for container de backup, gerar e enviar índice complementar (svb_XXXX.index.json)
-            if (isContainer) {
-                try {
-                    val baseName = localFile.nameWithoutExtension
-                    val localSidecar = File(localFile.parentFile, "$baseName.index.json")
-                    val indexJsonStr = if (localSidecar.exists() && localSidecar.length() > 0L) {
-                        val bytes = localSidecar.readBytes()
-                        val isGzip = bytes.size >= 2 && bytes[0] == 0x1F.toByte() && bytes[1] == 0x8B.toByte()
-                        if (isGzip) {
-                            java.util.zip.GZIPInputStream(java.io.ByteArrayInputStream(bytes)).bufferedReader(Charsets.UTF_8).use { it.readText() }
-                        } else {
-                            String(bytes, Charsets.UTF_8)
-                        }
-                    } else {
-                        val manifest = com.resync.app.engine.ArchiveEngine.readManifest(localFile)
-                        com.google.gson.Gson().toJson(manifest)
-                    }
-
-                    val indexFileName = "$baseName.index.json"
-                    val tempIndexFile = File(appContext.cacheDir, indexFileName)
-                    tempIndexFile.writeText(indexJsonStr, Charsets.UTF_8)
-
+                // Se for container de backup, gerar e enviar índice complementar (svb_XXXX.index.json)
+                if (isContainer) {
                     try {
-                        val existingIndexFile = driveRepo.findFileInFolder(targetEmail, indexFileName, parentFolderId)
-                        val indexMedia = FileContent("application/json", tempIndexFile)
-                        if (existingIndexFile != null && !existingIndexFile.id.isNullOrBlank()) {
-                            val updateMeta = DriveFile()
-                            drive.files().update(existingIndexFile.id, updateMeta, indexMedia).execute()
-                        } else {
-                            val indexMeta = DriveFile().apply {
-                                name = indexFileName
-                                parents = listOf(parentFolderId)
-                                appProperties = mapOf(
-                                    "indexFor" to uploadedDriveFile.id,
-                                    "containerName" to fileName
-                                ) + categoryProps
+                        val baseName = localFile.nameWithoutExtension
+                        val localSidecar = File(localFile.parentFile, "$baseName.index.json")
+                        val indexJsonStr = if (localSidecar.exists() && localSidecar.length() > 0L) {
+                            val bytes = localSidecar.readBytes()
+                            val isGzip = bytes.size >= 2 && bytes[0] == 0x1F.toByte() && bytes[1] == 0x8B.toByte()
+                            if (isGzip) {
+                                java.util.zip.GZIPInputStream(java.io.ByteArrayInputStream(bytes)).bufferedReader(Charsets.UTF_8).use { it.readText() }
+                            } else {
+                                String(bytes, Charsets.UTF_8)
                             }
-                            drive.files().create(indexMeta, indexMedia).execute()
+                        } else {
+                            val manifest = com.resync.app.engine.ArchiveEngine.readManifest(localFile)
+                            com.google.gson.Gson().toJson(manifest)
                         }
+
+                        val indexFileName = "$baseName.index.json"
+                        val driveFileManager = DriveFileManager(oAuthManager)
+                        driveFileManager.uploadIndexJson(
+                            name = indexFileName,
+                            content = indexJsonStr,
+                            parentId = parentFolderId,
+                            accountEmail = targetEmail
+                        )
                         dbHelper.insertLog(LogLevel.INFO, "UploadWorker", "Índice complementar sincronizado: $indexFileName")
-                    } finally {
-                        tempIndexFile.delete()
+                    } catch (idxEx: Exception) {
+                        dbHelper.insertLog(LogLevel.WARN, "UploadWorker", "Aviso ao gerar índice complementar: ${idxEx.message}")
                     }
-                } catch (idxEx: Exception) {
-                    dbHelper.insertLog(LogLevel.WARN, "UploadWorker", "Aviso ao gerar índice complementar: ${idxEx.message}")
                 }
-            }
 
-            if (queueId != null) {
-                dbHelper.updateQueueItemStatus(queueId, QueueStatus.COMPLETED, localFile.length())
-                com.resync.app.engine.OperationRepository.updateUploadOperation(
-                    operationId = "upload_$queueId",
-                    fileName = fileName,
-                    progressPercent = 1f,
-                    bytesProcessed = localFile.length(),
-                    totalBytesEstimated = localFile.length(),
-                    isFinished = true,
-                    status = com.resync.app.engine.OperationStatus.COMPLETED,
-                    destination = "Google Drive ($targetEmail)"
-                )
-            }
-            if (backupId != null) {
-                dbHelper.updateBackupSyncStatus(backupId, SyncStatus.SYNCED, uploadedDriveFile.id)
-            }
+                if (queueId != null) {
+                    dbHelper.updateQueueItemStatus(queueId, QueueStatus.COMPLETED, localFile.length())
+                    com.resync.app.engine.OperationRepository.updateUploadOperation(
+                        operationId = "upload_$queueId",
+                        fileName = fileName,
+                        progressPercent = 1f,
+                        bytesProcessed = localFile.length(),
+                        totalBytesEstimated = localFile.length(),
+                        isFinished = true,
+                        status = com.resync.app.engine.OperationStatus.COMPLETED,
+                        destination = "Google Drive ($targetEmail)"
+                    )
+                }
+                if (backupId != null) {
+                    dbHelper.updateBackupSyncStatus(backupId, SyncStatus.SYNCED, uploadedDriveFile.id)
+                }
 
-            dbHelper.insertLog(LogLevel.INFO, "UploadWorker", "Upload concluído: $fileName -> Google Drive ($targetEmail)")
-            try { notificationManager.cancel(NOTIFICATION_ID) } catch (_: Throwable) {}
+                dbHelper.insertLog(LogLevel.INFO, "UploadWorker", "Upload concluído: $fileName -> Google Drive ($targetEmail)")
+                try { notificationManager.cancel(NOTIFICATION_ID) } catch (_: Throwable) {}
 
-            Result.success(workDataOf("uploaded_id" to uploadedDriveFile.id))
-        } catch (ce: CancellationException) {
-            dbHelper.insertLog(LogLevel.WARN, "UploadWorker", "Upload cancelado pelo usuário: $fileName")
-            if (queueId != null) {
-                try {
-                    dbHelper.updateQueueItemStatus(queueId, QueueStatus.FAILED, 0L, "CANCELLED", "Upload cancelado pelo usuário")
-                } catch (_: Throwable) {}
-
-                com.resync.app.engine.OperationRepository.updateUploadOperation(
-                    operationId = "upload_$queueId",
-                    fileName = fileName,
-                    progressPercent = 0f,
-                    isFinished = true,
-                    status = com.resync.app.engine.OperationStatus.CANCELLED,
-                    error = "Upload cancelado pelo usuário",
-                    destination = "Google Drive"
-                )
-            }
-            if (backupId != null) {
-                try {
-                    dbHelper.updateBackupSyncStatus(backupId, SyncStatus.FAILED)
-                } catch (_: Throwable) {}
-            }
-            Result.failure(workDataOf("error" to "Upload cancelado pelo usuário"))
-        } catch (t: Throwable) {
-            if (t.cause is CancellationException || isCancelled.get() || isStopped) {
+                Result.success(workDataOf("uploaded_id" to uploadedDriveFile.id))
+            } catch (ce: CancellationException) {
                 dbHelper.insertLog(LogLevel.WARN, "UploadWorker", "Upload cancelado pelo usuário: $fileName")
                 if (queueId != null) {
                     try {
@@ -559,54 +318,78 @@ class FileUploadWorker(
                     } catch (_: Throwable) {}
                 }
                 Result.failure(workDataOf("error" to "Upload cancelado pelo usuário"))
-            } else {
-                val isNetworkIssue = t is java.io.IOException || t is java.net.SocketTimeoutException
-                val errMsg = "Falha no upload de $fileName: ${t.message}"
-                dbHelper.insertLog(LogLevel.ERROR, "UploadWorker", errMsg)
-                dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", errMsg)
+            } catch (t: Throwable) {
+                if (t.cause is CancellationException || isCancelled.get() || isStopped) {
+                    dbHelper.insertLog(LogLevel.WARN, "UploadWorker", "Upload cancelado pelo usuário: $fileName")
+                    if (queueId != null) {
+                        try {
+                            dbHelper.updateQueueItemStatus(queueId, QueueStatus.FAILED, 0L, "CANCELLED", "Upload cancelado pelo usuário")
+                        } catch (_: Throwable) {}
 
-                if (queueId != null) {
-                    try {
-                        dbHelper.updateQueueItemStatus(
-                            queueId,
-                            if (isNetworkIssue) QueueStatus.RETRYING else QueueStatus.FAILED,
-                            0L,
-                            "ERROR",
-                            t.message ?: "Erro desconhecido"
+                        com.resync.app.engine.OperationRepository.updateUploadOperation(
+                            operationId = "upload_$queueId",
+                            fileName = fileName,
+                            progressPercent = 0f,
+                            isFinished = true,
+                            status = com.resync.app.engine.OperationStatus.CANCELLED,
+                            error = "Upload cancelado pelo usuário",
+                            destination = "Google Drive"
                         )
-                    } catch (_: Throwable) {}
-
-                    com.resync.app.engine.OperationRepository.updateUploadOperation(
-                        operationId = "upload_$queueId",
-                        fileName = fileName,
-                        progressPercent = 0f,
-                        isFinished = true,
-                        status = com.resync.app.engine.OperationStatus.ERROR,
-                        error = t.message ?: "Falha no upload",
-                        destination = "Google Drive"
-                    )
-                }
-                if (backupId != null) {
-                    try {
-                        dbHelper.updateBackupSyncStatus(backupId, SyncStatus.FAILED)
-                    } catch (_: Throwable) {}
-                }
-
-                if (isNetworkIssue && runAttemptCount < 3) {
-                    Result.retry()
+                    }
+                    if (backupId != null) {
+                        try {
+                            dbHelper.updateBackupSyncStatus(backupId, SyncStatus.FAILED)
+                        } catch (_: Throwable) {}
+                    }
+                    Result.failure(workDataOf("error" to "Upload cancelado pelo usuário"))
                 } else {
-                    Result.failure(workDataOf("error" to (t.message ?: "Erro desconhecido")))
+                    val isNetworkIssue = t is java.io.IOException || t is java.net.SocketTimeoutException
+                    val errMsg = "Falha no upload de $fileName: ${t.message}"
+                    dbHelper.insertLog(LogLevel.ERROR, "UploadWorker", errMsg)
+                    dbHelper.insertLog(LogLevel.ERROR, "GoogleDrive", errMsg)
+
+                    if (queueId != null) {
+                        try {
+                            dbHelper.updateQueueItemStatus(
+                                queueId,
+                                if (isNetworkIssue) QueueStatus.RETRYING else QueueStatus.FAILED,
+                                0L,
+                                "ERROR",
+                                t.message ?: "Erro desconhecido"
+                            )
+                        } catch (_: Throwable) {}
+
+                        com.resync.app.engine.OperationRepository.updateUploadOperation(
+                            operationId = "upload_$queueId",
+                            fileName = fileName,
+                            progressPercent = 0f,
+                            isFinished = true,
+                            status = com.resync.app.engine.OperationStatus.ERROR,
+                            error = t.message ?: "Falha no upload",
+                            destination = "Google Drive"
+                        )
+                    }
+                    if (backupId != null) {
+                        try {
+                            dbHelper.updateBackupSyncStatus(backupId, SyncStatus.FAILED)
+                        } catch (_: Throwable) {}
+                    }
+
+                    if (isNetworkIssue && runAttemptCount < 3) {
+                        Result.retry()
+                    } else {
+                        Result.failure(workDataOf("error" to (t.message ?: "Erro desconhecido")))
+                    }
                 }
             }
+        } finally {
+            try { wakeLock?.let { if (it.isHeld) it.release() } } catch (_: Throwable) {}
+            try { wifiLock?.let { if (it.isHeld) it.release() } } catch (_: Throwable) {}
+            try {
+                notificationManager.cancel(NOTIFICATION_ID)
+            } catch (_: Throwable) {}
         }
-    } finally {
-        try { wakeLock?.let { if (it.isHeld) it.release() } } catch (_: Throwable) {}
-        try { wifiLock?.let { if (it.isHeld) it.release() } } catch (_: Throwable) {}
-        try {
-            notificationManager.cancel(NOTIFICATION_ID)
-        } catch (_: Throwable) {}
     }
-}
 
     private fun createForegroundInfo(
         title: String,
@@ -645,4 +428,3 @@ class FileUploadWorker(
         com.resync.app.util.HyperFocusNotificationHelper.ensureNotificationChannels(appContext)
     }
 }
-

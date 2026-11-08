@@ -1739,9 +1739,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 Log.d("RestoreInspection", "[INSPECT] driveFileId ausente no registro. Buscando por nome '$fileName' no Drive ($targetEmail)...")
                 try {
                     if (targetEmail != null) {
-                        val client = driveRepository.getDriveClientForAccount(targetEmail)
-                        val q = "name = '$fileName' and trashed = false"
-                        val found = client.files().list().setQ(q).setFields("files(id, name, size)").execute().files?.firstOrNull()
+                        val found = driveRepository.findFileByName(targetEmail, fileName)
                         if (found != null) {
                             fileId = found.id
                             Log.d("RestoreInspection", "[INSPECT] Arquivo localizado no Drive via busca por nome: id=$fileId")
@@ -2006,19 +2004,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                 // 2. Remote Backups
                 try {
-                    val driveFiles = driveRepository.listBackups(email)
-                    val mappedBackups = driveFiles.map { f ->
-                        com.resync.app.cloud.gdrive.DriveFileMetadata(
-                            id = f.id ?: "",
-                            name = f.name ?: "",
-                            sizeBytes = f.getSize() ?: 0L,
-                            createdTime = f.createdTime?.value ?: System.currentTimeMillis(),
-                            modifiedTime = f.modifiedTime?.value ?: System.currentTimeMillis(),
-                            md5Checksum = f.md5Checksum,
-                            mimeType = f.mimeType ?: "application/octet-stream",
-                            appProperties = f.appProperties ?: emptyMap()
-                        )
-                    }
+                    val mappedBackups = driveRepository.listBackups(email)
                     val loadedBackups = RemoteBackupsState.Loaded(mappedBackups)
                     _remoteBackupsState.value = loadedBackups
                     _remoteDriveBackups.value = mappedBackups

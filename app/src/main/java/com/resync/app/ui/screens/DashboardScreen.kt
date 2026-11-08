@@ -171,7 +171,7 @@ fun DashboardScreen(
     var showSecurityModal by remember { mutableStateOf(false) }
     val changelogPrefs = remember { context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE) }
     var showChangelogModal by remember {
-        mutableStateOf(changelogPrefs.getString("last_seen_changelog_version", "") != "1.0.34")
+        mutableStateOf(changelogPrefs.getString("last_seen_changelog_version", "") != "1.0.36")
     }
     val scrollState = rememberScrollState()
     var isPullRefreshing by remember { mutableStateOf(false) }
@@ -1473,16 +1473,16 @@ fun DashboardScreen(
         )
     }
 
-    // Modal Automático de Novidades (Changelog v1.0.34)
+    // Modal Automático de Novidades (Changelog v1.0.36)
     if (showChangelogModal) {
         ChangelogModal(
-            versionName = "1.0.34",
+            versionName = "1.0.36",
             primaryAccent = primaryAccent,
             onDismiss = {
                 showChangelogModal = false
             },
             onConfirm = {
-                changelogPrefs.edit().putString("last_seen_changelog_version", "1.0.34").apply()
+                changelogPrefs.edit().putString("last_seen_changelog_version", "1.0.36").apply()
                 showChangelogModal = false
             }
         )
@@ -2400,7 +2400,7 @@ private fun ChangelogModal(
                 color = TextPrimary
             )
             Text(
-                text = "Google Drive Turbo 2.0, Shell Hardening e Arquitetura Refinada",
+                text = "Streaming OkHttp HTTP/2, Zero-Timeout FGS e Otimização Extrema de Binário",
                 fontSize = 12.5.sp,
                 color = TextSecondary
             )
@@ -2418,26 +2418,17 @@ private fun ChangelogModal(
                 ChangelogPillarCard(
                     icon = Icons.Default.CloudSync,
                     accentColor = AccentElectricCyan,
-                    title = "Google Drive Turbo 2.0 (Upload Acelerado)",
-                    description = "Streaming de 256 KB com flush terminal único, MD5 em passagem única inline (sem releitura de disco) e chunks dinâmicos escaláveis de até 32 MB em Wi-Fi rápido.",
+                    title = "Google Drive Turbo 2.0 (OkHttp HTTP/2)",
+                    description = "Streaming direto via OkHttp HTTP/2 sem SDKs legados, buffers de 256 KB, upload resumável em chunks de até 32 MB e proteção de conexão de baixa latência (WifiLock).",
                     cardBg = bentoCard,
                     borderColor = bentoBorder
                 )
 
                 ChangelogPillarCard(
                     icon = Icons.Default.Speed,
-                    accentColor = AccentElectricCyan,
-                    title = "Download Paralelo 6x & HTTP/2",
-                    description = "6 fluxos simultâneos de download em estado térmico normal, buffer de 256 KB, contenção reduzida no SQLite Room e migração completa de índices para HTTP/2.",
-                    cardBg = bentoCard,
-                    borderColor = bentoBorder
-                )
-
-                ChangelogPillarCard(
-                    icon = Icons.Default.Shield,
                     accentColor = Color(0xFF00E676),
-                    title = "Shell Hardening no Explorer",
-                    description = "Sanitização rigorosa com ShellSecurityUtils.shellEscape em todas as operações root (mv, cp, rm, mount) no explorador de arquivos e repositório de armazenamento.",
+                    title = "Inicialização Instantânea (Zero Timeout)",
+                    description = "Chamada imediata de startForeground() na primeira linha de onStartCommand() dos serviços de backup e restauração, eliminando congelamentos e timeouts ANR.",
                     cardBg = bentoCard,
                     borderColor = bentoBorder
                 )
@@ -2445,17 +2436,17 @@ private fun ChangelogModal(
                 ChangelogPillarCard(
                     icon = Icons.Default.CleaningServices,
                     accentColor = Color(0xFFFFA726),
-                    title = "Limpeza Preventiva de Temporários",
-                    description = "Varredura automática e expurgo de arquivos e pastas residuais em resync_tmp antes do cálculo StatFs, eliminando falsos positivos de espaço insuficiente.",
+                    title = "Binário Ultra-Leve & WebP",
+                    description = "Remoção de bibliotecas legadas (google-api-client, kotlin-reflect), expurgo de metadados do AGP e conversão de todos os ícones para WebP q=85 sem duplicações.",
                     cardBg = bentoCard,
                     borderColor = bentoBorder
                 )
 
                 ChangelogPillarCard(
-                    icon = Icons.Default.AutoAwesome,
+                    icon = Icons.Default.Shield,
                     accentColor = Color(0xFFA855F7),
-                    title = "Arquitetura Unificada & Limpeza de Código",
-                    description = "Remoção de classes e motores órfãos legados (UniversalRestoreManager, BackupSafetyWorker, IBackupEngine/Root/Normal), além de deduplicação de assets de imagem.",
+                    title = "Hardening de Shell & I/O Puro",
+                    description = "Escapamento rigoroso de comandos shell e transferência de dados direta via streams puros com verificação MD5 inline em passagem única.",
                     cardBg = bentoCard,
                     borderColor = bentoBorder
                 )
