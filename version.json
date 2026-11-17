@@ -1,29 +1,21 @@
 {
-  "versionCode": 33,
-  "versionName": "1.0.33",
-  "tag": "v1.0.33",
-  "apkName": "ReSync-v1.0.33.apk",
-  "apkSize": 27483327,
-  "sha256": "4ef202898169893bf980e0a26237df5f0d5dba9edd4d0511217cefb945127028",
-  "releaseNotes": "🚀 **O QUE HÁ DE NOVO NESTA VERSÃO (v1.0.33):**\n\n🛡️ **Proteção Total da Pasta de Origem (Prevenção Absoluta de Perda de Dados)**\n• **Origem 100% Intacta:** Blindagem canônica reforçada contra exclusão pós-empacotamento de qualquer arquivo residente em `/storage/`, `/sdcard/`, `/data/media/` ou caminhos selecionados pelo usuário.\n• **Isolamento Estrito em `cacheDir/resync_tmp`:** Todas as operações temporárias de staging e extração residem estritamente dentro do diretório temporário exclusivo do app, com validação canônica antes de qualquer limpeza.\n• **Validação Canônica `safeDeleteStaging`:** Bloqueio definitivo contra exclusão acidental de caminhos protegidos ou diretórios externos ao sandbox temporário.\n\n📂 **Restauração Completa e Unificada de Pastas**\n• **Resolução Simultânea de Raiz e Subpastas:** Resolução de arquivos soltos na raiz da pasta e de todas as suas subpastas (resolvendo o problema de arquivos soltos ignorados quando coexistiam com subpastas em backups legados e novos).\n• **Progresso Dinâmico Arquivo a Arquivo:** Exibição em tempo real do arquivo sendo restaurado e contador de progresso na interface.\n• **Gravação Bufferizada Sem Root:** Gravação via `FileInputStream` e `FileOutputStream` com buffers de 64 KB e criação automática de diretórios-pai (`parentFile?.mkdirs()`).\n• **Fallback Root Seguro:** Execução via shell `cp -f` aguardando conclusão síncrona, validação de exit code (`isSuccess`) e verificação de integridade e tamanho do arquivo gravado.\n\n🔄 **Correção de Gestão de Estado na Interface (UI)**\n• **Reinicialização de Estado Residual:** Implementação de `resetRestoreState()` no `RestoreRepository` e `MainViewModel` para limpar SharedPreferences e `StateFlow` ao clicar em \"RESTAURAR\" ou inspecionar um backup.\n• **Correção da Flag `isFinished`:** Eliminação da transição prematura de 1s para o resumo de restauração por estado residual de operações anteriores.\n• **Botão \"Concluir e Voltar\":** Adição de botão explícito de fechamento na tela de resultado da restauração com limpeza garantida de estado.\n\n🧪 **Suíte de Testes Automatizados**\n• Adição de testes unitários em `FolderBackupRestoreTest` cobrindo restauração simultânea de arquivos soltos na raiz e subpastas em backups legados, gravação bufferizada e integridade de hashes SHA-256.",
+  "versionCode": 37,
+  "versionName": "1.0.37",
+  "tag": "v1.0.37",
+  "apkName": "ReSync-v1.0.37.apk",
+  "releaseNotes": "🚀 **O QUE HÁ DE NOVO NESTA VERSÃO (v1.0.37):**\n\n🌐 **Suporte Completo ao Idioma Inglês (Full English Language Support)**\n• Tradução completa e técnica de todas as telas, menus, diagnósticos e notificações em segundo plano para Inglês (English) e Português (Brasil).\n• Seletor Rápido de Idioma nas Configurações (Bento UI) com suporte a Padrão do Sistema, Português e English.\n• Integração nativa com Android 13+ per-app language settings via locales_config.xml.\n\n⚡ **Google Drive Turbo & Blindagem de Conexão**\n• Streaming HTTP/2 direto via OkHttp3, buffers de 256 KB e hash MD5 inline de passagem única.\n• Inicialização imediata de ForegroundService sem timeouts ANR e WifiLock de baixa latência.",
   "functions": [
-    "Proteção Total da Pasta de Origem contra modificação ou exclusão durante backups locais e nuvem",
-    "Isolamento estrito de arquivos temporários em cacheDir/resync_tmp",
-    "Restauração Direta de Pastas com resolução simultânea de raiz e subpastas",
-    "Emissão de progresso arquivo a arquivo na restauração de pastas",
-    "Gravação com streams de 64 KB e criação automática de diretórios-pai",
-    "Fallback Root com cp -f, waitFor e validação de tamanho de saída",
-    "Reinicialização completa de estado residual ao iniciar restauração",
-    "Nova Interface Bento UI com fundo OLED profundo (#05070A) e cards modulares (#0E121A)",
-    "Sincronização Global com MaterialTheme respeitando dinamicamente a cor de tema do usuário",
-    "Google Drive Turbo com uploads/downloads em chunks e validação SHA-256",
-    "Motor Universal de Backup inteligente com chaveamento transparente entre Root e Sem Root"
+    "Suporte completo ao idioma Inglês (English) em 100% da interface e notificações",
+    "Seletor de idioma nas Configurações com alternância instantânea",
+    "Integração nativa com o seletor por app do Android 13+ (locales_config.xml)",
+    "Streaming direto via OkHttp HTTP/2 sem SDKs legados",
+    "Buffers de 256 KB para alta vazão de upload e download no Google Drive",
+    "Proteção de conexão de baixa latência com WifiLock e WakeLock",
+    "Inicialização imediata de ForegroundService sem timeouts ANR"
   ],
   "fixes": [
-    "Blindagem canônica contra exclusão de arquivos da pasta de origem pós-empacotamento",
-    "Resolução de arquivos soltos na raiz ignorados quando existiam subpastas na pasta restaurada",
-    "Correção de estado residual da UI de restauração pulando para o resumo em 1s",
-    "Gravação de arquivos com criação automática de pastas-pai inexistentes",
-    "Substituição de cópia via shell por cp -f com verificação de exit code e tamanho"
+    "Blindagem de chaves XML e eliminação de hardcode de strings",
+    "Sincronização persistente de idioma via SharedPreferences e LocaleHelper",
+    "Atualização do changelog e sistema de notificação de releases"
   ]
 }

@@ -66,10 +66,11 @@ object CloudNotificationManager {
         val speedStr = String.format(Locale.US, "%.1f MB/s", payload.currentSpeedMBps).replace('.', ',')
         val avgSpeedStr = String.format(Locale.US, "%.1f MB/s", payload.averageSpeedMBps).replace('.', ',')
 
+        val wrapped = com.resync.app.util.LocaleHelper.wrapContext(context)
         val notifTitle = when {
-            payload.isWaitingNetwork -> "Aguardando conexão... ($pct%)"
-            payload.isPaused -> "$opName $arrow Pausado ($pct%)"
-            payload.isError -> "Falha na transferência"
+            payload.isWaitingNetwork -> "${wrapped.getString(R.string.notif_waiting_network)} ($pct%)"
+            payload.isPaused -> "$opName $arrow ${wrapped.getString(R.string.notif_paused_status)} ($pct%)"
+            payload.isError -> wrapped.getString(R.string.notif_transfer_failed)
             else -> "$opName $arrow ($pct%)"
         }
 

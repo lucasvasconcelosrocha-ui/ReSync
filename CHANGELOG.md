@@ -4,6 +4,28 @@ Todas as mudanças notáveis deste projeto são documentadas neste arquivo.
 
 ---
 
+## [1.0.37] - 2026-11-17
+
+### 🌐 Suporte Completo ao Idioma Inglês (Full English Language Support)
+- **Internacionalização Integral (100% i18n):**
+  - Tradução completa e profissional de 100% das telas, menus, diagnósticos, diálogos e notificações em segundo plano para Inglês (English) e Português (Brasil).
+  - Blindagem total de chaves XML com correspondência exata 1:1 entre `values/strings.xml` e `values-en/strings.xml`, preservando especificadores de formato e termos técnicos essenciais (Root, Shizuku, APK, SHA-256, AES-256-GCM, Google Drive, HTTP/2).
+- **Seletor Rápido de Idioma nas Configurações:**
+  - Novo card interativo de seleção de idioma na tela de Configurações no padrão estético Bento UI.
+  - Suporte a 3 modos de seleção: Padrão do Sistema (System default), Português (Brasil) e English (US / International).
+  - Recriação instantânea da Activity e aplicação imediata sem necessidade de reiniciar o aplicativo.
+- **Integração com Android 13+ (Per-App Language Preferences):**
+  - Configuração nativa de `android:localeConfig="@xml/locales_config"` permitindo alternar o idioma tanto pelo app quanto pelo painel de Idiomas por App das configurações do sistema operacional Android 13+.
+  - `LocaleHelper` com sincronização síncrona via `LocaleManager.setApplicationLocales`.
+
+### ⚡ Google Drive Turbo & Blindagem de Conexão
+- Streaming HTTP/2 direto via OkHttp sem SDKs pesados legados.
+- Buffers de alta velocidade (256 KB) e upload em chunks dinâmicos com integridade MD5 em passagem única.
+- Aquisição resiliente de `WifiLock` de baixa latência e `WakeLock` com liberação segura garantida.
+- Inicialização imediata de `ForegroundService` com tolerância zero a timeouts e congelamentos ANR.
+
+---
+
 ## [1.0.34] - 2026-11-07
 
 ### ⚡ Google Drive Turbo 2.0 (Velocidade Máxima Upload & Download)

@@ -98,6 +98,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.ReSync"
+        android:localeConfig="@xml/locales_config"
         android:requestLegacyExternalStorage="true"
         tools:targetApi="35">
 

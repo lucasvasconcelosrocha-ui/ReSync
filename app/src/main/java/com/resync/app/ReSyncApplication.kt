@@ -29,6 +29,10 @@ class ReSyncApplication : Application() {
 
     private val applicationScope = CoroutineScope(Dispatchers.Default)
 
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(com.resync.app.util.LocaleHelper.wrapContext(newBase))
+    }
+
     override fun onCreate() {
         // Enforce Mount Master shell configuration on first entry
         Shell.setDefaultBuilder(

@@ -19,11 +19,11 @@ android {
     val vCode = (System.getenv("VERSION_CODE")
         ?: project.findProperty("versionCode")?.toString()
         ?: versionProperties.getProperty("versionCode")
-        ?: "36").toInt()
+        ?: "37").toInt()
     val vName = System.getenv("VERSION_NAME")
         ?: project.findProperty("versionName")?.toString()
         ?: versionProperties.getProperty("versionName")
-        ?: "1.0.36"
+        ?: "1.0.37"
 
     defaultConfig {
         applicationId = "com.resync.app"
@@ -40,7 +40,7 @@ android {
             abiFilters.clear()
             abiFilters.add("arm64-v8a")
         }
-        resourceConfigurations += listOf("pt", "pt-rBR")
+        resourceConfigurations += listOf("pt-rBR", "pt", "en")
     }
 
     signingConfigs {
@@ -278,11 +278,14 @@ tasks.withType<com.android.build.gradle.internal.tasks.AppMetadataTask>().config
 
 tasks.matching { it.name.startsWith("merge") && it.name.endsWith("Resources") }.configureEach {
     doLast {
-        val dir = file("${project.layout.buildDirectory.get().asFile}/intermediates/app_metadata/release/writeReleaseAppMetadata")
-        dir.mkdirs()
-        val metaFile = File(dir, "app-metadata.properties")
-        if (!metaFile.exists()) {
-            metaFile.createNewFile()
+        for (variant in listOf("release", "debug")) {
+            val variantCap = variant.replaceFirstChar { it.uppercase() }
+            val dir = file("${project.layout.buildDirectory.get().asFile}/intermediates/app_metadata/$variant/write${variantCap}AppMetadata")
+            dir.mkdirs()
+            val metaFile = File(dir, "app-metadata.properties")
+            if (!metaFile.exists()) {
+                metaFile.createNewFile()
+            }
         }
     }
 }

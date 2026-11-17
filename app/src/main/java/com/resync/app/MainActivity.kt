@@ -46,11 +46,18 @@ import com.resync.app.ui.navigation.Screen
 import com.resync.app.ui.screens.*
 import com.resync.app.ui.theme.*
 import com.resync.app.ui.viewmodel.MainViewModel
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import com.resync.app.util.LocaleHelper
 
 class MainActivity : ComponentActivity() {
 
     private val viewModel: MainViewModel by viewModels()
     private val pendingRouteFlow = kotlinx.coroutines.flow.MutableSharedFlow<String>(extraBufferCapacity = 1)
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleHelper.wrapContext(newBase))
+    }
 
     private val notificationPermissionLauncher = registerForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
@@ -127,15 +134,29 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            val currentAccent by viewModel.themeAccent.collectAsState()
-            val activeOperations by viewModel.activeOperations.collectAsStateWithLifecycle()
-            val backupProgress by viewModel.backupProgress.collectAsStateWithLifecycle()
-            val backupExecutionState by viewModel.backupExecutionState.collectAsStateWithLifecycle()
-            val restoreProgress by viewModel.restoreProgress.collectAsStateWithLifecycle()
+            val context = LocalContext.current
+            val currentLocale = remember { LocaleHelper.getLocale(context) }
+            val wrappedContext = remember(currentLocale) { LocaleHelper.wrapContext(context) }
+            val configuration = remember(currentLocale) {
+                android.content.res.Configuration(context.resources.configuration).apply {
+                    setLocale(currentLocale)
+                    setLayoutDirection(currentLocale)
+                }
+            }
 
-            val primaryAccent = getAccentColor(currentAccent)
+            CompositionLocalProvider(
+                LocalConfiguration provides configuration,
+                LocalContext provides wrappedContext
+            ) {
+                val currentAccent by viewModel.themeAccent.collectAsState()
+                val activeOperations by viewModel.activeOperations.collectAsStateWithLifecycle()
+                val backupProgress by viewModel.backupProgress.collectAsStateWithLifecycle()
+                val backupExecutionState by viewModel.backupExecutionState.collectAsStateWithLifecycle()
+                val restoreProgress by viewModel.restoreProgress.collectAsStateWithLifecycle()
 
-            ReSyncTheme(accent = currentAccent) {
+                val primaryAccent = getAccentColor(currentAccent)
+
+                ReSyncTheme(accent = currentAccent) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -652,6 +673,7 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+}
 }
 
 

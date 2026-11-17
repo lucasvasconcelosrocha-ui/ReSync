@@ -34,6 +34,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -610,7 +611,7 @@ fun DashboardScreen(
                                 .weight(1f)
                                 .clickable { showRootDiagBottomSheet = true },
                             icon = Icons.Default.Shield,
-                            label = "Status de Root",
+                            label = stringResource(R.string.dashboard_root_status),
                             title = rootTitle,
                             titleColor = rootTitleColor,
                             subtitle = rootSubtitle,
@@ -623,12 +624,12 @@ fun DashboardScreen(
                                 .weight(1f)
                                 .clickable(onClick = onNavigateToCloud),
                             icon = Icons.Default.Cloud,
-                            label = "Google Drive",
+                            label = stringResource(R.string.dashboard_google_drive),
                             title = if (isDriveConnected) {
-                                if (googleDriveState == GoogleDriveState.SYNCING) "Sincronizando..." else "Sincronizado"
-                            } else "Desconectado",
+                                if (googleDriveState == GoogleDriveState.SYNCING) stringResource(R.string.dashboard_syncing) else stringResource(R.string.dashboard_synced)
+                            } else stringResource(R.string.dashboard_disconnected),
                             titleColor = if (isDriveConnected) Color(0xFF38BDF8) else TextSecondary,
-                            subtitle = if (isDriveConnected) "Criptografia AES-256" else "Toque para conectar",
+                            subtitle = if (isDriveConnected) stringResource(R.string.dashboard_aes_encryption) else stringResource(R.string.dashboard_tap_to_connect),
                             subtitleColor = TextSecondary
                         )
                     }
@@ -666,7 +667,7 @@ fun DashboardScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Novo Backup Completo",
+                        text = stringResource(R.string.dashboard_new_full_backup),
                         color = Color.White,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
@@ -685,7 +686,7 @@ fun DashboardScreen(
                 // Atalho 1: Restaurar
                 QuickShortcutButton(
                     modifier = Modifier.weight(1f),
-                    title = "Restaurar",
+                    title = stringResource(R.string.dashboard_shortcut_restore),
                     icon = Icons.Default.Restore,
                     iconTint = Color(0xFFFF8A92),
                     onClick = onNavigateToRestore
@@ -694,7 +695,7 @@ fun DashboardScreen(
                 // Atalho 2: Agendados
                 QuickShortcutButton(
                     modifier = Modifier.weight(1f),
-                    title = "Agendados",
+                    title = stringResource(R.string.dashboard_shortcut_scheduled),
                     icon = Icons.Default.Schedule,
                     iconTint = Color(0xFF10B981),
                     onClick = onNavigateToScheduledBackups
@@ -703,7 +704,7 @@ fun DashboardScreen(
                 // Atalho 3: Histórico (Gatilho interativo funcional para BottomSheet de Histórico)
                 QuickShortcutButton(
                     modifier = Modifier.weight(1f),
-                    title = "Histórico",
+                    title = stringResource(R.string.dashboard_shortcut_history),
                     icon = Icons.Default.History,
                     iconTint = Color(0xFF38BDF8),
                     onClick = { showHistoryBottomSheet = true }
@@ -843,15 +844,15 @@ fun DashboardScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column {
-                                Text(text = "VELOCIDADE", fontSize = 10.sp, color = TextMuted, fontFamily = FontFamily.Monospace)
+                                Text(text = stringResource(R.string.dashboard_speed), fontSize = 10.sp, color = TextMuted, fontFamily = FontFamily.Monospace)
                                 Text(text = speedText, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF38BDF8), fontFamily = FontFamily.Monospace)
                             }
                             Column {
-                                Text(text = "RESTANTE", fontSize = 10.sp, color = TextMuted, fontFamily = FontFamily.Monospace)
+                                Text(text = stringResource(R.string.dashboard_remaining), fontSize = 10.sp, color = TextMuted, fontFamily = FontFamily.Monospace)
                                 Text(text = remainingText, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White, fontFamily = FontFamily.Monospace)
                             }
                             Column {
-                                Text(text = "I/O DISCO", fontSize = 10.sp, color = TextMuted, fontFamily = FontFamily.Monospace)
+                                Text(text = stringResource(R.string.dashboard_io_disk), fontSize = 10.sp, color = TextMuted, fontFamily = FontFamily.Monospace)
                                 Text(text = ioDiskText, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF10B981), fontFamily = FontFamily.Monospace)
                             }
                         }
@@ -1319,7 +1320,7 @@ fun DashboardScreen(
                 DataModuleBentoCard(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Default.Apps,
-                    title = "Aplicativos",
+                    title = stringResource(R.string.nav_tab_apps),
                     subtitle = "$appsCount instalados",
                     badgeText = "$userAppsCount OK",
                     badgeColor = Color(0xFF10B981),
@@ -1328,8 +1329,8 @@ fun DashboardScreen(
                 DataModuleBentoCard(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Default.Chat,
-                    title = "Mensagens",
-                    subtitle = "SMS & MMS",
+                    title = stringResource(R.string.dashboard_section_messages),
+                    subtitle = stringResource(R.string.dashboard_section_sms_mms),
                     badgeText = "3.4k",
                     badgeColor = Color(0xFF38BDF8),
                     onClick = { onNavigateToCategory("messages") }
@@ -1346,8 +1347,8 @@ fun DashboardScreen(
                 DataModuleBentoCard(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Default.Call,
-                    title = "Chamadas",
-                    subtitle = "Histórico",
+                    title = stringResource(R.string.dashboard_section_calls),
+                    subtitle = stringResource(R.string.dashboard_section_history),
                     badgeText = "980",
                     badgeColor = Color(0xFF10B981),
                     onClick = { onNavigateToCategory("calls") }
@@ -1355,8 +1356,8 @@ fun DashboardScreen(
                 DataModuleBentoCard(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Default.ContactPage,
-                    title = "Contatos",
-                    subtitle = "VCF / vCard",
+                    title = stringResource(R.string.dashboard_section_contacts),
+                    subtitle = stringResource(R.string.dashboard_section_vcf),
                     badgeText = "842",
                     badgeColor = TextSecondary,
                     onClick = { onNavigateToCategory("contacts") }
@@ -1373,8 +1374,8 @@ fun DashboardScreen(
                 DataModuleBentoCard(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Default.FolderShared,
-                    title = "Pastas do Sistema",
-                    subtitle = "Armazenamento",
+                    title = stringResource(R.string.dashboard_section_folders),
+                    subtitle = stringResource(R.string.dashboard_section_storage),
                     badgeText = "Pastas",
                     badgeColor = Color(0xFF38BDF8),
                     onClick = onNavigateToFolders
@@ -1382,8 +1383,8 @@ fun DashboardScreen(
                 DataModuleBentoCard(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Default.Wifi,
-                    title = "Redes Wi-Fi",
-                    subtitle = "Senhas salvas",
+                    title = stringResource(R.string.dashboard_section_wifi),
+                    subtitle = stringResource(R.string.dashboard_section_saved_passwords),
                     badgeText = "Redes",
                     badgeColor = Color(0xFF10B981),
                     onClick = { onNavigateToCategory("wifi") }
@@ -1400,8 +1401,8 @@ fun DashboardScreen(
                 DataModuleBentoCard(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Default.Bluetooth,
-                    title = "Bluetooth",
-                    subtitle = "Chaves pareadas",
+                    title = stringResource(R.string.dashboard_section_bluetooth),
+                    subtitle = stringResource(R.string.dashboard_section_paired_keys),
                     badgeText = "18 DEV",
                     badgeColor = Color(0xFF38BDF8),
                     onClick = { onNavigateToCategory("bluetooth") }
@@ -1409,8 +1410,8 @@ fun DashboardScreen(
                 DataModuleBentoCard(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Default.Dns,
-                    title = "DNS Privado",
-                    subtitle = "DoH / TLS",
+                    title = stringResource(R.string.dashboard_section_private_dns),
+                    subtitle = stringResource(R.string.dashboard_section_doh_tls),
                     badgeText = "ATIVO",
                     badgeColor = Color(0xFF10B981),
                     onClick = { onNavigateToCategory("dns") }
@@ -1427,8 +1428,8 @@ fun DashboardScreen(
                 DataModuleBentoCard(
                     modifier = Modifier.fillMaxWidth(),
                     icon = Icons.Default.Wallpaper,
-                    title = "Papéis de Parede",
-                    subtitle = "Tela Inicial & Bloqueio (4K)",
+                    title = stringResource(R.string.dashboard_section_wallpapers),
+                    subtitle = stringResource(R.string.dashboard_section_wallpapers_sub),
                     badgeText = "2 ITENS",
                     badgeColor = primaryAccent,
                     onClick = { onNavigateToCategory("wallpaper") }
@@ -1938,12 +1939,12 @@ private fun RootDiagBottomSheet(
                     }
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
-                        Text("Diagnóstico Root & Ambiente", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                        Text("Verificação rigorosa de integridade e sandbox", fontSize = 11.5.sp, color = TextSecondary)
+                        Text(stringResource(R.string.dashboard_root_diag_title), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text(stringResource(R.string.dashboard_root_diag_desc), fontSize = 11.5.sp, color = TextSecondary)
                     }
                 }
                 IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Default.Close, contentDescription = "Fechar", tint = TextSecondary, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Default.Close, contentDescription = stringResource(R.string.btn_close), tint = TextSecondary, modifier = Modifier.size(18.dp))
                 }
             }
 
@@ -1978,7 +1979,7 @@ private fun RootDiagBottomSheet(
                 ) {
                     Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Testar Root", fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
+                    Text(stringResource(R.string.dashboard_test_root), fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
                 }
 
                 OutlinedButton(
@@ -1991,7 +1992,7 @@ private fun RootDiagBottomSheet(
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
                     border = BorderStroke(1.dp, Color(0xFF38BDF8).copy(alpha = 0.5f))
                 ) {
-                    Text("Permissões", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF38BDF8), maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
+                    Text(stringResource(R.string.dashboard_permissions), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF38BDF8), maxLines = 1, softWrap = false, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
@@ -2043,12 +2044,12 @@ private fun SecurityModal(
                     }
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
-                        Text("Status de Segurança & Criptografia", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                        Text("Padrão Militar AES-256-GCM & SHA-256", fontSize = 11.5.sp, color = TextSecondary)
+                        Text(stringResource(R.string.dashboard_security_status_title), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text(stringResource(R.string.dashboard_security_status_sub), fontSize = 11.5.sp, color = TextSecondary)
                     }
                 }
                 IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Default.Close, contentDescription = "Fechar", tint = TextSecondary, modifier = Modifier.size(18.dp))
+                    Icon(Icons.Default.Close, contentDescription = stringResource(R.string.btn_close), tint = TextSecondary, modifier = Modifier.size(18.dp))
                 }
             }
 
@@ -2073,7 +2074,7 @@ private fun SecurityModal(
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1A2230), contentColor = Color.White),
                 border = BorderStroke(1.dp, Color(0xFF263244))
             ) {
-                Text("Entendido", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.dashboard_understood), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             }
         }
     }
@@ -2369,7 +2370,7 @@ private fun ChangelogModal(
                     border = BorderStroke(1.dp, primaryAccent.copy(alpha = 0.4f))
                 ) {
                     Text(
-                        text = "NOVA VERSÃO • $versionName",
+                        text = stringResource(R.string.changelog_new_version_badge, versionName),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace,
@@ -2384,7 +2385,7 @@ private fun ChangelogModal(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
-                        contentDescription = "Fechar",
+                        contentDescription = stringResource(R.string.btn_close),
                         tint = TextSecondary,
                         modifier = Modifier.size(18.dp)
                     )
@@ -2394,13 +2395,13 @@ private fun ChangelogModal(
             Spacer(modifier = Modifier.height(10.dp))
 
             Text(
-                text = "O que há de novo no ReSync",
+                text = stringResource(R.string.changelog_title),
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 color = TextPrimary
             )
             Text(
-                text = "Streaming OkHttp HTTP/2, Zero-Timeout FGS e Otimização Extrema de Binário",
+                text = stringResource(R.string.changelog_subtitle_v37),
                 fontSize = 12.5.sp,
                 color = TextSecondary
             )
@@ -2416,10 +2417,19 @@ private fun ChangelogModal(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 ChangelogPillarCard(
+                    icon = Icons.Default.Language,
+                    accentColor = Color(0xFF38BDF8),
+                    title = stringResource(R.string.changelog_i18n_title),
+                    description = stringResource(R.string.changelog_i18n_desc),
+                    cardBg = bentoCard,
+                    borderColor = bentoBorder
+                )
+
+                ChangelogPillarCard(
                     icon = Icons.Default.CloudSync,
                     accentColor = AccentElectricCyan,
-                    title = "Google Drive Turbo 2.0 (OkHttp HTTP/2)",
-                    description = "Streaming direto via OkHttp HTTP/2 sem SDKs legados, buffers de 256 KB, upload resumável em chunks de até 32 MB e proteção de conexão de baixa latência (WifiLock).",
+                    title = stringResource(R.string.changelog_gdrive_title),
+                    description = stringResource(R.string.changelog_gdrive_desc),
                     cardBg = bentoCard,
                     borderColor = bentoBorder
                 )
@@ -2441,15 +2451,6 @@ private fun ChangelogModal(
                     cardBg = bentoCard,
                     borderColor = bentoBorder
                 )
-
-                ChangelogPillarCard(
-                    icon = Icons.Default.Shield,
-                    accentColor = Color(0xFFA855F7),
-                    title = "Hardening de Shell & I/O Puro",
-                    description = "Escapamento rigoroso de comandos shell e transferência de dados direta via streams puros com verificação MD5 inline em passagem única.",
-                    cardBg = bentoCard,
-                    borderColor = bentoBorder
-                )
             }
 
             Spacer(modifier = Modifier.height(18.dp))
@@ -2464,7 +2465,7 @@ private fun ChangelogModal(
                 colors = ButtonDefaults.buttonColors(containerColor = primaryAccent)
             ) {
                 Text(
-                    text = "Entendi / Continuar",
+                    text = stringResource(R.string.changelog_button_continue),
                     fontSize = 15.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.Black

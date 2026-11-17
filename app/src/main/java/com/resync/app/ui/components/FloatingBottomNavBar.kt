@@ -32,6 +32,8 @@ import com.resync.app.ui.navigation.Screen
 import com.resync.app.ui.theme.DarkCardBorder
 import com.resync.app.ui.theme.DarkSurfaceVariant
 import com.resync.app.ui.theme.TextMuted
+import androidx.compose.ui.res.stringResource
+import com.resync.app.R
 
 private data class NavItemData(
     val route: String,
@@ -51,35 +53,41 @@ fun FloatingBottomNavBar(
     onNavigateToSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val items = remember(currentRoute, primaryAccent) {
+    val homeTitle = stringResource(R.string.nav_home)
+    val appsTitle = stringResource(R.string.nav_apps)
+    val filesTitle = stringResource(R.string.nav_files)
+    val cloudTitle = stringResource(R.string.nav_cloud)
+    val accountTitle = stringResource(R.string.nav_account)
+
+    val items = remember(currentRoute, primaryAccent, homeTitle, appsTitle, filesTitle, cloudTitle, accountTitle) {
         listOf(
             NavItemData(
                 route = Screen.Dashboard.route,
-                title = "Início",
+                title = homeTitle,
                 icon = Icons.Default.GridView,
                 onClick = onNavigateToDashboard
             ),
             NavItemData(
                 route = Screen.AppsList.route,
-                title = "Aplicativos",
+                title = appsTitle,
                 icon = Icons.Default.Apps,
                 onClick = onNavigateToApps
             ),
             NavItemData(
                 route = Screen.FileExplorer.route,
-                title = "Arquivos",
+                title = filesTitle,
                 icon = Icons.Default.Folder,
                 onClick = onNavigateToFiles
             ),
             NavItemData(
                 route = Screen.CloudSync.route,
-                title = "Nuvem",
+                title = cloudTitle,
                 icon = Icons.Default.Sync,
                 onClick = onNavigateToCloud
             ),
             NavItemData(
                 route = Screen.Account.route,
-                title = "Conta",
+                title = accountTitle,
                 icon = Icons.Default.AccountCircle,
                 onClick = onNavigateToSettings
             )

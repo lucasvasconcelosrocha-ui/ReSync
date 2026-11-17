@@ -223,15 +223,16 @@ object HyperFocusNotificationHelper {
     ): Notification {
         ensureNotificationChannels(context)
 
+        val wrapped = LocaleHelper.wrapContext(context)
         return try {
             val collapsedView = RemoteViews(context.packageName, R.layout.notification_transfer_collapsed).apply {
-                setTextViewText(R.id.notif_title, title.ifBlank { "Realizando Backup" })
+                setTextViewText(R.id.notif_title, title.ifBlank { wrapped.getString(R.string.notif_performing_backup) })
                 setTextViewText(R.id.notif_size_dest, line2SizeDest.ifBlank { "0 B • Local" })
-                setTextViewText(R.id.notif_batch_rate, line3BatchRate.ifBlank { "Lote: 0/0" })
-                setTextViewText(R.id.notif_speed, line4SpeedOrDetails.ifBlank { "Velocidade: 0,0 MB/s" })
+                setTextViewText(R.id.notif_batch_rate, line3BatchRate.ifBlank { wrapped.getString(R.string.notif_batch_format, 0, 0) })
+                setTextViewText(R.id.notif_speed, line4SpeedOrDetails.ifBlank { wrapped.getString(R.string.notif_speed_format, "0,0 MB/s") })
             }
 
-            val effectiveSubText = subText.ifBlank { "Processando itens..." }
+            val effectiveSubText = subText.ifBlank { wrapped.getString(R.string.notif_processing_items) }
             val appIconBmp = getAdaptiveIconColorBitmap(context, 96)
 
             val builder = NotificationCompat.Builder(context, channelId)

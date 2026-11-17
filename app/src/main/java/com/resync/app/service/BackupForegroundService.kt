@@ -485,20 +485,21 @@ class BackupForegroundService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val wrapped = com.resync.app.util.LocaleHelper.wrapContext(this)
         val actions = listOf(
             NotificationCompat.Action.Builder(
                 if (paused) android.R.drawable.ic_media_play else android.R.drawable.ic_media_pause,
-                if (paused) "Retomar" else "Pausar",
+                if (paused) wrapped.getString(R.string.action_resume) else wrapped.getString(R.string.action_pause),
                 pauseResumePending
             ).build(),
             NotificationCompat.Action.Builder(
                 android.R.drawable.ic_menu_close_clear_cancel,
-                "Cancelar",
+                wrapped.getString(R.string.action_cancel),
                 cancelPending
             ).build()
         )
 
-        val effectiveSubText = subText.ifBlank { "Processando itens..." }
+        val effectiveSubText = subText.ifBlank { wrapped.getString(R.string.notif_processing_items) }
         val opName = when {
             title.contains("Drive", ignoreCase = true) -> "Drive"
             title.contains("Ambos", ignoreCase = true) -> "Ambos"

@@ -24,6 +24,8 @@ import androidx.compose.ui.window.DialogProperties
 import com.resync.app.ui.theme.*
 import com.resync.app.ui.viewmodel.MainViewModel
 import com.resync.app.updater.UpdateState
+import androidx.compose.ui.res.stringResource
+import com.resync.app.R
 import java.io.File
 import java.util.Locale
 
@@ -79,7 +81,7 @@ fun AppUpdateDialog(
                             )
                             Spacer(modifier = Modifier.width(16.dp))
                             Text(
-                                text = "Consultando atualizações no GitHub...",
+                                text = stringResource(R.string.update_dialog_checking),
                                 color = TextPrimary,
                                 fontSize = 14.sp
                             )
@@ -93,7 +95,7 @@ fun AppUpdateDialog(
 
                         // Título centralizado
                         Text(
-                            text = "Nova versão disponível",
+                            text = stringResource(R.string.update_dialog_title),
                             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                             color = TextPrimary,
                             textAlign = TextAlign.Center,
@@ -288,7 +290,7 @@ fun AppUpdateDialog(
                                     .heightIn(min = 48.dp)
                             ) {
                                 Text(
-                                    text = "Depois",
+                                    text = stringResource(R.string.update_dialog_later_btn),
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     textAlign = TextAlign.Center,
@@ -307,7 +309,7 @@ fun AppUpdateDialog(
                                     .heightIn(min = 48.dp)
                             ) {
                                 Text(
-                                    text = "Atualizar agora",
+                                    text = stringResource(R.string.update_dialog_download_btn),
                                     fontSize = 13.sp,
                                     color = Color.Black,
                                     fontWeight = FontWeight.Bold,

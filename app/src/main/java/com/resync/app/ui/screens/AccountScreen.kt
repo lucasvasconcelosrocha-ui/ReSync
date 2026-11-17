@@ -1,11 +1,15 @@
 package com.resync.app.ui.screens
 
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
+import androidx.compose.ui.res.stringResource
+import com.resync.app.R
+import com.resync.app.util.LocaleHelper
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -357,8 +361,8 @@ fun AccountScreen(
                     HorizontalDivider(color = DarkCardBorder.copy(alpha = 0.5f))
 
                     AccountOptionRow(
-                        title = "Idioma",
-                        subtitle = "Português (Brasil)",
+                        title = stringResource(R.string.account_language),
+                        subtitle = LocaleHelper.getLanguageDisplayName(context),
                         icon = Icons.Default.Language,
                         iconColor = AccentEmeraldGreen,
                         onClick = { showLanguageDialog = true }
@@ -483,25 +487,40 @@ fun AccountScreen(
 
     // Diálogo de Idioma
     if (showLanguageDialog) {
+        val currentTag = LocaleHelper.getAppLanguage(context)
+        val langOptions = listOf(
+            Triple(LocaleHelper.LANG_SYSTEM, stringResource(R.string.lang_system_default), "Padrão do sistema"),
+            Triple(LocaleHelper.LANG_PT_BR, stringResource(R.string.lang_portuguese), "Português"),
+            Triple(LocaleHelper.LANG_EN, stringResource(R.string.lang_english), "English")
+        )
         AlertDialog(
             onDismissRequest = { showLanguageDialog = false },
-            title = { Text("Idioma do aplicativo", fontWeight = FontWeight.Bold) },
+            title = { Text(stringResource(R.string.settings_language_choose), fontWeight = FontWeight.Bold) },
             text = {
                 Column {
-                    listOf("Português (Brasil)" to true, "English (US)" to false, "Español" to false).forEach { (lang, isCurrent) ->
+                    langOptions.forEach { (tag, label, _) ->
+                        val isCurrent = tag == currentTag
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
                                     showLanguageDialog = false
-                                    Toast.makeText(context, "Idioma definido para $lang", Toast.LENGTH_SHORT).show()
+                                    LocaleHelper.setAppLanguage(context, tag)
+                                    (context as? Activity)?.recreate()
                                 }
                                 .padding(vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            RadioButton(selected = isCurrent, onClick = { showLanguageDialog = false })
+                            RadioButton(
+                                selected = isCurrent,
+                                onClick = {
+                                    showLanguageDialog = false
+                                    LocaleHelper.setAppLanguage(context, tag)
+                                    (context as? Activity)?.recreate()
+                                }
+                            )
                             Spacer(modifier = Modifier.width(10.dp))
-                            Text(lang, fontSize = 13.5.sp, color = TextPrimary)
+                            Text(label, fontSize = 13.5.sp, color = TextPrimary)
                         }
                     }
                 }
@@ -509,7 +528,7 @@ fun AccountScreen(
             confirmButton = {},
             dismissButton = {
                 TextButton(onClick = { showLanguageDialog = false }) {
-                    Text("Fechar", color = TextSecondary)
+                    Text(stringResource(R.string.btn_close), color = TextSecondary)
                 }
             },
             containerColor = DarkSurface,

@@ -297,10 +297,11 @@ class RestoreForegroundService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        val wrapped = com.resync.app.util.LocaleHelper.wrapContext(this)
         val actions = listOf(
             NotificationCompat.Action.Builder(
                 android.R.drawable.ic_menu_close_clear_cancel,
-                "Cancelar",
+                wrapped.getString(R.string.action_cancel),
                 pCancel
             ).build()
         )

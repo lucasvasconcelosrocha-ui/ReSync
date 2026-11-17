@@ -1,11 +1,14 @@
 package com.resync.app.ui.screens
 
+import android.app.Activity
 import android.content.Context
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import com.resync.app.R
+import com.resync.app.util.LocaleHelper
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -72,6 +75,19 @@ fun SettingsScreen(
     val installedVersionName = remember { viewModel.appUpdateManager.getInstalledVersionName() }
     val installedVersionCode = remember { viewModel.appUpdateManager.getInstalledVersionCode() }
 
+    var showLanguageBottomSheet by remember { mutableStateOf(false) }
+    val currentLangTag = remember { LocaleHelper.getAppLanguage(context) }
+    val currentLangSubtitle = remember(currentLangTag) {
+        when (currentLangTag) {
+            LocaleHelper.LANG_EN -> "English"
+            LocaleHelper.LANG_PT_BR -> "Português (Brasil)"
+            else -> {
+                val isEn = LocaleHelper.getLocale(context).language == "en"
+                if (isEn) "System default" else "Padrão do sistema"
+            }
+        }
+    }
+
     Scaffold(
         containerColor = DarkBg,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -88,11 +104,11 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = onBack) {
-                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar", tint = TextPrimary)
+                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.btn_back), tint = TextPrimary)
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Configurações",
+                        text = stringResource(R.string.settings_title),
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                         color = TextPrimary
                     )
@@ -116,7 +132,7 @@ fun SettingsScreen(
                 colors = CardDefaults.cardColors(containerColor = DarkSurfaceVariant)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Tema Visual & Destaques", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 14.sp)
+                    Text(stringResource(R.string.settings_visual_theme), fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 14.sp)
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Row(
@@ -151,6 +167,26 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
+            // SELETOR DE IDIOMA / LANGUAGE
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .border(1.dp, DarkCardBorder, RoundedCornerShape(14.dp)),
+                colors = CardDefaults.cardColors(containerColor = DarkSurfaceVariant)
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    SettingNavRow(
+                        title = stringResource(R.string.settings_language_title),
+                        subtitle = currentLangSubtitle,
+                        icon = Icons.Default.Language,
+                        onClick = { showLanguageBottomSheet = true }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
             // 2. SEÇÕES RÁPIDAS
             Card(
                 modifier = Modifier
@@ -161,22 +197,22 @@ fun SettingsScreen(
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
                     SettingNavRow(
-                        title = "Permissões do Sistema",
-                        subtitle = "Controle de acessos a arquivos, contatos e chamadas",
+                        title = stringResource(R.string.settings_permissions_title),
+                        subtitle = stringResource(R.string.settings_permissions_desc),
                         icon = Icons.Default.Security,
                         onClick = onNavigateToPermissions
                     )
                     HorizontalDivider(color = DarkCardBorder.copy(alpha = 0.5f), modifier = Modifier.padding(vertical = 8.dp))
                     SettingNavRow(
-                        title = "DNS, Wi-Fi e consumo de dados",
-                        subtitle = "Verificar DNS privado, redes Wi-Fi salvas e consumo de internet",
+                        title = stringResource(R.string.settings_dns_title),
+                        subtitle = stringResource(R.string.settings_dns_desc),
                         icon = Icons.Default.Dns,
                         onClick = onNavigateToDns
                     )
                     HorizontalDivider(color = DarkCardBorder.copy(alpha = 0.5f), modifier = Modifier.padding(vertical = 8.dp))
                     SettingNavRow(
-                        title = "Assistente de Configuração Inicial",
-                        subtitle = "Executar novamente o fluxo de boas-vindas e checagem",
+                        title = stringResource(R.string.settings_setup_wizard_title),
+                        subtitle = stringResource(R.string.settings_setup_wizard_desc),
                         icon = Icons.Default.AutoFixHigh,
                         onClick = onNavigateToInitialSetup
                     )
@@ -197,7 +233,7 @@ fun SettingsScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(imageVector = Icons.Default.SystemUpdate, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Atualizações do Aplicativo", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 14.sp)
+                        Text(stringResource(R.string.settings_app_updates_title), fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 14.sp)
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -208,8 +244,8 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Verificar ao abrir", fontWeight = FontWeight.SemiBold, color = TextPrimary, fontSize = 13.sp)
-                            Text("Consulta a última versão no GitHub ao iniciar o app", fontSize = 11.sp, color = TextSecondary)
+                            Text(stringResource(R.string.settings_auto_check_title), fontWeight = FontWeight.SemiBold, color = TextPrimary, fontSize = 13.sp)
+                            Text(stringResource(R.string.settings_auto_check_desc), fontSize = 11.sp, color = TextSecondary)
                         }
                         Switch(
                             checked = isAutoCheck,
@@ -226,8 +262,8 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Versão Atual: v$installedVersionName", fontWeight = FontWeight.SemiBold, color = TextPrimary, fontSize = 13.sp)
-                            Text("Build $installedVersionCode", fontSize = 11.sp, color = TextSecondary)
+                            Text(stringResource(R.string.settings_current_version, installedVersionName), fontWeight = FontWeight.SemiBold, color = TextPrimary, fontSize = 13.sp)
+                            Text(stringResource(R.string.settings_build_code, installedVersionCode), fontSize = 11.sp, color = TextSecondary)
                         }
                         Button(
                             onClick = { viewModel.checkForUpdateManual() },
@@ -239,7 +275,7 @@ fun SettingsScreen(
                             if (updateState is UpdateState.Checking) {
                                 CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.Black, strokeWidth = 2.dp)
                             } else {
-                                Text("Verificar agora", fontSize = 12.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                                Text(stringResource(R.string.settings_check_now), fontSize = 12.sp, color = Color.Black, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -247,7 +283,7 @@ fun SettingsScreen(
                     if (updateState is UpdateState.UpToDate) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "✓ ReSync já está na versão mais recente (v$installedVersionName).",
+                            text = stringResource(R.string.settings_up_to_date, installedVersionName),
                             color = StatusSuccess,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold
@@ -284,7 +320,7 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text("ReSync", fontWeight = FontWeight.ExtraBold, color = TextPrimary, fontSize = 16.sp)
-                            Text("Versão $installedVersionName (teste de atualização) — API 35 (Android 17 Ready)", fontSize = 12.sp, color = primaryAccent, fontWeight = FontWeight.SemiBold)
+                            Text("Versão $installedVersionName — API 35 (Android 15+ Ready)", fontSize = 12.sp, color = primaryAccent, fontWeight = FontWeight.SemiBold)
                         }
                     }
                     Spacer(modifier = Modifier.height(12.dp))
@@ -296,6 +332,105 @@ fun SettingsScreen(
             }
 
             Spacer(modifier = Modifier.height(30.dp))
+        }
+    }
+
+    if (showLanguageBottomSheet) {
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ModalBottomSheet(
+            onDismissRequest = { showLanguageBottomSheet = false },
+            sheetState = sheetState,
+            containerColor = DarkSurface,
+            scrimColor = Color.Black.copy(alpha = 0.75f),
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            dragHandle = {
+                Surface(
+                    modifier = Modifier
+                        .padding(vertical = 12.dp)
+                        .width(44.dp)
+                        .height(4.dp),
+                    shape = CircleShape,
+                    color = DarkCardBorder.copy(alpha = 0.8f)
+                ) {}
+            }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 24.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.settings_language_choose),
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = TextPrimary
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                val languageOptions = listOf(
+                    Triple(LocaleHelper.LANG_SYSTEM, stringResource(R.string.lang_system_default), "Padrão do sistema / System default"),
+                    Triple(LocaleHelper.LANG_PT_BR, stringResource(R.string.lang_portuguese), "Português (Brasil)"),
+                    Triple(LocaleHelper.LANG_EN, stringResource(R.string.lang_english), "English")
+                )
+
+                languageOptions.forEach { (tag, label, desc) ->
+                    val isSelected = tag == currentLangTag
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 5.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .border(
+                                width = 1.dp,
+                                color = if (isSelected) primaryAccent else DarkCardBorder,
+                                shape = RoundedCornerShape(14.dp)
+                            )
+                            .clickable {
+                                showLanguageBottomSheet = false
+                                LocaleHelper.setAppLanguage(context, tag)
+                                (context as? Activity)?.recreate()
+                            },
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isSelected) primaryAccent.copy(alpha = 0.12f) else DarkSurfaceVariant
+                        )
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = isSelected,
+                                onClick = {
+                                    showLanguageBottomSheet = false
+                                    LocaleHelper.setAppLanguage(context, tag)
+                                    (context as? Activity)?.recreate()
+                                },
+                                colors = RadioButtonDefaults.colors(
+                                    selectedColor = primaryAccent,
+                                    unselectedColor = TextSecondary
+                                )
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = label,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.5.sp,
+                                    color = if (isSelected) primaryAccent else TextPrimary
+                                )
+                                Text(
+                                    text = desc,
+                                    fontSize = 11.5.sp,
+                                    color = TextSecondary
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
