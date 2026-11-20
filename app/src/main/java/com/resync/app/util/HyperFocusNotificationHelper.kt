@@ -31,6 +31,25 @@ object HyperFocusNotificationHelper {
     const val CHANNEL_COMPLETION_ID = "resync_completion_v5"
 
     /**
+     * Retorna de forma segura a string de recurso traduzida, evitando crash por formatação ou ID inválido.
+     */
+    fun safeGetString(context: Context, resId: Int, vararg args: Any): String {
+        return try {
+            if (args.isEmpty()) {
+                context.getString(resId)
+            } else {
+                context.getString(resId, *args)
+            }
+        } catch (_: Throwable) {
+            try {
+                context.resources.getString(resId)
+            } catch (_: Throwable) {
+                ""
+            }
+        }
+    }
+
+    /**
      * Cria e atualiza os canais de notificação unificados do app, deletando canais obsoletos
      * para contornar bloqueios ou reduções silenciosas de importância salvas pelo Android.
      */
@@ -65,10 +84,10 @@ object HyperFocusNotificationHelper {
             // Canal para operações em andamento (Backup, Restauração, Nuvem)
             val opsChannel = NotificationChannel(
                 CHANNEL_OPERATIONS_ID,
-                context.getString(R.string.notif_channel_ops_running),
+                safeGetString(context, R.string.notif_channel_ops_running).ifBlank { "ReSync - Operações Ativas" },
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = context.getString(R.string.notif_channel_ops_running_desc)
+                description = safeGetString(context, R.string.notif_channel_ops_running_desc).ifBlank { "Notificações em primeiro plano para operações do ReSync" }
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                 setShowBadge(false)
                 enableVibration(false)
@@ -79,10 +98,10 @@ object HyperFocusNotificationHelper {
             // Canal para avisos de conclusão de operações
             val compChannel = NotificationChannel(
                 CHANNEL_COMPLETION_ID,
-                context.getString(R.string.notif_channel_ops_completed),
+                safeGetString(context, R.string.notif_channel_ops_completed).ifBlank { "ReSync - Conclusão de Tarefas" },
                 NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
-                description = context.getString(R.string.notif_channel_ops_completed_desc)
+                description = safeGetString(context, R.string.notif_channel_ops_completed_desc).ifBlank { "Alertas de conclusão de backup e restauração" }
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                 setShowBadge(true)
             }
@@ -226,13 +245,13 @@ object HyperFocusNotificationHelper {
         val wrapped = LocaleHelper.wrapContext(context)
         return try {
             val collapsedView = RemoteViews(context.packageName, R.layout.notification_transfer_collapsed).apply {
-                setTextViewText(R.id.notif_title, title.ifBlank { wrapped.getString(R.string.notif_performing_backup) })
+                setTextViewText(R.id.notif_title, title.ifBlank { safeGetString(wrapped, R.string.notif_performing_backup).ifBlank { "Performing Backup" } })
                 setTextViewText(R.id.notif_size_dest, line2SizeDest.ifBlank { "0 B • Local" })
-                setTextViewText(R.id.notif_batch_rate, line3BatchRate.ifBlank { wrapped.getString(R.string.notif_batch_format, 0, 0) })
-                setTextViewText(R.id.notif_speed, line4SpeedOrDetails.ifBlank { wrapped.getString(R.string.notif_speed_format, "0,0 MB/s") })
+                setTextViewText(R.id.notif_batch_rate, line3BatchRate.ifBlank { safeGetString(wrapped, R.string.notif_batch_format, 0, 0).ifBlank { "Batch: 0/0" } })
+                setTextViewText(R.id.notif_speed, line4SpeedOrDetails.ifBlank { safeGetString(wrapped, R.string.notif_speed_format, "0,0 MB/s").ifBlank { "Speed: 0,0 MB/s" } })
             }
 
-            val effectiveSubText = subText.ifBlank { wrapped.getString(R.string.notif_processing_items) }
+            val effectiveSubText = subText.ifBlank { safeGetString(wrapped, R.string.notif_processing_items).ifBlank { "Processing..." } }
             val appIconBmp = getAdaptiveIconColorBitmap(context, 96)
 
             val builder = NotificationCompat.Builder(context, channelId)
@@ -290,7 +309,7 @@ object HyperFocusNotificationHelper {
                 .setSmallIcon(R.drawable.ic_notification)
                 .setLargeIcon(fallbackLogo)
                 .setContentTitle(title.ifBlank { "ReSync" })
-                .setContentText(line2SizeDest.ifBlank { context.getString(R.string.banner_restore_in_progress) })
+                .setContentText(line2SizeDest.ifBlank { safeGetString(context, R.string.banner_restore_in_progress).ifBlank { "Operation in progress" } })
                 .setOngoing(isOngoing)
                 .setOnlyAlertOnce(true)
                 .apply {

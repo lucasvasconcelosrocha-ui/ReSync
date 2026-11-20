@@ -390,10 +390,10 @@ fun SettingsScreen(
                         }
                     }
                     Spacer(modifier = Modifier.height(12.dp))
-                    InfoRow(stringResource(R.string.settings_crypto_engine), "AES-256-GCM Hardware-Backed", StatusSuccess)
-                    InfoRow(stringResource(R.string.settings_integrity_val), "SHA-256 e MD5 Hash", StatusSuccess)
-                    InfoRow(stringResource(R.string.settings_supported_cloud), "Exclusivamente Google Drive", AccentElectricCyan)
-                    InfoRow(stringResource(R.string.settings_flow_invariance), "Kotlin channelFlow Auditado", StatusSuccess)
+                    InfoRow(stringResource(R.string.settings_crypto_engine), stringResource(R.string.settings_crypto_engine_val), StatusSuccess)
+                    InfoRow(stringResource(R.string.settings_integrity_val), stringResource(R.string.settings_integrity_val_val), StatusSuccess)
+                    InfoRow(stringResource(R.string.settings_supported_cloud), stringResource(R.string.settings_supported_cloud_val), AccentElectricCyan)
+                    InfoRow(stringResource(R.string.settings_flow_invariance), stringResource(R.string.settings_flow_invariance_val), StatusSuccess)
                 }
             }
 
@@ -435,9 +435,9 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 val languageOptions = listOf(
-                    Triple(LocaleHelper.LANG_EN, stringResource(R.string.lang_english), "English (Default)"),
+                    Triple(LocaleHelper.LANG_EN, stringResource(R.string.lang_english), stringResource(R.string.lang_english_default)),
                     Triple(LocaleHelper.LANG_PT_BR, stringResource(R.string.lang_portuguese), stringResource(R.string.lang_pt_br)),
-                    Triple(LocaleHelper.LANG_SYSTEM, stringResource(R.string.lang_system_default), "System default")
+                    Triple(LocaleHelper.LANG_SYSTEM, stringResource(R.string.lang_system_default), stringResource(R.string.lang_system_default))
                 )
 
                 languageOptions.forEach { (tag, label, desc) ->

@@ -1,4 +1,40 @@
-# 🚀 ReSync v1.0.39 Release Notes
+# 🚀 ReSync v1.0.40 Release Notes
+
+---
+
+## 🇧🇷 Português
+
+### 🚀 O Que Há de Novo na Versão 1.0.40:
+
+#### 1. 🛡️ Correção Crítica do Crash ao Iniciar Backup (Zero Backup Crash Fix)
+- **Blindagem Completa de StatFs:** Proteção contra falhas `IllegalArgumentException` ao calcular espaço livre, com criação de diretórios (`mkdirs`) e fallback automático para o diretório interno do aplicativo.
+- **Início Imediato do Serviço em Primeiro Plano:** Chamada imediata a `ServiceCompat.startForeground` com `FOREGROUND_SERVICE_TYPE_DATA_SYNC` na primeira linha de `onStartCommand`, blindando contra timeouts no Android 14 e 15.
+- **Isolamento de Coroutines & Suporte a Não-Root:** Adicionados manipuladores globais `CoroutineExceptionHandler` em serviços e repositórios, além de desvio seguro de chamadas `su` quando o root não estiver concedido.
+
+#### 2. 🔤 Eliminação Total de Mojibake (UTF-8) & Sincronização Perfeita
+- **Purificação de Codificação:** Correção de 100% dos caracteres com dupla codificação (`Ã§`, `Ãµ`, `Ã£`, `â€¢`, etc.) nos arquivos de strings e fontes Kotlin.
+- **Paridade 1:1 de Traduções:** 1.323 chaves sincronizadas com precisão milimétrica entre Inglês (`values`) e Português do Brasil (`values-pt-rBR`).
+- **Resolução de Formatação de Strings:** Correção de placeholders e escape adequado de porcentagem (`%%`) aprovados sem erros no Lint.
+
+---
+
+## 🇺🇸 English
+
+### 🚀 What's New in Version 1.0.40:
+
+#### 1. 🛡️ Backup Launch Crash Fix & Service Hardening
+- **StatFs Shielding:** Full protection against `IllegalArgumentException` during disk space calculation with directory verification and resilient fallback to internal app storage.
+- **Immediate Foreground Service Startup:** First-line `ServiceCompat.startForeground` invocation with `FOREGROUND_SERVICE_TYPE_DATA_SYNC` conforming strictly to Android 14 & 15 requirements.
+- **Coroutine Fault Tolerance & Non-Root Fallback:** Global `CoroutineExceptionHandler` attached to service and repository scopes; graceful bypass of shell root commands when superuser access is unavailable.
+
+#### 2. 🔤 Total Mojibake (UTF-8) Elimination & Parity
+- **Encoding Cleanup:** 100% resolution of double-encoded UTF-8 characters (`Ã§`, `Ãµ`, `â€¢`, etc.) across all string bundles and Kotlin source files.
+- **1:1 Strict Parity:** 1,323 keys synchronized between English default and Portuguese (Brazil).
+- **Format Specifier Lint Cleanliness:** Proper percent escaping (`%%`) and clean Lint validation with zero formatting issues.
+
+---
+
+## [v1.0.39] Release Notes
 
 ---
 

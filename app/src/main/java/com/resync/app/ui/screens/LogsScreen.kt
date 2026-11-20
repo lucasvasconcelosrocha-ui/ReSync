@@ -105,10 +105,10 @@ fun LogsScreen(
             val shareIntent = Intent(Intent.ACTION_SEND).apply {
                 type = "text/plain"
                 putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_SUBJECT, "ReSync - Logs do Sistema")
+                putExtra(Intent.EXTRA_SUBJECT, context.getString(R.string.logs_system_title_share))
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            context.startActivity(Intent.createChooser(shareIntent, "Exportar Logs"))
+            context.startActivity(Intent.createChooser(shareIntent, context.getString(R.string.logs_export_chooser)))
         } catch (e: Exception) {
             Toast.makeText(context, context.getString(R.string.logs_export_failed, e.message ?: ""), Toast.LENGTH_SHORT).show()
         }
@@ -137,7 +137,7 @@ fun LogsScreen(
                         }
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "Logs do Sistema",
+                            text = stringResource(R.string.logs_system_title),
                             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                             color = TextPrimary
                         )
@@ -145,16 +145,16 @@ fun LogsScreen(
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = { copyLogsToClipboard() }) {
-                            Icon(imageVector = Icons.Default.ContentCopy, contentDescription = "Copiar Logs", tint = TextSecondary)
+                            Icon(imageVector = Icons.Default.ContentCopy, contentDescription = stringResource(R.string.logs_copy_all), tint = TextSecondary)
                         }
                         IconButton(onClick = { exportAndShareLogs() }) {
-                            Icon(imageVector = Icons.Default.Share, contentDescription = "Compartilhar", tint = TextSecondary)
+                            Icon(imageVector = Icons.Default.Share, contentDescription = stringResource(R.string.action_share), tint = TextSecondary)
                         }
                         IconButton(onClick = { showClearConfirmation = true }) {
-                            Icon(imageVector = Icons.Default.DeleteOutline, contentDescription = "Limpar", tint = StatusError)
+                            Icon(imageVector = Icons.Default.DeleteOutline, contentDescription = stringResource(R.string.action_clear), tint = StatusError)
                         }
                         IconButton(onClick = { viewModel.loadData() }) {
-                            Icon(imageVector = Icons.Default.Refresh, contentDescription = "Atualizar", tint = TextSecondary)
+                            Icon(imageVector = Icons.Default.Refresh, contentDescription = stringResource(R.string.action_refresh), tint = TextSecondary)
                         }
                     }
                 }
@@ -173,7 +173,7 @@ fun LogsScreen(
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
                             IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Default.Clear, contentDescription = "Limpar busca", tint = TextMuted, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.Clear, contentDescription = stringResource(R.string.clear_search), tint = TextMuted, modifier = Modifier.size(16.dp))
                             }
                         }
                     },
@@ -237,7 +237,7 @@ fun LogsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "${filteredLogs.size} registros encontrados",
+                        text = stringResource(R.string.logs_records_found, filteredLogs.size),
                         style = MaterialTheme.typography.bodySmall,
                         color = TextMuted
                     )
@@ -357,7 +357,7 @@ fun LogsScreen(
                                     },
                                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                                 ) {
-                                    Text("Ver detalhes", fontSize = 11.sp, color = primaryAccent)
+                                    Text(stringResource(R.string.view_details), fontSize = 11.sp, color = primaryAccent)
                                 }
                             }
                         }
@@ -384,7 +384,7 @@ fun LogsScreen(
     if (showClearConfirmation) {
         AlertDialog(
             onDismissRequest = { showClearConfirmation = false },
-            title = { Text("Limpar Logs", color = TextPrimary) },
+            title = { Text(stringResource(R.string.logs_clear_title), color = TextPrimary) },
             text = { Text(stringResource(R.string.logs_clear_confirm), color = TextSecondary) },
             confirmButton = {
                 Button(
@@ -396,7 +396,7 @@ fun LogsScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = StatusError)
                 ) {
-                    Text("Limpar", color = Color.White)
+                    Text(stringResource(R.string.action_clear), color = Color.White)
                 }
             },
             dismissButton = {

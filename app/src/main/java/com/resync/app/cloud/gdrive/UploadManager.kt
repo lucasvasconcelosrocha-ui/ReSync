@@ -371,7 +371,13 @@ class UploadManager(private val oAuthManager: OAuthManager) {
                 // Clone the current MD5 state before the chunk upload.
                 // On success, the clone (already updated inline by StreamingFileRequestBody)
                 // becomes the new canonical digest. On failure/retry, the original is unaffected.
-                val chunkDigestClone = md5Digest.clone() as MessageDigest
+                val chunkDigestClone = try {
+                    md5Digest.clone() as MessageDigest
+                } catch (_: CloneNotSupportedException) {
+                    null
+                } catch (_: Throwable) {
+                    null
+                }
 
                 val chunkResult = uploadChunkWithInfiniteNetworkRetry(
                     sessionUri = activeSessionUri,
@@ -398,7 +404,7 @@ class UploadManager(private val oAuthManager: OAuthManager) {
                             val remaining = totalBytes - currentTotal
                             val speedBytesSec = (smoothedSpeedMBps * 1024 * 1024).toLong()
                             val etaSec = if (speedBytesSec > 0) remaining / speedBytesSec else 0L
-                            val progressPercent = (currentTotal.toFloat() / totalBytes.toFloat()).coerceIn(0f, 0.99f)
+                            val progressPercent = if (totalBytes > 0L) (currentTotal.toFloat() / totalBytes.toFloat()).coerceIn(0f, 0.99f) else 0f
 
                             val currentPctInt = (progressPercent * 100).toInt()
                             if (currentPctInt >= lastMilestonePct + 5) {
@@ -428,7 +434,7 @@ class UploadManager(private val oAuthManager: OAuthManager) {
                                 stage = "Reconectando bloco (tentativa $attempt em ${delaySec}s)...",
                                 bytesUploaded = bytesUploaded,
                                 totalBytes = totalBytes,
-                                progressPercent = (bytesUploaded.toFloat() / totalBytes.toFloat()).coerceIn(0f, 1f),
+                                progressPercent = if (totalBytes > 0L) (bytesUploaded.toFloat() / totalBytes.toFloat()).coerceIn(0f, 1f) else 0f,
                                 speedMBps = 0f,
                                 estimatedRemainingSeconds = 0
                             )
@@ -441,7 +447,9 @@ class UploadManager(private val oAuthManager: OAuthManager) {
 
                 // Commit the MD5 clone on success: the clone was updated inline by StreamingFileRequestBody
                 // during the upload pass — no second disk read needed (single-pass MD5 achieved).
-                md5Digest = chunkDigestClone
+                if (chunkDigestClone != null) {
+                    md5Digest = chunkDigestClone
+                }
 
 
                 // Update time tracking for Room persistence

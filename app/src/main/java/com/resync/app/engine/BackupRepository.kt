@@ -63,7 +63,10 @@ object BackupRepository {
     private const val KEY_TIMESTAMP = "key_timestamp"
     private const val KEY_EXEC_STATE = "key_exec_state"
 
-    private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val coroutineExceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        com.resync.app.util.AppLogger.e("BackupRepository", "Exceção assíncrona não tratada capturada no repositoryScope: ${throwable.message}", throwable)
+    }
+    private val repositoryScope = CoroutineScope(SupervisorJob() + Dispatchers.IO + coroutineExceptionHandler)
 
     private val _backupProgress = MutableStateFlow<BackupProgress?>(null)
     val backupProgress: StateFlow<BackupProgress?> = _backupProgress.asStateFlow()
@@ -419,12 +422,13 @@ object BackupRepository {
                 timeoutJob.cancel()
                 _isBackupPaused.value = false
                 resetToIdle()
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 timeoutJob.cancel()
                 BackupForegroundService.stopService(appCtx)
                 _isBackupPaused.value = false
                 _executionState.value = BackupExecutionState.ERROR
-                dbHelper.insertLog(LogLevel.ERROR, "BackupRepository", "Erro ao executar backup: ${e.message}")
+                dbHelper.insertLog(LogLevel.ERROR, "BackupRepository", "Erro crítico ao executar backup: ${e.message}")
+                com.resync.app.util.AppLogger.e("BackupRepository", "Falha fatal na execução do backup: ${e.message}", e)
                 val errState = BackupProgress(
                     stage = "Erro",
                     currentItemName = e.message ?: "Falha ao executar backup.",

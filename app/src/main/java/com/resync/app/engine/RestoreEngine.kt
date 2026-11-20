@@ -217,9 +217,13 @@ class RestoreEngine(private val context: Context) {
 
         try {
             // Cheque de espaço livre na partição temporária via StatFs
+            if (!tempRestoreBase.exists()) {
+                try { tempRestoreBase.mkdirs() } catch (_: Throwable) {}
+            }
             val freeBytes = try {
-                android.os.StatFs(tempRestoreBase.absolutePath).availableBytes
-            } catch (_: Exception) {
+                val targetPath = if (tempRestoreBase.exists()) tempRestoreBase.absolutePath else context.filesDir.absolutePath
+                android.os.StatFs(targetPath).availableBytes
+            } catch (_: Throwable) {
                 Long.MAX_VALUE
             }
             val requiredMargin = itemsToRestore.sumOf { it.sizeBytes } + (50L * 1024 * 1024)

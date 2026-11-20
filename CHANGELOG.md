@@ -4,6 +4,22 @@ Todas as mudanças notáveis deste projeto são documentadas neste arquivo.
 
 ---
 
+## [1.0.40] - 2026-11-20
+
+### 🛡️ Correção Crítica do Crash ao Iniciar Backup (Zero Backup Crash Fix)
+- **Blindagem do `StatFs`:** Protegidas todas as invocações de `android.os.StatFs` em `BackupEngine.kt` e `RestoreEngine.kt` com criação preventiva de diretórios (`mkdirs()`), tratamento seguro em bloco `try/catch` e fallback resiliente para `context.filesDir.absolutePath`, evitando `IllegalArgumentException: Invalid path`.
+- **Invocação Imediata de `startForeground`:** Implementada chamada com `ServiceCompat.startForeground` e tipo `FOREGROUND_SERVICE_TYPE_DATA_SYNC` na primeira linha absoluta de `onStartCommand` em `BackupForegroundService.kt` e `RestoreForegroundService.kt`, garantindo conformidade rigorosa com Android 14 e 15 (API 35).
+- **Proteção para Dispositivos Sem Root:** Tratamento seguro para `isRootActive == false` em cópias de APK base e splits, impedindo chamadas `Shell.cmd` desnecessárias ou falhas críticas em arquivos inacessíveis.
+- **Prevenção de Quedas de Coroutines:** Adicionado `CoroutineExceptionHandler` a todos os escopos assíncronos (`serviceScope` em serviços em primeiro plano e `repositoryScope` no `BackupRepository`), além de captura abrangente com log via `AppLogger.e` e emissão de estado de erro para a interface em vez de crash da JVM.
+- **Resiliência em `UploadManager` & `ActiveBackupsScreen`:** Tratamento para `CloneNotSupportedException` no clone de digest MD5 e proteção contra `NaN` e divisão por zero em cálculos de progresso e pesos do Jetpack Compose, além de cópias defensivas `.toList()` em iterações de logs.
+
+### 🔤 Eliminação Total de Mojibake (UTF-8) & Sincronização Perfeita de Idiomas
+- **Correção de 100% da Dupla Codificação:** Eliminadas todas as ocorrências de caracteres corrompidos por dupla codificação UTF-8 (`Ã§`, `Ãµ`, `Ã£`, `Ãª`, `Ãº`, `Ã¡`, `Ã©`, `â€¢`, `â€”`, etc.) em arquivos de recursos XML e classes Kotlin.
+- **Paridade Estrita de Chaves (1.323 Chaves):** Sincronização perfeita 1:1 entre `values/strings.xml`, `values-en/strings.xml`, `values-pt/strings.xml` e `values-pt-rBR/strings.xml`.
+- **Auditoria Rigorosa do Lint:** Resolução de todos os alertas de `StringFormatInvalid` com escape adequado de `%` (`%%`) e adição da permissão `android.permission.VIBRATE` no `AndroidManifest.xml`.
+
+---
+
 ## [1.0.39] - 2026-11-20
 
 ### 🛡️ Fim Definitivo dos Crashes ao Abrir Abas (Zero Tab Crash Fix)

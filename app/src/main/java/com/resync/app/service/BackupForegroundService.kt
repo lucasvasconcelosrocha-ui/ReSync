@@ -135,7 +135,10 @@ class BackupForegroundService : Service() {
         }
     }
 
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val coroutineExceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        com.resync.app.util.AppLogger.e("BackupForegroundService", "Exceção assíncrona capturada no serviceScope: ${throwable.message}", throwable)
+    }
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO + coroutineExceptionHandler)
     private var backupJob: Job? = null
     private var thermalListener: Any? = null
     @Volatile private var currentOperationTitle: String = "Realizando Backup"
@@ -312,11 +315,13 @@ class BackupForegroundService : Service() {
             paused = false
         )
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(NOTIFICATION_ID, initialNotification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-            } else {
-                startForeground(NOTIFICATION_ID, initialNotification)
-            }
+            createNotificationChannel()
+            androidx.core.app.ServiceCompat.startForeground(
+                this,
+                NOTIFICATION_ID,
+                initialNotification,
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0
+            )
         } catch (t: Throwable) {
             android.util.Log.e("ReSyncNotif", "BackupForegroundService: Falha ao executar startForeground inicial: ${t.message}", t)
         }

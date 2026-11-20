@@ -122,7 +122,7 @@ fun ActiveBackupsScreen(
 
     val systemLogs by viewModel.systemLogs.collectAsStateWithLifecycle()
     val recentLogs = remember(systemLogs) {
-        systemLogs
+        systemLogs.toList()
             .filter { !it.tag.contains("DIAGN", true) && !it.message.contains("[DIAGN", true) && !it.message.contains("preload", true) }
             .takeLast(6)
     }
@@ -728,13 +728,14 @@ fun ActiveBackupsScreen(
                                 .clip(RoundedCornerShape(3.dp))
                                 .background(Color(0xFF1C222D))
                         ) {
-                            val pFraction = (progressPercent / 100f).coerceIn(0f, 1f)
+                            val rawFraction = if (progressPercent.isNaN()) 0f else progressPercent / 100f
+                            val pFraction = rawFraction.coerceIn(0f, 1f)
                             if (pFraction > 0f) {
-                                Box(modifier = Modifier.weight(pFraction).fillMaxHeight().background(Color(0xFFFF3B47)))
+                                Box(modifier = Modifier.weight(pFraction.coerceAtLeast(0.0001f)).fillMaxHeight().background(Color(0xFFFF3B47)))
                             }
-                            val remainFraction = (1f - pFraction).coerceAtLeast(0f)
+                            val remainFraction = (1f - pFraction).coerceIn(0f, 1f)
                             if (remainFraction > 0f) {
-                                Box(modifier = Modifier.weight(remainFraction).fillMaxHeight().background(Color(0xFF1C222D)))
+                                Box(modifier = Modifier.weight(remainFraction.coerceAtLeast(0.0001f)).fillMaxHeight().background(Color(0xFF1C222D)))
                             }
                         }
 
@@ -946,8 +947,9 @@ fun ActiveBackupsScreen(
                                     color = Color(0xFF1A2230),
                                     border = BorderStroke(0.6.dp, Color(0xFF263244)),
                                     modifier = Modifier.clickable {
-                                        val logText = if (recentLogs.isNotEmpty()) {
-                                            recentLogs.joinToString("\n") { log ->
+                                        val safeLogs = recentLogs.toList()
+                                        val logText = if (safeLogs.isNotEmpty()) {
+                                            safeLogs.joinToString("\n") { log ->
                                                 val timeStr = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(log.timestamp))
                                                 "[$timeStr] [${log.tag}] ${log.message}"
                                             }
@@ -999,8 +1001,9 @@ fun ActiveBackupsScreen(
                             border = BorderStroke(0.6.dp, Color(0xFF1E2837))
                         ) {
                             Column(modifier = Modifier.padding(10.dp)) {
-                                if (recentLogs.isNotEmpty()) {
-                                    recentLogs.forEach { logEntry ->
+                                val safeLogs = recentLogs.toList()
+                                if (safeLogs.isNotEmpty()) {
+                                    safeLogs.forEach { logEntry ->
                                         val timeStr = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(logEntry.timestamp))
                                         val tagColor = when (logEntry.level) {
                                             com.resync.app.data.model.LogLevel.ERROR -> Color(0xFFFF414D)

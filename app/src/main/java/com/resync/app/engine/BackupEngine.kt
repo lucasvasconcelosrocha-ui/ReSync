@@ -482,9 +482,13 @@ class BackupEngine(private val context: Context) {
                 )
 
                 // Retrieve all actual APK paths (base and all splits) via pm path
-                val pmPathCmd = com.topjohnwu.superuser.Shell.cmd("pm path ${app.packageName}").exec()
-                val realApkPaths = if (pmPathCmd.isSuccess && pmPathCmd.out.isNotEmpty()) {
-                    pmPathCmd.out.filter { it.startsWith("package:") }.map { it.removePrefix("package:").trim() }
+                val realApkPaths = if (isRootActive) {
+                    val pmPathCmd = try { com.topjohnwu.superuser.Shell.cmd("pm path ${app.packageName}").exec() } catch (_: Throwable) { null }
+                    if (pmPathCmd?.isSuccess == true && pmPathCmd.out.isNotEmpty()) {
+                        pmPathCmd.out.filter { it.startsWith("package:") }.map { it.removePrefix("package:").trim() }
+                    } else {
+                        (listOf(app.sourceDir) + app.splitSourceDirs).distinct().filter { it.isNotBlank() }
+                    }
                 } else {
                     (listOf(app.sourceDir) + app.splitSourceDirs).distinct().filter { it.isNotBlank() }
                 }
@@ -495,12 +499,14 @@ class BackupEngine(private val context: Context) {
                 // Base APK
                 if (options.includeBaseApk && realBaseApkPath.isNotBlank()) {
                     var baseApk = File(realBaseApkPath)
-                    if (!baseApk.canRead()) {
+                    if (!baseApk.canRead() && isRootActive) {
                         val stagedBase = File(stagingDir, "${app.packageName}_base.apk")
-                        com.topjohnwu.superuser.Shell.cmd("nice -n 19 ionice -c 3 cp \"${baseApk.absolutePath}\" \"${stagedBase.absolutePath}\" && chmod 644 \"${stagedBase.absolutePath}\"").exec()
-                        if (stagedBase.exists() && stagedBase.length() > 0) {
-                            baseApk = stagedBase
-                        }
+                        try {
+                            com.topjohnwu.superuser.Shell.cmd("nice -n 19 ionice -c 3 cp \"${baseApk.absolutePath}\" \"${stagedBase.absolutePath}\" && chmod 644 \"${stagedBase.absolutePath}\"").exec()
+                            if (stagedBase.exists() && stagedBase.length() > 0) {
+                                baseApk = stagedBase
+                            }
+                        } catch (_: Throwable) {}
                     }
 
                     if (baseApk.exists() && baseApk.length() > 0) {
@@ -548,12 +554,14 @@ class BackupEngine(private val context: Context) {
                 if (options.includeSplits && realSplitApkPaths.isNotEmpty()) {
                     for ((splitIdx, splitPath) in realSplitApkPaths.withIndex()) {
                         var splitFile = File(splitPath)
-                        if (!splitFile.canRead()) {
+                        if (!splitFile.canRead() && isRootActive) {
                             val stagedSplit = File(stagingDir, "${app.packageName}_split_$splitIdx.apk")
-                            com.topjohnwu.superuser.Shell.cmd("nice -n 19 ionice -c 3 cp \"${splitFile.absolutePath}\" \"${stagedSplit.absolutePath}\" && chmod 644 \"${stagedSplit.absolutePath}\"").exec()
-                            if (stagedSplit.exists() && stagedSplit.length() > 0) {
-                                splitFile = stagedSplit
-                            }
+                            try {
+                                com.topjohnwu.superuser.Shell.cmd("nice -n 19 ionice -c 3 cp \"${splitFile.absolutePath}\" \"${stagedSplit.absolutePath}\" && chmod 644 \"${stagedSplit.absolutePath}\"").exec()
+                                if (stagedSplit.exists() && stagedSplit.length() > 0) {
+                                    splitFile = stagedSplit
+                                }
+                            } catch (_: Throwable) {}
                         }
 
                         if (splitFile.exists() && splitFile.length() > 0) {
@@ -1000,9 +1008,13 @@ class BackupEngine(private val context: Context) {
 
             // Check free space on internal storage before proceeding
             val internalRoot = android.os.Environment.getExternalStorageDirectory()
+            if (!internalRoot.exists()) {
+                try { internalRoot.mkdirs() } catch (_: Throwable) {}
+            }
             val freeBytes = try {
-                android.os.StatFs(internalRoot.absolutePath).availableBytes
-            } catch (_: Exception) {
+                val targetPath = if (internalRoot.exists()) internalRoot.absolutePath else context.filesDir.absolutePath
+                android.os.StatFs(targetPath).availableBytes
+            } catch (_: Throwable) {
                 Long.MAX_VALUE
             }
             val requiredMargin = totalEstimatedSize + (100L * 1024 * 1024) // 100 MB margin
@@ -2197,11 +2209,12 @@ class BackupEngine(private val context: Context) {
             createdFinalDir?.let { if (it.listFiles().isNullOrEmpty()) it.delete() }
             dbHelper.insertLog(LogLevel.WARN, "BackupEngine", "Operação de backup cancelada: ${e.message}")
             throw e
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             safeDeleteStaging(stagingDir, selectedFilesAndFolders)
             createdFinalFile?.delete()
             createdFinalDir?.let { if (it.listFiles().isNullOrEmpty()) it.delete() }
             dbHelper.insertLog(LogLevel.ERROR, "BackupEngine", "Erro crítico durante backup: ${e.message}")
+            com.resync.app.util.AppLogger.e("BackupEngine", "Erro crítico durante backup: ${e.message}", e)
             emitProgress(BackupProgress("Erro", e.message ?: "Falha ao gravar container de backup.", 1.0f, 0, 0, isFinished = true, error = e.message, completedItems = completedItemsList.toList()))
         } finally {
             etaCountdownTickerJob.cancel()

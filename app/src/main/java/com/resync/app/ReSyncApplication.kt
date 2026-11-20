@@ -352,6 +352,12 @@ class ReSyncApplication : Application() {
 
                 val crashFile = java.io.File(filesDir, "crash.log")
                 crashFile.writeText(crashLogContent)
+
+                com.resync.app.util.AppLogger.e(
+                    "CrashHandler",
+                    "CRASH NÃO TRATADO: ${throwable.javaClass.simpleName}: ${throwable.message}",
+                    throwable
+                )
             } catch (_: Throwable) {
             } finally {
                 defaultHandler?.uncaughtException(thread, throwable)

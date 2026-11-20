@@ -63,7 +63,10 @@ class RestoreForegroundService : Service() {
         }
     }
 
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val coroutineExceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        com.resync.app.util.AppLogger.e("RestoreForegroundService", "Exceção assíncrona capturada no serviceScope: ${throwable.message}", throwable)
+    }
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO + coroutineExceptionHandler)
     private var notificationManager: NotificationManager? = null
     private var wakeLock: android.os.PowerManager.WakeLock? = null
     private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
@@ -127,14 +130,16 @@ class RestoreForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // Blindagem Android 14/15: startForeground e locks DEVEM ser a primeira linha absoluta sem timeout
         acquireLocks()
+        createNotificationChannel()
         val title = intent?.getStringExtra(EXTRA_TITLE) ?: "Backup Restoration"
         val notification = buildInitialNotification(title)
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-            } else {
-                startForeground(NOTIFICATION_ID, notification)
-            }
+            androidx.core.app.ServiceCompat.startForeground(
+                this,
+                NOTIFICATION_ID,
+                notification,
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0
+            )
         } catch (t: Throwable) {
             android.util.Log.e("ReSyncNotif", "Erro no startForeground da restauração: ${t.message}", t)
         }

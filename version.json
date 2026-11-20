@@ -1,18 +1,20 @@
 {
-  "versionCode": 39,
-  "versionName": "1.0.39",
-  "tag": "v1.0.39",
-  "apkName": "ReSync-v1.0.39.apk",
-  "releaseNotes": "🚀 **O QUE HÁ DE NOVO NESTA VERSÃO (v1.0.39) / WHAT'S NEW IN THIS VERSION:**\n\n🛡️ **Fim Definitivo dos Crashes ao Abrir Abas (Zero Tab Crash Fix)**\n• Eliminação do ClassCastException fatal (ContextImpl cannot be cast to Activity) causado pela substituição indevida do LocalContext.\n• Implementada extensão segura Context.findActivity() em toda a aplicação.\n\n🌐 **Purificação Total em Inglês & Sincronização Perfeita (100% English Localization)**\n• Varredura completa de 100% das strings hardcoded em português nas telas, modais, gráficos, serviços e viewmodels.\n• Inglês nativo como padrão de fábrica com suporte total e idêntico a Português do Brasil e Padrão do Sistema.\n\n🧹 **Limpeza de Chaves de Bibliotecas & Otimização XML**\n• Remoção de conflitos de merge de strings de bibliotecas de terceiros (Google Play Services, AndroidX Startup, Material3).\n• Validação anti-crash de formatação e apóstrofos em 100% dos recursos de idiomas.",
+  "versionCode": 40,
+  "versionName": "1.0.40",
+  "tag": "v1.0.40",
+  "apkName": "ReSync-v1.0.40.apk",
+  "releaseNotes": "🚀 **O QUE HÁ DE NOVO NESTA VERSÃO (v1.0.40) / WHAT'S NEW IN THIS VERSION:**\n\n🛡️ **Correção Crítica do Crash ao Iniciar Backup (Zero Backup Crash Fix)**\n• Blindagem contra IllegalArgumentException em StatFs com verificação de existência (mkdirs) e fallback seguro para filesDir.\n• Execução protegida do startForeground com ServiceCompat.startForeground e tipo FOREGROUND_SERVICE_TYPE_DATA_SYNC na primeira linha do serviço.\n• Tratamento robusto para dispositivos sem acesso Root (isRootActive == false), contornando comandos Shell protegidos.\n• CoroutineExceptionHandler instalado em todos os escopos assíncronos (serviceScope e repositoryScope).\n\n🔤 **Eliminação Total de Mojibake (UTF-8) & Sincronização Perfeita**\n• Resolução de 100% dos caracteres com dupla codificação UTF-8 em todos os arquivos de strings e fontes Kotlin.\n• Paridade estrita de 1.323 chaves entre os pacotes de idiomas Inglês e Português (Brasil).\n• Auditoria completa de Lint com 0 erros de formatação de strings e de permissões.",
   "functions": [
-    "100% English factory default localization across all screens, dialogs, charts, and background services",
-    "Complete synchronization of 1,307+ translation keys between English (values) and Portuguese (values-pt-rBR)",
-    "Safe Activity resolution via Context.findActivity() extension eliminating crashes across all navigation tabs",
-    "Third-party library XML keys cleanup preventing resource merging conflicts"
+    "Definitive fix for crash on backup initialization via StatFs path validation and fallback",
+    "First-line ServiceCompat.startForeground execution with FOREGROUND_SERVICE_TYPE_DATA_SYNC",
+    "Complete resolution of all double UTF-8 encoded characters (Mojibake) across translation files",
+    "Comprehensive CoroutineExceptionHandler installed in service and repository scopes",
+    "Safe non-root fallback avoiding Shell execution on protected system paths"
   ],
   "fixes": [
-    "Fixed fatal ClassCastException (ContextImpl cannot be cast to Activity) when opening tabs or dialogs",
-    "Replaced all remaining hardcoded Portuguese strings with localized stringResource / getString calls",
-    "Standardized positional string format specifiers (%1$s, %1$d) across all localized resource bundles"
+    "Fixed crash when launching backup caused by unhandled StatFs on unmounted/uncreated paths",
+    "Eliminated CloneNotSupportedException in UploadManager MD5 streaming digest clone",
+    "Fixed UTF-8 Mojibake double encoding across values/strings.xml and values-pt-rBR/strings.xml",
+    "Resolved Lint issues for StringFormatInvalid and added missing VIBRATE permission"
   ]
 }

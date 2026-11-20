@@ -736,7 +736,7 @@ fun DashboardScreen(
             Spacer(modifier = Modifier.height(14.dp))
 
             // ====================================================================
-            // ▶️ 4. CARD DINÂMICO DE JOB EM ANDAMENTO (100% REAL - ZERO MOCKS)
+            // ▶️ 4. CARD DINMICO DE JOB EM ANDAMENTO (100% REAL - ZERO MOCKS)
             // ====================================================================
             val runningOps = activeOps.filter { !it.isFinished && it.status != com.resync.app.engine.OperationStatus.CANCELLED && it.status != com.resync.app.engine.OperationStatus.ERROR }
             val activeOp = runningOps.firstOrNull()
