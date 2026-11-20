@@ -134,26 +134,15 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            val context = LocalContext.current
-            val currentLanguage by LocaleHelper.currentLanguageFlow.collectAsState()
-            LaunchedEffect(Unit) {
-                LocaleHelper.getAppLanguage(context)
-            }
-            val localizedContext = remember(currentLanguage) { LocaleHelper.wrapContext(context) }
+            val currentAccent by viewModel.themeAccent.collectAsState()
+            val activeOperations by viewModel.activeOperations.collectAsStateWithLifecycle()
+            val backupProgress by viewModel.backupProgress.collectAsStateWithLifecycle()
+            val backupExecutionState by viewModel.backupExecutionState.collectAsStateWithLifecycle()
+            val restoreProgress by viewModel.restoreProgress.collectAsStateWithLifecycle()
 
-            CompositionLocalProvider(
-                LocalContext provides localizedContext,
-                LocalConfiguration provides localizedContext.resources.configuration
-            ) {
-                val currentAccent by viewModel.themeAccent.collectAsState()
-                val activeOperations by viewModel.activeOperations.collectAsStateWithLifecycle()
-                val backupProgress by viewModel.backupProgress.collectAsStateWithLifecycle()
-                val backupExecutionState by viewModel.backupExecutionState.collectAsStateWithLifecycle()
-                val restoreProgress by viewModel.restoreProgress.collectAsStateWithLifecycle()
+            val primaryAccent = getAccentColor(currentAccent)
 
-                val primaryAccent = getAccentColor(currentAccent)
-
-                ReSyncTheme(accent = currentAccent) {
+            ReSyncTheme(accent = currentAccent) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -670,7 +659,6 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-}
 }
 
 

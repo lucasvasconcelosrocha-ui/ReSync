@@ -1,5 +1,8 @@
 package com.resync.app.ui.components
 
+import com.resync.app.R
+import androidx.compose.ui.res.stringResource
+
 import android.app.Activity
 import android.content.Intent
 import android.widget.Toast
@@ -68,13 +71,13 @@ fun GoogleDriveAccountsBottomSheet(
                     onAuthNeeded = { pendingConsentIntent = it },
                     onComplete = { addRes ->
                         if (addRes.isSuccess) {
-                            Toast.makeText(context, "Google Drive conectado com sucesso!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.gdrive_connected_success), Toast.LENGTH_SHORT).show()
                         }
                     }
                 )
             }
         } else {
-            Toast.makeText(context, "Autorização não concluída.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.gdrive_auth_not_completed), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -84,7 +87,7 @@ fun GoogleDriveAccountsBottomSheet(
             try {
                 consentLauncher.launch(intent)
             } catch (t: Throwable) {
-                Toast.makeText(context, "Erro ao abrir autorização: ${t.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, context.getString(R.string.gdrive_auth_err, t.message ?: ""), Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -101,7 +104,7 @@ fun GoogleDriveAccountsBottomSheet(
                     onAuthNeeded = { pendingConsentIntent = it },
                     onComplete = { addRes ->
                         if (addRes.isSuccess) {
-                            Toast.makeText(context, "Conta $accountName conectada com sucesso!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.gdrive_account_connected, accountName), Toast.LENGTH_SHORT).show()
                         }
                     }
                 )
@@ -118,7 +121,7 @@ fun GoogleDriveAccountsBottomSheet(
                 val fallbackIntent = viewModel.gdriveProvider.oAuthManager.createChooseAccountIntent()
                 accountChooserLauncher.launch(fallbackIntent)
             } catch (e2: Throwable) {
-                Toast.makeText(context, "Erro ao abrir seletor de contas: ${e2.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, context.getString(R.string.gdrive_account_picker_err, e2.message ?: ""), Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -205,7 +208,7 @@ fun GoogleDriveAccountsBottomSheet(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "Você ainda não possui contas do Google Drive vinculadas ao ReSync.",
+                            text = stringResource(R.string.gdrive_no_accounts_linked),
                             color = TextSecondary,
                             fontSize = 13.sp,
                             lineHeight = 18.sp
@@ -392,7 +395,7 @@ fun GoogleDriveAccountsBottomSheet(
             },
             text = {
                 Text(
-                    text = "Deseja desconectar a conta ${acc.email} do ReSync? Os backups já armazenados no Google Drive permanecerão intactos.",
+                    text = stringResource(R.string.gdrive_disconnect_confirm, acc.email),
                     color = TextSecondary,
                     fontSize = 13.sp,
                     lineHeight = 18.sp
@@ -413,7 +416,7 @@ fun GoogleDriveAccountsBottomSheet(
             },
             dismissButton = {
                 TextButton(onClick = { accountPendingRemoval = null }) {
-                    Text("Cancelar", color = TextSecondary)
+                    Text(stringResource(R.string.action_cancel), color = TextSecondary)
                 }
             },
             containerColor = DarkSurface,

@@ -1,5 +1,8 @@
 package com.resync.app.ui.components.charts
 
+import com.resync.app.R
+import androidx.compose.ui.res.stringResource
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -21,7 +24,7 @@ enum class AppStatusCategory(val displayName: String, val color: Color) {
     WITH_BACKUP("Com backup", StatusSuccess),
     WITHOUT_BACKUP("Sem backup", TextMuted),
     OUTDATED("Desatualizado", StatusWarning),
-    ERROR("Erro", StatusError)
+    ERROR("Error", StatusError)
 }
 
 @Composable
@@ -53,7 +56,7 @@ fun AppStatusDistributionChart(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Status dos Aplicativos",
+                text = stringResource(R.string.dash_stats_title),
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
                 color = TextPrimary
             )

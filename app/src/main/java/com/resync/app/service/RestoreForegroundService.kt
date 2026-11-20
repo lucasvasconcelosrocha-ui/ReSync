@@ -127,7 +127,7 @@ class RestoreForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // Blindagem Android 14/15: startForeground e locks DEVEM ser a primeira linha absoluta sem timeout
         acquireLocks()
-        val title = intent?.getStringExtra(EXTRA_TITLE) ?: "Restauração de Backup"
+        val title = intent?.getStringExtra(EXTRA_TITLE) ?: "Backup Restoration"
         val notification = buildInitialNotification(title)
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -324,7 +324,7 @@ class RestoreForegroundService : Service() {
             autoCancel = false,
             contentIntent = pOpen,
             actions = actions,
-            operationName = "Restaurar",
+            operationName = "Restore",
             destinationText = "Local",
             isFinished = false,
             subText = "Iniciando..."

@@ -1,5 +1,9 @@
 package com.resync.app.ui.screens
 
+import com.resync.app.R
+import androidx.compose.ui.res.stringResource
+
+
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
@@ -193,7 +197,7 @@ fun RestoreSelectionScreen(
                 list.add(
                     RestoreCategoryGroup(
                         id = "APPS",
-                        title = "Aplicativos",
+                        title = context.getString(R.string.category_apps),
                         description = "$pkgCount app(s) em backup",
                         icon = Icons.Default.Apps,
                         accentColor = AccentNeonBlue,
@@ -211,7 +215,7 @@ fun RestoreSelectionScreen(
                     RestoreCategoryGroup(
                         id = "SMS",
                         title = "Mensagens (SMS)",
-                        description = "Histórico de mensagens de texto",
+                        description = context.getString(R.string.restore_sms_history),
                         icon = Icons.Default.Chat,
                         accentColor = AccentCyberPurple,
                         itemCount = smsItems.size,
@@ -232,7 +236,7 @@ fun RestoreSelectionScreen(
                 list.add(
                     RestoreCategoryGroup(
                         id = "CALL_LOG",
-                        title = "Histórico de chamadas",
+                        title = context.getString(R.string.restore_calls_history),
                         description = "$callCount chamada(s) registrada(s)",
                         icon = Icons.Default.Phone,
                         accentColor = AccentEmeraldGreen,
@@ -246,8 +250,8 @@ fun RestoreSelectionScreen(
                 list.add(
                     RestoreCategoryGroup(
                         id = "CALL_LOG",
-                        title = "Histórico de chamadas",
-                        description = "Sem histórico de chamadas neste backup",
+                        title = context.getString(R.string.restore_calls_history),
+                        description = context.getString(R.string.restore_no_calls_backup),
                         icon = Icons.Default.Phone,
                         accentColor = TextMuted,
                         itemCount = 0,
@@ -299,7 +303,7 @@ fun RestoreSelectionScreen(
                     RestoreCategoryGroup(
                         id = "FOLDERS",
                         title = "Pastas",
-                        description = "${folderItems.size} diretório(s) arquivado(s)",
+                        description = context.getString(R.string.restore_dirs_archived, folderItems.size),
                         icon = Icons.Default.FolderZip,
                         accentColor = AccentSunsetOrange,
                         itemCount = folderItems.size,
@@ -315,7 +319,7 @@ fun RestoreSelectionScreen(
                 list.add(
                     RestoreCategoryGroup(
                         id = "FILES",
-                        title = "Arquivos",
+                        title = context.getString(R.string.title_files),
                         description = "${fileItems.size} arquivo(s) e documento(s)",
                         icon = Icons.Default.Description,
                         accentColor = AccentElectricCyan,
@@ -349,8 +353,8 @@ fun RestoreSelectionScreen(
                 list.add(
                     RestoreCategoryGroup(
                         id = "WALLPAPER",
-                        title = "Papéis de parede",
-                        description = "Tela de início e tela de bloqueio",
+                        title = context.getString(R.string.restore_wallpapers_title),
+                        description = context.getString(R.string.restore_home_lock_screens),
                         icon = Icons.Default.Wallpaper,
                         accentColor = AccentElectricCyan,
                         itemCount = wpItems.size,
@@ -367,7 +371,7 @@ fun RestoreSelectionScreen(
                     RestoreCategoryGroup(
                         id = "CONTACTS",
                         title = "Contatos",
-                        description = "Catálogo de contatos",
+                        description = context.getString(R.string.restore_contacts_catalog),
                         icon = Icons.Default.Person,
                         accentColor = AccentEmeraldGreen,
                         itemCount = contactItems.size,
@@ -390,7 +394,7 @@ fun RestoreSelectionScreen(
                     (initialCategoryId.equals("PASTAS", ignoreCase = true) && it.id == "FOLDERS") ||
                     (initialCategoryId.equals("CHAMADAS", ignoreCase = true) && it.id == "CALL_LOG") ||
                     (initialCategoryId.equals("MENSAGENS", ignoreCase = true) && it.id == "SMS") ||
-                    (initialCategoryId.equals("APLICATIVOS", ignoreCase = true) && it.id == "APPS") ||
+                    (initialCategoryId.equals(context.getString(R.string.restore_apps_header), ignoreCase = true) && it.id == "APPS") ||
                     (initialCategoryId.equals("CONTATOS", ignoreCase = true) && it.id == "CONTACTS") ||
                     (initialCategoryId.equals("WI-FI", ignoreCase = true) && it.id == "WIFI") ||
                     (initialCategoryId.equals("BLUETOOTH", ignoreCase = true) && it.id == "BLUETOOTH") ||
@@ -455,10 +459,10 @@ fun RestoreSelectionScreen(
                     title = {
                         Text(
                             text = when {
-                                isFinished -> "Resultado da Restauração"
+                                isFinished -> stringResource(R.string.restore_result_title)
                                 isRestoring -> "Restaurando Dados"
                                 activeCategoryDetail != null -> activeCategoryDetail!!.title
-                                else -> "Restauração Seletiva"
+                                else -> stringResource(R.string.restore_selective_title)
                             },
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             color = TextPrimary,
@@ -480,7 +484,7 @@ fun RestoreSelectionScreen(
                                 onBack()
                             }
                         }) {
-                            Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Voltar", tint = TextPrimary)
+                            Icon(imageVector = Icons.Default.ArrowBack, contentDescription = stringResource(R.string.btn_back), tint = TextPrimary)
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
@@ -608,7 +612,7 @@ fun RestoreSelectionScreen(
                                     }
                             ) {
                                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    Text("Marcar todos", color = primaryAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Text(stringResource(R.string.select_all), color = primaryAccent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
 
@@ -643,7 +647,7 @@ fun RestoreSelectionScreen(
                                     }
                             ) {
                                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    Text("Desmarcar todos", color = StatusError, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Text(stringResource(R.string.unselect_all), color = StatusError, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -763,7 +767,7 @@ fun RestoreSelectionScreen(
                         ) {
                             Icon(Icons.Default.ArrowBack, contentDescription = null, modifier = Modifier.size(18.dp), tint = TextPrimary)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("VOLTAR", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp, maxLines = 1, softWrap = false)
+                            Text(stringResource(R.string.btn_back), fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp, maxLines = 1, softWrap = false)
                         }
 
                         Button(
@@ -834,10 +838,10 @@ fun RestoreSelectionScreen(
                                             "BLUETOOTH" -> selectedBtKeys.values.count { it }
                                             else -> curGroup.itemIds.count { selectedItemIds[it] == true }
                                         }
-                                        if (countSelected > 0) "RESTAURAR ($countSelected)" else "RESTAURAR"
+                                        if (countSelected > 0) stringResource(R.string.restore_restore_count, countSelected) else stringResource(R.string.restore_restore_action)
                                     }
-                                    totalSelectedUnits > 0 -> "RESTAURAR ($totalSelectedUnits)"
-                                    else -> "RESTAURAR"
+                                    totalSelectedUnits > 0 -> stringResource(R.string.restore_restore_count, totalSelectedUnits)
+                                    else -> stringResource(R.string.restore_restore_action)
                                 },
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White,
@@ -909,14 +913,14 @@ fun RestoreSelectionScreen(
                                     }
                                     Spacer(modifier = Modifier.height(10.dp))
                                     Text(
-                                        text = if (!hasError) "Restauração Finalizada" else "Restauração com Falhas ou Parcial",
+                                        text = if (!hasError) stringResource(R.string.restore_finished_title) else stringResource(R.string.restore_failed_partial_title),
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 17.sp,
                                         color = statusColor
                                     )
                                     Spacer(modifier = Modifier.height(4.dp))
                                     Text(
-                                        text = restoreProgress?.stage ?: (if (!hasError) "Todos os itens selecionados foram verificados no sistema com êxito." else "Ocorreram falhas durante a restauração ou verificação."),
+                                        text = restoreProgress?.stage ?: (if (!hasError) stringResource(R.string.restore_all_verified_success) else stringResource(R.string.restore_occurred_failures)),
                                         fontSize = 12.sp,
                                         color = TextSecondary,
                                         maxLines = 2,
@@ -960,7 +964,7 @@ fun RestoreSelectionScreen(
                                         }
                                         if (summary.averageSpeedMBps > 0.05) {
                                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                                Text("Velocidade média", color = TextSecondary, fontSize = 12.sp)
+                                                Text(stringResource(R.string.restore_avg_speed), color = TextSecondary, fontSize = 12.sp)
                                                 Text("%.1f MB/s".format(java.util.Locale.US, summary.averageSpeedMBps), color = TextPrimary, fontSize = 12.sp)
                                             }
                                         }
@@ -1024,7 +1028,7 @@ fun RestoreSelectionScreen(
                                     colors = CardDefaults.cardColors(containerColor = DarkSurfaceVariant)
                                 ) {
                                     Text(
-                                        text = "Restauração concluída.",
+                                        text = stringResource(R.string.restore_completed_simple),
                                         fontSize = 12.sp,
                                         color = TextSecondary,
                                         modifier = Modifier.padding(14.dp)
@@ -1132,7 +1136,7 @@ fun RestoreSelectionScreen(
                             ) {
                                 Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Concluir e Voltar", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
+                                Text(stringResource(R.string.restore_finish_and_back), fontWeight = FontWeight.Bold, color = Color.White, fontSize = 14.sp)
                             }
                         }
                     }
@@ -1265,7 +1269,7 @@ fun RestoreSelectionScreen(
                                     ) {
                                         Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White)
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Cancelar", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        Text(stringResource(R.string.action_cancel), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
@@ -1280,7 +1284,7 @@ fun RestoreSelectionScreen(
                         is ManifestInspectState.DownloadingFromDrive -> {
                             val dlState = state as? ManifestInspectState.DownloadingFromDrive
                             val progressPct = dlState?.progressPercent ?: 0f
-                            val stageMsg = dlState?.stage ?: if (source == RestoreSource.DRIVE) "Baixando índice do Google Drive..." else "Lendo manifesto do container..."
+                            val stageMsg = dlState?.stage ?: if (source == RestoreSource.DRIVE) stringResource(R.string.restore_downloading_drive_index) else "Lendo manifesto do container..."
                             val percentText = if (progressPct > 0f) " ${(progressPct * 100).toInt()}%" else ""
 
                             Box(
@@ -1310,7 +1314,7 @@ fun RestoreSelectionScreen(
                                     )
                                     Spacer(modifier = Modifier.height(6.dp))
                                     Text(
-                                        text = if (source == RestoreSource.DRIVE) "Lendo apenas o índice leve sem baixar o container completo" else "Acessando armazenamento interno diretamente",
+                                        text = if (source == RestoreSource.DRIVE) stringResource(R.string.restore_reading_light_index) else stringResource(R.string.restore_accessing_internal_direct),
                                         fontSize = 11.sp,
                                         color = TextSecondary,
                                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -1334,7 +1338,7 @@ fun RestoreSelectionScreen(
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Icon(Icons.Default.ErrorOutline, contentDescription = null, tint = StatusError, modifier = Modifier.size(20.dp))
                                             Spacer(modifier = Modifier.width(8.dp))
-                                            Text("Falha ao carregar índice", fontWeight = FontWeight.Bold, color = StatusError, fontSize = 14.sp)
+                                            Text(stringResource(R.string.restore_failed_load_index), fontWeight = FontWeight.Bold, color = StatusError, fontSize = 14.sp)
                                         }
                                         Spacer(modifier = Modifier.height(6.dp))
                                         Text(state.message, color = TextPrimary, fontSize = 12.sp)
@@ -1568,7 +1572,7 @@ fun RestoreSelectionScreen(
                                                                     }
                                                                 ) {
                                                                     Text(
-                                                                        "Só APK",
+                                                                        stringResource(R.string.app_detail_apk_only),
                                                                         fontSize = 10.5.sp,
                                                                         fontWeight = if (isSoApk) FontWeight.Bold else FontWeight.Normal,
                                                                         color = if (isSoApk) primaryAccent else TextSecondary,
@@ -1588,7 +1592,7 @@ fun RestoreSelectionScreen(
                                                                     }
                                                                 ) {
                                                                     Text(
-                                                                        "Só Dados",
+                                                                        stringResource(R.string.app_detail_data_only),
                                                                         fontSize = 10.5.sp,
                                                                         fontWeight = if (isSoDados) FontWeight.Bold else FontWeight.Normal,
                                                                         color = if (isSoDados) primaryAccent else TextSecondary,
@@ -1657,7 +1661,7 @@ fun RestoreSelectionScreen(
                                                             date = backup.timestamp,
                                                             type = 1,
                                                             read = 1,
-                                                            body = "Pacote com $count mensagem(ns) SMS salvas na nuvem."
+                                                            body = context.getString(R.string.restore_sms_count_cloud, count)
                                                         )
                                                     )
                                                 }
@@ -1669,7 +1673,7 @@ fun RestoreSelectionScreen(
                                                         date = backup.timestamp,
                                                         type = 1,
                                                         read = 1,
-                                                        body = "Pacote com $count mensagem(ns) SMS salvas na nuvem."
+                                                        body = context.getString(R.string.restore_sms_count_cloud, count)
                                                     )
                                                 )
                                             }
@@ -1696,7 +1700,7 @@ fun RestoreSelectionScreen(
                                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                                     CircularProgressIndicator(color = primaryAccent, modifier = Modifier.size(32.dp), strokeWidth = 3.dp)
                                                     Spacer(modifier = Modifier.height(12.dp))
-                                                    Text("Carregando mensagens da nuvem...", color = TextSecondary, fontSize = 13.sp)
+                                                    Text(stringResource(R.string.restore_loading_sms_cloud), color = TextSecondary, fontSize = 13.sp)
                                                 }
                                             }
                                         } else if (filteredSms.isEmpty()) {
@@ -1847,7 +1851,7 @@ fun RestoreSelectionScreen(
                                                     val count = callItem.metadata["count"]?.toIntOrNull() ?: curGroup.itemCount.coerceAtLeast(1)
                                                     listOf(
                                                         CallRecord(
-                                                            number = "Histórico de Chamadas",
+                                                            number = context.getString(R.string.restore_calls_history),
                                                             date = backup.timestamp,
                                                             duration = 0,
                                                             type = 1,
@@ -1863,11 +1867,11 @@ fun RestoreSelectionScreen(
                                                     val count = callItem.metadata["count"]?.toIntOrNull() ?: curGroup.itemCount.coerceAtLeast(1)
                                                     listOf(
                                                         CallRecord(
-                                                            number = "Histórico de Chamadas",
+                                                            number = context.getString(R.string.restore_calls_history),
                                                             date = backup.timestamp,
                                                             duration = 0,
                                                             type = 1,
-                                                            cachedName = "Pacote com $count chamada(s) salvas na nuvem"
+                                                            cachedName = context.getString(R.string.restore_calls_count_cloud, count)
                                                         )
                                                     )
                                                 }
@@ -1875,11 +1879,11 @@ fun RestoreSelectionScreen(
                                                 val count = callItem.metadata["count"]?.toIntOrNull() ?: curGroup.itemCount.coerceAtLeast(1)
                                                 listOf(
                                                     CallRecord(
-                                                        number = "Histórico de Chamadas",
+                                                        number = context.getString(R.string.restore_calls_history),
                                                         date = backup.timestamp,
                                                         duration = 0,
                                                         type = 1,
-                                                        cachedName = "Pacote com $count chamada(s) salvas na nuvem"
+                                                        cachedName = context.getString(R.string.restore_calls_count_cloud, count)
                                                     )
                                                 )
                                             }
@@ -1906,13 +1910,13 @@ fun RestoreSelectionScreen(
                                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                                     CircularProgressIndicator(color = primaryAccent, modifier = Modifier.size(32.dp), strokeWidth = 3.dp)
                                                     Spacer(modifier = Modifier.height(12.dp))
-                                                    Text("Carregando histórico de chamadas da nuvem...", color = TextSecondary, fontSize = 13.sp)
+                                                    Text(stringResource(R.string.restore_loading_calls_cloud), color = TextSecondary, fontSize = 13.sp)
                                                 }
                                             }
                                         } else if (filteredCalls.isEmpty()) {
                                             Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                                                 Text(
-                                                    text = if (callRecords.isEmpty()) "Nenhum registro de chamada encontrado no container." else "Nenhuma chamada encontrada para a busca.",
+                                                    text = if (callRecords.isEmpty()) stringResource(R.string.restore_no_calls_container) else stringResource(R.string.restore_no_calls_search),
                                                     color = TextMuted,
                                                     fontSize = 13.sp
                                                 )
@@ -2071,7 +2075,7 @@ fun RestoreSelectionScreen(
                                                     listOf(
                                                         ContactRecord(
                                                             id = contactItem.id,
-                                                            displayName = "Catálogo de Contatos ($count contatos)",
+                                                            displayName = context.getString(R.string.restore_contacts_title, count),
                                                             phoneNumbers = listOf("Pacote com $count contato(s) salvo(s) no container"),
                                                             emails = emptyList()
                                                         )
@@ -2091,8 +2095,8 @@ fun RestoreSelectionScreen(
                                                     listOf(
                                                         ContactRecord(
                                                             id = contactItem.id,
-                                                            displayName = "Catálogo de Contatos ($count contatos)",
-                                                            phoneNumbers = listOf("Pacote com $count contato(s) salvo(s) na nuvem"),
+                                                            displayName = context.getString(R.string.restore_contacts_title, count),
+                                                            phoneNumbers = listOf(context.getString(R.string.restore_contacts_count_cloud, count)),
                                                             emails = emptyList()
                                                         )
                                                     )
@@ -2102,8 +2106,8 @@ fun RestoreSelectionScreen(
                                                 listOf(
                                                     ContactRecord(
                                                         id = contactItem.id,
-                                                        displayName = "Catálogo de Contatos ($count contatos)",
-                                                        phoneNumbers = listOf("Pacote com $count contato(s) salvo(s) na nuvem"),
+                                                        displayName = context.getString(R.string.restore_contacts_title, count),
+                                                        phoneNumbers = listOf(context.getString(R.string.restore_contacts_count_cloud, count)),
                                                         emails = emptyList()
                                                     )
                                                 )
@@ -2133,13 +2137,13 @@ fun RestoreSelectionScreen(
                                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                                     CircularProgressIndicator(color = primaryAccent, modifier = Modifier.size(32.dp), strokeWidth = 3.dp)
                                                     Spacer(modifier = Modifier.height(12.dp))
-                                                    Text("Carregando contatos da nuvem...", color = TextSecondary, fontSize = 13.sp)
+                                                    Text(stringResource(R.string.restore_loading_contacts_cloud), color = TextSecondary, fontSize = 13.sp)
                                                 }
                                             }
                                         } else if (filteredContacts.isEmpty()) {
                                             Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                                                 Text(
-                                                    text = if (contactRecords.isEmpty()) "Nenhum contato encontrado no container." else "Nenhum contato encontrado para a busca.",
+                                                    text = if (contactRecords.isEmpty()) stringResource(R.string.restore_no_contacts_container) else stringResource(R.string.restore_no_contacts_search),
                                                     color = TextMuted,
                                                     fontSize = 13.sp
                                                 )
@@ -2305,10 +2309,10 @@ fun RestoreSelectionScreen(
                                                         }
                                                     }
                                                     list.ifEmpty {
-                                                        listOf(SavedWifiNetwork("Redes Wi-Fi do Backup", null, "Wi-Fi Seguro", "Configurações salvas no backup"))
+                                                        listOf(SavedWifiNetwork(context.getString(R.string.restore_wifi_title), null, "Wi-Fi", context.getString(R.string.restore_wifi_saved_settings)))
                                                     }
                                                 } else {
-                                                    listOf(SavedWifiNetwork("Redes Wi-Fi do Backup", null, "Wi-Fi Seguro", "Configurações salvas no backup"))
+                                                    listOf(SavedWifiNetwork(context.getString(R.string.restore_wifi_title), null, "Wi-Fi", context.getString(R.string.restore_wifi_saved_settings)))
                                                 }
                                             }
                                         }
@@ -2334,7 +2338,7 @@ fun RestoreSelectionScreen(
                                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                                     CircularProgressIndicator(color = primaryAccent, modifier = Modifier.size(32.dp), strokeWidth = 3.dp)
                                                     Spacer(modifier = Modifier.height(12.dp))
-                                                    Text("Carregando redes Wi-Fi da nuvem...", color = TextSecondary, fontSize = 13.sp)
+                                                    Text(stringResource(R.string.restore_loading_wifi_cloud), color = TextSecondary, fontSize = 13.sp)
                                                 }
                                             }
                                         } else if (filteredWifi.isEmpty()) {
@@ -2571,13 +2575,13 @@ fun RestoreSelectionScreen(
                                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                                     CircularProgressIndicator(color = primaryAccent, modifier = Modifier.size(32.dp), strokeWidth = 3.dp)
                                                     Spacer(modifier = Modifier.height(12.dp))
-                                                    Text("Carregando dispositivos Bluetooth da nuvem...", color = TextSecondary, fontSize = 13.sp)
+                                                    Text(stringResource(R.string.restore_loading_bt_cloud), color = TextSecondary, fontSize = 13.sp)
                                                 }
                                             }
                                         } else if (filteredBt.isEmpty()) {
                                             Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                                                 Text(
-                                                    text = if (btDevices.isEmpty()) "Nenhum dispositivo Bluetooth encontrado no container." else "Nenhum dispositivo encontrado para a busca.",
+                                                    text = if (btDevices.isEmpty()) stringResource(R.string.restore_no_bt_container) else stringResource(R.string.restore_no_bt_search),
                                                     color = TextMuted,
                                                     fontSize = 13.sp
                                                 )
@@ -2715,7 +2719,7 @@ fun RestoreSelectionScreen(
                                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                                     CircularProgressIndicator(color = primaryAccent, modifier = Modifier.size(32.dp), strokeWidth = 3.dp)
                                                     Spacer(modifier = Modifier.height(12.dp))
-                                                    Text("Carregando configuração de DNS da nuvem...", color = TextSecondary, fontSize = 13.sp)
+                                                    Text(stringResource(R.string.restore_loading_dns_cloud), color = TextSecondary, fontSize = 13.sp)
                                                 }
                                             }
                                         } else {
@@ -2750,7 +2754,7 @@ fun RestoreSelectionScreen(
                                                             }
                                                             Spacer(modifier = Modifier.width(12.dp))
                                                             Column {
-                                                                Text("Configuração de DNS Privado", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 14.sp)
+                                                                Text(stringResource(R.string.cat_private_dns_config), fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 14.sp)
                                                                 Text(
                                                                     text = "Modo: ${dnsConfig?.mode ?: "Automático"}",
                                                                     fontSize = 12.sp,
@@ -2815,7 +2819,7 @@ fun RestoreSelectionScreen(
                                         if (filteredItems.isEmpty()) {
                                             Box(modifier = Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                                                 Text(
-                                                    text = "Nenhum item encontrado nesta categoria.",
+                                                    text = stringResource(R.string.restore_no_items_category),
                                                     color = TextMuted,
                                                     fontSize = 13.sp
                                                 )
@@ -2902,7 +2906,7 @@ fun RestoreSelectionScreen(
                                 // MODO CATEGORIAS PRINCIPAIS
                                 if (categoryGroups.isEmpty()) {
                                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                        Text("Nenhum item encontrado no backup.", color = TextMuted, fontSize = 13.sp)
+                                        Text(stringResource(R.string.restore_no_items_backup), color = TextMuted, fontSize = 13.sp)
                                     }
                                 } else {
                                     LazyColumn(
@@ -2926,7 +2930,7 @@ fun RestoreSelectionScreen(
                                                     Spacer(modifier = Modifier.width(10.dp))
                                                     Column {
                                                         Text(backup.title, fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp)
-                                                        Text("$dateFormatted • Toque em qualquer categoria para escolher itens específicos", fontSize = 11.sp, color = TextSecondary)
+                                                        Text(stringResource(R.string.restore_tap_category_hint, dateFormatted), fontSize = 11.sp, color = TextSecondary)
                                                     }
                                                 }
                                             }
@@ -3027,7 +3031,7 @@ fun RestoreSelectionScreen(
                                                             )
                                                         } else {
                                                             Text(
-                                                                text = "Indisponível neste backup",
+                                                                text = stringResource(R.string.restore_unavailable_in_backup),
                                                                 fontSize = 10.sp,
                                                                 color = TextMuted.copy(alpha = 0.7f)
                                                             )
@@ -3073,7 +3077,7 @@ fun RestoreSelectionScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Log Detalhado da Restauração",
+                            text = stringResource(R.string.restore_detailed_log),
                             fontWeight = FontWeight.Bold,
                             color = TextPrimary,
                             fontSize = 15.sp
@@ -3085,7 +3089,7 @@ fun RestoreSelectionScreen(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    val logText = lastRestoreLog ?: "Nenhum log registrado ainda."
+                    val logText = lastRestoreLog ?: stringResource(R.string.restore_no_log_yet)
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -3113,7 +3117,7 @@ fun RestoreSelectionScreen(
                     ) {
                         TextButton(onClick = {
                             clipboardManager.setText(AnnotatedString(logText))
-                            Toast.makeText(context, "Log copiado para a área de transferência!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.restore_log_copied_clipboard), Toast.LENGTH_SHORT).show()
                         }) {
                             Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp), tint = primaryAccent)
                             Spacer(modifier = Modifier.width(4.dp))

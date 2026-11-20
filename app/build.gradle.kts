@@ -19,11 +19,11 @@ android {
     val vCode = (System.getenv("VERSION_CODE")
         ?: project.findProperty("versionCode")?.toString()
         ?: versionProperties.getProperty("versionCode")
-        ?: "38").toInt()
+        ?: "39").toInt()
     val vName = System.getenv("VERSION_NAME")
         ?: project.findProperty("versionName")?.toString()
         ?: versionProperties.getProperty("versionName")
-        ?: "1.0.38"
+        ?: "1.0.39"
 
     defaultConfig {
         applicationId = "com.resync.app"
@@ -40,7 +40,7 @@ android {
             abiFilters.clear()
             abiFilters.add("arm64-v8a")
         }
-        resourceConfigurations += listOf("en", "en-rUS", "pt", "pt-rBR")
+        resourceConfigurations += listOf("en", "pt-rBR", "pt")
     }
 
     signingConfigs {

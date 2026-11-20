@@ -106,7 +106,7 @@ fun AppUpdateDialog(
 
                         // Versão atual e Versão mais recente em fonte grande e em negrito
                         Text(
-                            text = "Versão atual: v$currentVersionName",
+                            text = stringResource(R.string.updater_current_version, currentVersionName),
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
                             color = TextSecondary,
@@ -115,7 +115,7 @@ fun AppUpdateDialog(
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "Versão mais recente: v$newVersionName",
+                            text = stringResource(R.string.updater_latest_version, newVersionName),
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
                             color = primaryAccent,
@@ -202,7 +202,7 @@ fun AppUpdateDialog(
                             } else {
                                 if (release.functions.isNotEmpty()) {
                                     Text(
-                                        text = "Função",
+                                        text = stringResource(R.string.updater_function),
                                         fontSize = 15.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = TextPrimary
@@ -238,7 +238,7 @@ fun AppUpdateDialog(
                                         Spacer(modifier = Modifier.height(14.dp))
                                     }
                                     Text(
-                                        text = "Otimização e reparo",
+                                        text = stringResource(R.string.updater_opt_repair),
                                         fontSize = 15.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = TextPrimary
@@ -328,7 +328,7 @@ fun AppUpdateDialog(
                         val totalMb = state.totalBytes.toDouble() / (1024.0 * 1024.0)
 
                         Text(
-                            text = "Baixando atualização...",
+                            text = stringResource(R.string.updater_downloading),
                             color = TextPrimary,
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
@@ -373,7 +373,7 @@ fun AppUpdateDialog(
 
                         Spacer(modifier = Modifier.height(14.dp))
                         Text(
-                            text = "Retomada automática ativa em caso de instabilidade na conexão.",
+                            text = stringResource(R.string.updater_auto_resume),
                             color = TextMuted,
                             fontSize = 10.sp
                         )
@@ -392,7 +392,7 @@ fun AppUpdateDialog(
                             Spacer(modifier = Modifier.width(16.dp))
                             Column {
                                 Text(
-                                    text = "Conferência de Segurança",
+                                    text = stringResource(R.string.updater_security_check),
                                     color = TextPrimary,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp
@@ -417,7 +417,7 @@ fun AppUpdateDialog(
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
                                 Text(
-                                    text = "Download verificado com sucesso",
+                                    text = stringResource(R.string.updater_verified_success),
                                     color = TextPrimary,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 15.sp
@@ -435,9 +435,9 @@ fun AppUpdateDialog(
 
                         Text(
                             text = if (state.isRootAvailable && preferSilentRoot)
-                                "O ReSync será atualizado silenciosamente via Root (pm install -r -d) e reiniciado automaticamente."
+                                stringResource(R.string.updater_root_install_desc)
                             else
-                                "O Android exibirá a confirmação do instalador de pacotes para concluir a atualização.",
+                                stringResource(R.string.updater_package_installer_desc),
                             color = TextSecondary,
                             fontSize = 12.sp,
                             lineHeight = 17.sp
@@ -479,13 +479,13 @@ fun AppUpdateDialog(
                             Spacer(modifier = Modifier.width(16.dp))
                             Column {
                                 Text(
-                                    text = "Instalando atualização...",
+                                    text = stringResource(R.string.updater_installing),
                                     color = TextPrimary,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp
                                 )
                                 Text(
-                                    text = if (state.isRoot) "Executando via Root silencioso (pm install -r -d)..." else "Aguardando instalador do sistema...",
+                                    text = if (state.isRoot) "Executando via Root silencioso (pm install -r -d)..." else stringResource(R.string.updater_waiting_installer),
                                     color = TextSecondary,
                                     fontSize = 11.sp
                                 )
@@ -504,7 +504,7 @@ fun AppUpdateDialog(
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
                                 Text(
-                                    text = "Atualização temporariamente bloqueada",
+                                    text = stringResource(R.string.updater_blocked_temp),
                                     color = TextPrimary,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 15.sp
@@ -540,7 +540,7 @@ fun AppUpdateDialog(
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
                                 Text(
-                                    text = "Aviso de Atualização",
+                                    text = stringResource(R.string.updater_warning_title),
                                     color = TextPrimary,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 15.sp

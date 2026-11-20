@@ -9,6 +9,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import com.resync.app.R
 import com.resync.app.util.LocaleHelper
+import com.resync.app.util.findActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -80,10 +81,10 @@ fun SettingsScreen(
     val currentLangSubtitle = remember(currentLangTag) {
         when (currentLangTag) {
             LocaleHelper.LANG_EN -> "English"
-            LocaleHelper.LANG_PT_BR -> "Português (Brasil)"
+            LocaleHelper.LANG_PT_BR -> context.getString(R.string.lang_pt_br)
             else -> {
                 val isEn = LocaleHelper.getLocale(context).language == "en"
-                if (isEn) "System default" else "Padrão do sistema"
+                if (isEn) "System default" else context.getString(R.string.lang_system)
             }
         }
     }
@@ -385,14 +386,14 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text("ReSync", fontWeight = FontWeight.ExtraBold, color = TextPrimary, fontSize = 16.sp)
-                            Text("Versão $installedVersionName — API 35 (Android 15+ Ready)", fontSize = 12.sp, color = primaryAccent, fontWeight = FontWeight.SemiBold)
+                            Text(stringResource(R.string.settings_version_display, installedVersionName), fontSize = 12.sp, color = primaryAccent, fontWeight = FontWeight.SemiBold)
                         }
                     }
                     Spacer(modifier = Modifier.height(12.dp))
-                    InfoRow("Motor Criptográfico", "AES-256-GCM Hardware-Backed", StatusSuccess)
-                    InfoRow("Validação de Integridade", "SHA-256 e MD5 Hash", StatusSuccess)
-                    InfoRow("Nuvem Suportada", "Exclusivamente Google Drive", AccentElectricCyan)
-                    InfoRow("Invariância de Fluxo", "Kotlin channelFlow Auditado", StatusSuccess)
+                    InfoRow(stringResource(R.string.settings_crypto_engine), "AES-256-GCM Hardware-Backed", StatusSuccess)
+                    InfoRow(stringResource(R.string.settings_integrity_val), "SHA-256 e MD5 Hash", StatusSuccess)
+                    InfoRow(stringResource(R.string.settings_supported_cloud), "Exclusivamente Google Drive", AccentElectricCyan)
+                    InfoRow(stringResource(R.string.settings_flow_invariance), "Kotlin channelFlow Auditado", StatusSuccess)
                 }
             }
 
@@ -435,7 +436,7 @@ fun SettingsScreen(
 
                 val languageOptions = listOf(
                     Triple(LocaleHelper.LANG_EN, stringResource(R.string.lang_english), "English (Default)"),
-                    Triple(LocaleHelper.LANG_PT_BR, stringResource(R.string.lang_portuguese), "Português (Brasil)"),
+                    Triple(LocaleHelper.LANG_PT_BR, stringResource(R.string.lang_portuguese), stringResource(R.string.lang_pt_br)),
                     Triple(LocaleHelper.LANG_SYSTEM, stringResource(R.string.lang_system_default), "System default")
                 )
 
@@ -454,7 +455,7 @@ fun SettingsScreen(
                             .clickable {
                                 showLanguageBottomSheet = false
                                 LocaleHelper.setAppLanguage(context, tag)
-                                (context as? Activity)?.recreate()
+                                context.findActivity()?.recreate()
                             },
                         colors = CardDefaults.cardColors(
                             containerColor = if (isSelected) primaryAccent.copy(alpha = 0.12f) else DarkSurfaceVariant
@@ -471,7 +472,7 @@ fun SettingsScreen(
                                 onClick = {
                                     showLanguageBottomSheet = false
                                     LocaleHelper.setAppLanguage(context, tag)
-                                    (context as? Activity)?.recreate()
+                                    context.findActivity()?.recreate()
                                 },
                                 colors = RadioButtonDefaults.colors(
                                     selectedColor = primaryAccent,

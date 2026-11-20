@@ -1,4 +1,44 @@
-# 🚀 ReSync v1.0.38 Release Notes
+# 🚀 ReSync v1.0.39 Release Notes
+
+---
+
+## 🇧🇷 Português
+
+### 🚀 O Que Há de Novo na Versão 1.0.39:
+
+#### 1. 🛡️ Fim Definitivo dos Crashes ao Abrir Abas (Zero Tab Crash Fix)
+- **Causa Raiz Eliminada:** Extirpado o erro fatal `ClassCastException: ContextImpl cannot be cast to Activity` que fechava o aplicativo ao abrir determinadas abas ou modais.
+- **Navegação 100% Estável:** Substituição de todos os casts diretos de Activity pela extensão segura `Context.findActivity()`.
+
+#### 2. 🌐 Purificação e Tradução Integral para o Inglês (100% Localization)
+- **Varredura Completa:** Todas as telas, gráficos (Donut, Linhas, Barras), diálogos e notificações tiveram textos hardcoded em português substituídos por chaves localizadas.
+- **Sincronização 1:1:** 1.307+ chaves sincronizadas com exatidão entre Inglês padrão (`values/strings.xml`) e Português do Brasil (`values-pt-rBR/strings.xml`).
+
+#### 3. 🧹 Limpeza de Chaves de Bibliotecas & Estabilidade XML
+- **Remoção de Conflitos:** Limpeza de chaves de bibliotecas externas (`common_google_play_services`, `androidx_startup`, etc.) dos arquivos XML do projeto, prevenindo quebras de compilação e merge.
+- **Auditoria de Placeholders:** Formatação estrita com especificadores posicionais (`%1$s`, `%1$d`) e apóstrofos devidamente escapados.
+
+---
+
+## 🇺🇸 English
+
+### 🚀 What's New in Version 1.0.39:
+
+#### 1. 🛡️ Zero Tab Crash & Navigation Shielding
+- **Root Cause Fixed:** Permanently resolved fatal `ClassCastException: ContextImpl cannot be cast to Activity` when opening navigation tabs, bottom sheets, and dialogs.
+- **Safe Context Resolution:** All direct Activity casts replaced with safe null-tolerant `Context.findActivity()` extension across all screens.
+
+#### 2. 🌐 Complete English Localization & Parity (100% Localization)
+- **Hardcoded Strings Sweep:** Replaced 100% of hardcoded Portuguese text across screens, dialogs, charts, and background services with localized string resources.
+- **1:1 Strict Parity:** 1,307+ translation keys synchronized between English default (`values/strings.xml`) and Portuguese (`values-pt-rBR/strings.xml`).
+
+#### 3. 🧹 Library Key Cleanup & XML Stability
+- **Merge Conflict Resolution:** Stripped conflicting third-party library keys (`common_google_play_services`, `androidx_startup`, `m3c_*`) from app XML resources.
+- **Anti-Crash Verification:** All placeholders strictly validated with positional specifiers (`%1$s`, `%1$d`) and properly escaped apostrophes.
+
+---
+
+## [v1.0.38] Release Notes
 
 ---
 

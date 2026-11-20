@@ -1,5 +1,7 @@
 package com.resync.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -256,7 +258,7 @@ fun AppDetailScreen(
     val daysSinceUpdate = remember(app.lastUpdateTime) {
         val diff = System.currentTimeMillis() - app.lastUpdateTime
         val d = (diff / (1000 * 60 * 60 * 24)).coerceAtLeast(0)
-        if (d == 0L) "hoje" else "há $d dia${if (d == 1L) "" else "s"}"
+        if (d == 0L) context.getString(R.string.app_detail_today) else if (d == 1L) context.getString(R.string.app_detail_one_day_ago) else context.getString(R.string.app_detail_days_ago, d)
     }
 
     fun shareAppApk() {
@@ -289,10 +291,10 @@ fun AppDetailScreen(
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     })
                 } else {
-                    Toast.makeText(context, "Não foi possível extrair o arquivo APK.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, context.getString(R.string.app_detail_err_extract_apk), Toast.LENGTH_SHORT).show()
                 }
             } catch (t: Throwable) {
-                Toast.makeText(context, "Falha ao compartilhar APK: ${t.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, context.getString(R.string.app_detail_err_share_apk, t.message ?: ""), Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -300,7 +302,7 @@ fun AppDetailScreen(
     fun copyToClipboard(label: String, text: String) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
         clipboard?.setPrimaryClip(ClipData.newPlainText(label, text))
-        Toast.makeText(context, "$label copiado para a área de transferência", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, context.getString(R.string.app_detail_copied_clipboard, label), Toast.LENGTH_SHORT).show()
     }
 
     if (showIndividualRestoreScreen) {
@@ -350,7 +352,7 @@ fun AppDetailScreen(
                 ) {
                     Icon(
                         imageVector = Icons.Default.ArrowBack,
-                        contentDescription = "Voltar",
+                        contentDescription = stringResource(R.string.btn_back),
                         tint = TextPrimary
                     )
                 }
@@ -366,7 +368,7 @@ fun AppDetailScreen(
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = "Backup e restauração",
+                        text = stringResource(R.string.app_detail_backup_restore_title),
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSecondary
                     )
@@ -455,7 +457,7 @@ fun AppDetailScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.MoreVert,
-                                contentDescription = "Opções do aplicativo",
+                                contentDescription = stringResource(R.string.app_detail_options),
                                 tint = TextPrimary
                             )
                         }
@@ -473,7 +475,7 @@ fun AppDetailScreen(
                             Text(installDateFormatted, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = TextPrimary)
                         }
                         Column(horizontalAlignment = Alignment.End) {
-                            Text("Última atualização", fontSize = 11.sp, color = TextMuted)
+                            Text(stringResource(R.string.app_detail_last_update), fontSize = 11.sp, color = TextMuted)
                             Text("$lastUpdateDateFormatted ($daysSinceUpdate)", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = TextPrimary)
                         }
                     }
@@ -686,7 +688,7 @@ fun AppDetailScreen(
                         Icon(imageVector = Icons.Default.Restore, contentDescription = null, tint = Color.Black, modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "RESTAURAR",
+                            text = stringResource(R.string.action_restore),
                             fontSize = 13.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.Black
@@ -755,7 +757,7 @@ fun AppDetailScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "Não há backup no dispositivo",
+                                text = stringResource(R.string.app_detail_no_device_backup),
                                 fontSize = 13.sp,
                                 color = TextMuted
                             )
@@ -808,8 +810,8 @@ fun AppDetailScreen(
                                         )
                                         val contentTag = when {
                                             record.hasApk && record.hasData -> "APK + Dados"
-                                            record.hasApk -> "Só APK"
-                                            record.hasData -> "Só Dados"
+                                            record.hasApk -> context.getString(R.string.app_detail_apk_only)
+                                            record.hasData -> context.getString(R.string.app_detail_data_only)
                                             else -> "Completo"
                                         }
                                         Box(
@@ -847,7 +849,7 @@ fun AppDetailScreen(
                                     }
                                     if (!record.versionName.isNullOrBlank()) {
                                         Text(
-                                            text = "Versão salva: v${record.versionName}",
+                                            text = stringResource(R.string.app_detail_version_saved, record.versionName),
                                             fontSize = 10.sp,
                                             color = TextMuted,
                                             modifier = Modifier.padding(top = 1.dp)
@@ -873,7 +875,7 @@ fun AppDetailScreen(
                                 ) {
                                     Icon(Icons.Default.Restore, contentDescription = null, modifier = Modifier.size(13.dp))
                                     Spacer(modifier = Modifier.width(3.dp))
-                                    Text("Restaurar", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text(stringResource(R.string.action_restore), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 }
 
                                 Box {
@@ -890,7 +892,7 @@ fun AppDetailScreen(
                                         modifier = Modifier.background(DarkSurface)
                                     ) {
                                         DropdownMenuItem(
-                                            text = { Text("Restaurar", color = TextPrimary) },
+                                            text = { Text(stringResource(R.string.action_restore), color = TextPrimary) },
                                             leadingIcon = { Icon(Icons.Default.Restore, contentDescription = null, tint = StatusSuccess) },
                                             onClick = {
                                                 showItemMenu = false
@@ -903,7 +905,7 @@ fun AppDetailScreen(
 
                                         if (record.filePath.isNotBlank()) {
                                             DropdownMenuItem(
-                                                text = { Text("Backup na nuvem", color = TextPrimary) },
+                                                text = { Text(stringResource(R.string.app_detail_cloud_backup), color = TextPrimary) },
                                                 leadingIcon = { Icon(Icons.Default.CloudUpload, contentDescription = null, tint = AccentElectricCyan) },
                                                 onClick = {
                                                     showItemMenu = false
@@ -951,7 +953,7 @@ fun AppDetailScreen(
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = "Backups na nuvem",
+                            text = stringResource(R.string.app_detail_cloud_backups_title),
                             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                             color = TextPrimary
                         )
@@ -974,7 +976,7 @@ fun AppDetailScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "Não há backup na nuvem",
+                                text = stringResource(R.string.app_detail_no_cloud_backup),
                                 fontSize = 13.sp,
                                 color = TextMuted
                             )
@@ -1027,9 +1029,9 @@ fun AppDetailScreen(
                                         )
                                         val contentTag = when {
                                             record.hasApk && record.hasData -> "APK + Dados"
-                                            record.hasApk -> "Só APK"
-                                            record.hasData -> "Só Dados"
-                                            else -> "Nuvem"
+                                            record.hasApk -> context.getString(R.string.app_detail_apk_only)
+                                            record.hasData -> context.getString(R.string.app_detail_data_only)
+                                            else -> context.getString(R.string.cloud_title)
                                         }
                                         Box(
                                             modifier = Modifier
@@ -1066,7 +1068,7 @@ fun AppDetailScreen(
                                     }
                                     if (!record.versionName.isNullOrBlank()) {
                                         Text(
-                                            text = "Versão salva: v${record.versionName}",
+                                            text = stringResource(R.string.app_detail_version_saved, record.versionName),
                                             fontSize = 10.sp,
                                             color = TextMuted,
                                             modifier = Modifier.padding(top = 1.dp)
@@ -1092,7 +1094,7 @@ fun AppDetailScreen(
                                 ) {
                                     Icon(Icons.Default.Restore, contentDescription = null, modifier = Modifier.size(13.dp))
                                     Spacer(modifier = Modifier.width(3.dp))
-                                    Text("Restaurar", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text(stringResource(R.string.action_restore), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 }
 
                                 Box {
@@ -1109,7 +1111,7 @@ fun AppDetailScreen(
                                         modifier = Modifier.background(DarkSurface)
                                     ) {
                                         DropdownMenuItem(
-                                            text = { Text("Restaurar", color = TextPrimary) },
+                                            text = { Text(stringResource(R.string.action_restore), color = TextPrimary) },
                                             leadingIcon = { Icon(Icons.Default.Restore, contentDescription = null, tint = StatusSuccess) },
                                             onClick = {
                                                 showCloudItemMenu = false
@@ -1121,7 +1123,7 @@ fun AppDetailScreen(
                                         )
 
                                         DropdownMenuItem(
-                                            text = { Text("Apagar da nuvem", color = StatusError, fontWeight = FontWeight.Bold) },
+                                            text = { Text(stringResource(R.string.app_detail_delete_cloud), color = StatusError, fontWeight = FontWeight.Bold) },
                                             leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = StatusError) },
                                             onClick = {
                                                 showCloudItemMenu = false
@@ -1169,7 +1171,7 @@ fun AppDetailScreen(
                 ) {
                     Column {
                         Text(
-                            text = "Arquivos do APK",
+                            text = stringResource(R.string.app_detail_apk_files),
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             color = TextPrimary
                         )
@@ -1205,12 +1207,12 @@ fun AppDetailScreen(
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Versão", fontSize = 11.5.sp, color = TextSecondary)
+                            Text(stringResource(R.string.app_detail_version_label), fontSize = 11.5.sp, color = TextSecondary)
                             Text("v${apkDetails?.versionName ?: app.versionName} (${apkDetails?.versionCode ?: app.versionCode})", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("SDK Alvo / Mínimo", fontSize = 11.5.sp, color = TextSecondary)
+                            Text(stringResource(R.string.app_detail_target_min_sdk), fontSize = 11.5.sp, color = TextSecondary)
                             Text("Android ${apkDetails?.targetSdk ?: 34} (Min: ${apkDetails?.minSdk ?: 26})", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
                         }
                         Spacer(modifier = Modifier.height(6.dp))
@@ -1233,7 +1235,7 @@ fun AppDetailScreen(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    text = "LISTA DE ARQUIVOS",
+                    text = stringResource(R.string.app_detail_files_list),
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 0.5.sp,
@@ -1357,7 +1359,7 @@ fun AppDetailScreen(
                                 .background(StatusSuccess.copy(alpha = 0.15f))
                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
-                            Text("Medição Root ✓", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = StatusSuccess)
+                            Text(stringResource(R.string.app_detail_root_meas_check), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = StatusSuccess)
                         }
                     }
                 }
@@ -1366,11 +1368,11 @@ fun AppDetailScreen(
 
                 // Detalhamento por partição
                 val items = listOf(
-                    storageBreakdown?.internalData ?: com.resync.app.engine.StoragePathBreakdown("Dados Internos", "/data/data/${app.packageName}", -1L, false),
-                    storageBreakdown?.externalData ?: com.resync.app.engine.StoragePathBreakdown("Dados Externos", "/storage/emulated/0/Android/data/${app.packageName}", -1L, false),
-                    storageBreakdown?.obbData ?: com.resync.app.engine.StoragePathBreakdown("Arquivos OBB", "/storage/emulated/0/Android/obb/${app.packageName}", -1L, false),
-                    storageBreakdown?.mediaData ?: com.resync.app.engine.StoragePathBreakdown("Mídia", "/storage/emulated/0/Android/media/${app.packageName}", -1L, false),
-                    storageBreakdown?.cacheData ?: com.resync.app.engine.StoragePathBreakdown("Cache", "/data/data/${app.packageName}/cache", -1L, false)
+                    storageBreakdown?.internalData ?: com.resync.app.engine.StoragePathBreakdown(stringResource(R.string.storage_internal_data), "/data/data/${app.packageName}", -1L, false),
+                    storageBreakdown?.externalData ?: com.resync.app.engine.StoragePathBreakdown(stringResource(R.string.storage_external_data), "/storage/emulated/0/Android/data/${app.packageName}", -1L, false),
+                    storageBreakdown?.obbData ?: com.resync.app.engine.StoragePathBreakdown(stringResource(R.string.app_detail_obb_files), "/storage/emulated/0/Android/obb/${app.packageName}", -1L, false),
+                    storageBreakdown?.mediaData ?: com.resync.app.engine.StoragePathBreakdown(stringResource(R.string.app_detail_media), "/storage/emulated/0/Android/media/${app.packageName}", -1L, false),
+                    storageBreakdown?.cacheData ?: com.resync.app.engine.StoragePathBreakdown(stringResource(R.string.storage_cache), "/data/data/${app.packageName}/cache", -1L, false)
                 )
 
                 items.forEach { item ->
@@ -1403,7 +1405,7 @@ fun AppDetailScreen(
                                 )
                             } else {
                                 val sizeText = when {
-                                    item.sizeBytes < 0L || !item.exists -> "Não existe"
+                                    item.sizeBytes < 0L || !item.exists -> context.getString(R.string.app_detail_not_exist)
                                     item.sizeBytes == 0L -> "0 B"
                                     else -> formatStorageSize(item.sizeBytes)
                                 }
@@ -1473,7 +1475,7 @@ fun AppDetailScreen(
                                             border = BorderStroke(0.5.dp, StatusWarning.copy(alpha = 0.4f))
                                         ) {
                                             Text(
-                                                text = "Requer acesso avançado",
+                                                text = stringResource(R.string.app_detail_advanced_access_req),
                                                 fontSize = 9.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = StatusWarning,
@@ -1484,7 +1486,7 @@ fun AppDetailScreen(
                                 }
                                 val intSize = storageBreakdown?.internalData?.sizeBytes ?: -1L
                                 Text(
-                                    text = if (!isRootActive) "Requer privilégios para backup de dados internos" else if (intSize < 0L) "Não existe" else formatStorageSize(intSize),
+                                    text = if (!isRootActive) stringResource(R.string.app_detail_internal_data_perm_req) else if (intSize < 0L) stringResource(R.string.app_detail_not_exist) else formatStorageSize(intSize),
                                     fontSize = 11.sp,
                                     color = TextSecondary
                                 )
@@ -1506,7 +1508,7 @@ fun AppDetailScreen(
                                 Text("Dados Externos (Android/data)", fontSize = 13.sp, color = TextPrimary)
                                 val extSize = storageBreakdown?.externalData?.sizeBytes ?: -1L
                                 Text(
-                                    text = if (extSize < 0L) "Não existe" else formatStorageSize(extSize),
+                                    text = if (extSize < 0L) stringResource(R.string.app_detail_not_exist) else formatStorageSize(extSize),
                                     fontSize = 11.sp,
                                     color = TextSecondary
                                 )
@@ -1524,10 +1526,10 @@ fun AppDetailScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("Arquivos adicionais (Recursos e mídia)", fontSize = 13.sp, color = TextPrimary)
+                                Text(stringResource(R.string.app_detail_additional_files_media), fontSize = 13.sp, color = TextPrimary)
                                 val obbSize = storageBreakdown?.obbData?.sizeBytes ?: -1L
                                 Text(
-                                    text = if (obbSize < 0L) "Não existe" else formatStorageSize(obbSize),
+                                    text = if (obbSize < 0L) stringResource(R.string.app_detail_not_exist) else formatStorageSize(obbSize),
                                     fontSize = 11.sp,
                                     color = TextSecondary
                                 )
@@ -1564,7 +1566,7 @@ fun AppDetailScreen(
             ) {
                 // Título
                 Text(
-                    text = "Ações do Aplicativo",
+                    text = stringResource(R.string.app_detail_app_actions),
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = TextPrimary,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
@@ -1581,7 +1583,7 @@ fun AppDetailScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     ActionChip(
-                        title = "Informações",
+                        title = stringResource(R.string.app_detail_info),
                         icon = Icons.Default.Info,
                         color = primaryAccent,
                         onClick = {
@@ -1643,25 +1645,25 @@ fun AppDetailScreen(
                             viewModel.setAppEnabled(app.packageName, isDisabled) { ok, err ->
                                 if (ok) {
                                     isDisabled = !isDisabled
-                                    Toast.makeText(context, if (isDisabled) "App desabilitado com sucesso!" else "App habilitado!", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, if (isDisabled) context.getString(R.string.app_detail_app_disabled_success) else context.getString(R.string.app_detail_app_enabled_success), Toast.LENGTH_SHORT).show()
                                 } else {
-                                    Toast.makeText(context, err ?: "Falha ao alterar estado do app", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, err ?: context.getString(R.string.app_detail_err_change_app_state), Toast.LENGTH_SHORT).show()
                                 }
                             }
                         }
                     )
 
                     ActionChip(
-                        title = "Forçar parada",
+                        title = stringResource(R.string.app_detail_force_stop),
                         icon = Icons.Default.PowerSettingsNew,
                         color = StatusError,
                         onClick = {
                             showOptionsMenuSheet = false
                             viewModel.forceStopApp(app.packageName) { ok, err ->
                                 if (ok) {
-                                    Toast.makeText(context, "Parada forçada executada com sucesso!", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, context.getString(R.string.app_detail_force_stop_success), Toast.LENGTH_SHORT).show()
                                 } else {
-                                    Toast.makeText(context, err ?: "Falha ao forçar parada", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, err ?: context.getString(R.string.app_detail_force_stop_failed), Toast.LENGTH_SHORT).show()
                                 }
                             }
                         }
@@ -1675,7 +1677,7 @@ fun AppDetailScreen(
                 // 1. Favoritos
                 OptionRow(
                     title = "Favoritos",
-                    subtitle = if (isFavorite) "Marcado como favorito" else "Não favoritado",
+                    subtitle = if (isFavorite) stringResource(R.string.app_detail_favorited) else stringResource(R.string.app_detail_not_favorited),
                     icon = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
                     iconColor = if (isFavorite) StatusWarning else TextMuted,
                     onClick = {
@@ -1687,7 +1689,7 @@ fun AppDetailScreen(
 
                 // 2. Definir etiquetas de aplicativos
                 OptionRow(
-                    title = "Definir etiquetas de aplicativos",
+                    title = stringResource(R.string.app_detail_set_app_tags),
                     subtitle = if (appTags.isEmpty()) "Nenhuma etiqueta definida" else appTags.joinToString(", "),
                     icon = Icons.Default.Label,
                     iconColor = primaryAccent,
@@ -1704,7 +1706,7 @@ fun AppDetailScreen(
                         .clickable {
                             isBlacklisted = !isBlacklisted
                             viewModel.setAppBlacklisted(app.packageName, isBlacklisted)
-                            Toast.makeText(context, if (isBlacklisted) "Adicionado à lista negra" else "Removido da lista negra", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, if (isBlacklisted) context.getString(R.string.app_detail_added_blacklist) else context.getString(R.string.app_detail_removed_blacklist), Toast.LENGTH_SHORT).show()
                         }
                         .padding(horizontal = 20.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -1718,7 +1720,7 @@ fun AppDetailScreen(
                     Spacer(modifier = Modifier.width(14.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Adicionar à lista negra", fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                            Text(stringResource(R.string.app_detail_add_blacklist), fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
                             Spacer(modifier = Modifier.width(6.dp))
                             IconButton(
                                 onClick = { showBlacklistHelpDialog = true },
@@ -1728,7 +1730,7 @@ fun AppDetailScreen(
                             }
                         }
                         Text(
-                            text = if (isBlacklisted) "Ignorado em backups automáticos" else "Incluído normalmente",
+                            text = if (isBlacklisted) stringResource(R.string.app_detail_ignored_auto_backup) else stringResource(R.string.app_detail_included_normally),
                             fontSize = 11.5.sp,
                             color = TextSecondary
                         )
@@ -1771,9 +1773,9 @@ fun AppDetailScreen(
                     )
                     Spacer(modifier = Modifier.width(14.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Otimização da bateria", fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                        Text(stringResource(R.string.app_detail_battery_optimization), fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
                         Text(
-                            text = if (isIgnoringBattery) "Sem restrições em segundo plano" else "Otimizado pelo sistema",
+                            text = if (isIgnoringBattery) stringResource(R.string.app_detail_no_background_restrictions) else stringResource(R.string.battery_opt_optimized),
                             fontSize = 11.5.sp,
                             color = TextSecondary
                         )
@@ -1798,8 +1800,8 @@ fun AppDetailScreen(
 
                 // 5. Adicionar à tela inicial
                 OptionRow(
-                    title = "Adicionar à tela inicial",
-                    subtitle = "Criar atalho rápido na tela inicial do dispositivo",
+                    title = stringResource(R.string.app_detail_add_to_home),
+                    subtitle = stringResource(R.string.app_detail_add_to_home_sub),
                     icon = Icons.Default.AddHome,
                     iconColor = primaryAccent,
                     onClick = {
@@ -1814,17 +1816,17 @@ fun AppDetailScreen(
                                 .setIcon(IconCompat.createWithResource(context, com.resync.app.R.mipmap.ic_launcher))
                                 .build()
                             ShortcutManagerCompat.requestPinShortcut(context, shortcut, null)
-                            Toast.makeText(context, "Solicitação de atalho enviada!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.app_detail_shortcut_sent), Toast.LENGTH_SHORT).show()
                         } else {
-                            Toast.makeText(context, "Criação de atalhos não suportada por este iniciador.", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.app_detail_shortcut_not_supported), Toast.LENGTH_SHORT).show()
                         }
                     }
                 )
 
                 // 6. Configurações
                 OptionRow(
-                    title = "Configurações",
-                    subtitle = "Abrir detalhes de notificações e permissões do sistema",
+                    title = stringResource(R.string.settings_title),
+                    subtitle = stringResource(R.string.app_detail_sys_settings_sub),
                     icon = Icons.Default.Settings,
                     iconColor = TextSecondary,
                     onClick = {
@@ -1852,7 +1854,7 @@ fun AppDetailScreen(
                         showUninstallDialog = false
                         viewModel.uninstallApp(app.packageName) { ok, reason ->
                             if (ok) {
-                                Toast.makeText(context, "${app.appName} desinstalado com sucesso!", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, context.getString(R.string.app_detail_uninstalled_success, app.appName), Toast.LENGTH_SHORT).show()
                                 onBack()
                             } else if (reason == "REQUER_INTENT") {
                                 val intent = Intent(Intent.ACTION_DELETE, Uri.parse("package:${app.packageName}")).apply {
@@ -1860,7 +1862,7 @@ fun AppDetailScreen(
                                 }
                                 context.startActivity(intent)
                             } else {
-                                Toast.makeText(context, reason ?: "Falha ao desinstalar", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, reason ?: context.getString(R.string.app_detail_uninstall_failed), Toast.LENGTH_SHORT).show()
                             }
                         }
                     }
@@ -1870,7 +1872,7 @@ fun AppDetailScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showUninstallDialog = false }) {
-                    Text("Cancelar", color = TextSecondary)
+                    Text(stringResource(R.string.action_cancel), color = TextSecondary)
                 }
             },
             containerColor = DarkSurface,
@@ -1883,17 +1885,17 @@ fun AppDetailScreen(
     if (showClearDataDialog) {
         AlertDialog(
             onDismissRequest = { showClearDataDialog = false },
-            title = { Text("Limpar dados de ${app.appName}?", fontWeight = FontWeight.Bold) },
-            text = { Text("Todos os arquivos, contas, bancos de dados e preferências salvos deste aplicativo serão apagados permanentemente.") },
+            title = { Text(stringResource(R.string.app_detail_clear_data_title, app.appName), fontWeight = FontWeight.Bold) },
+            text = { Text(stringResource(R.string.app_detail_clear_data_confirm)) },
             confirmButton = {
                 TextButton(
                     onClick = {
                         showClearDataDialog = false
                         viewModel.clearAppData(app.packageName) { ok, err ->
                             if (ok) {
-                                Toast.makeText(context, "Dados limpos com sucesso!", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, context.getString(R.string.app_detail_data_cleared_success), Toast.LENGTH_SHORT).show()
                             } else {
-                                Toast.makeText(context, err ?: "Falha ao limpar dados", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, err ?: context.getString(R.string.app_detail_data_clear_failed), Toast.LENGTH_SHORT).show()
                             }
                         }
                     }
@@ -1903,7 +1905,7 @@ fun AppDetailScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showClearDataDialog = false }) {
-                    Text("Cancelar", color = TextSecondary)
+                    Text(stringResource(R.string.action_cancel), color = TextSecondary)
                 }
             },
             containerColor = DarkSurface,
@@ -1920,7 +1922,7 @@ fun AppDetailScreen(
             title = { Text("Etiquetas de ${app.appName}", fontWeight = FontWeight.Bold) },
             text = {
                 Column {
-                    Text("Digite as etiquetas separadas por vírgula (ex: Trabalho, Bancos, Jogos):", fontSize = 12.sp, color = TextSecondary)
+                    Text(stringResource(R.string.app_detail_tags_hint), fontSize = 12.sp, color = TextSecondary)
                     Spacer(modifier = Modifier.height(10.dp))
                     OutlinedTextField(
                         value = tagsInput,
@@ -1951,7 +1953,7 @@ fun AppDetailScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showTagsDialog = false }) {
-                    Text("Cancelar", color = TextSecondary)
+                    Text(stringResource(R.string.action_cancel), color = TextSecondary)
                 }
             },
             containerColor = DarkSurface,
@@ -1967,7 +1969,7 @@ fun AppDetailScreen(
             title = { Text("Sobre a Lista Negra", fontWeight = FontWeight.Bold) },
             text = {
                 Text(
-                    text = "Aplicativos adicionados à lista negra não serão incluídos em backups programados ou rotinas de backup em lote.\n\nIsso evita o consumo excessivo de armazenamento interno ou quota do Google Drive com aplicativos temporários ou de grandes dimensões que você não deseja salvar.",
+                    text = stringResource(R.string.app_detail_blacklist_explain),
                     fontSize = 13.sp,
                     color = TextSecondary
                 )
@@ -1997,7 +1999,7 @@ fun AppDetailScreen(
                         backupToDelete = null
                         if (target != null) {
                             viewModel.deleteUnifiedBackup(target.first, deleteMode = target.second) { _, _ -> }
-                            Toast.makeText(context, "Backup excluído.", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.app_detail_backup_deleted), Toast.LENGTH_SHORT).show()
                         }
                     }
                 ) {
@@ -2006,7 +2008,7 @@ fun AppDetailScreen(
             },
             dismissButton = {
                 TextButton(onClick = { backupToDelete = null }) {
-                    Text("Cancelar", color = TextSecondary)
+                    Text(stringResource(R.string.action_cancel), color = TextSecondary)
                 }
             },
             containerColor = DarkSurface,
@@ -2061,7 +2063,7 @@ fun AppDetailScreen(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Opções de Backup",
+                            text = stringResource(R.string.app_detail_backup_options),
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
                             color = TextPrimary
@@ -2095,9 +2097,9 @@ fun AppDetailScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 val destinations = listOf(
-                    Triple(BackupDestinationType.SOMENTE_INTERNA, "Dispositivo", Icons.Default.PhoneAndroid),
-                    Triple(BackupDestinationType.SOMENTE_DRIVE, "Nuvem (Drive)", Icons.Default.CloudUpload),
-                    Triple(BackupDestinationType.INTERNA_E_DRIVE, "Ambos", Icons.Default.Sync)
+                    Triple(BackupDestinationType.SOMENTE_INTERNA, stringResource(R.string.dest_device), Icons.Default.PhoneAndroid),
+                    Triple(BackupDestinationType.SOMENTE_DRIVE, stringResource(R.string.app_detail_cloud_drive), Icons.Default.CloudUpload),
+                    Triple(BackupDestinationType.INTERNA_E_DRIVE, stringResource(R.string.dest_both), Icons.Default.Sync)
                 )
 
                 Row(
@@ -2231,7 +2233,7 @@ fun AppDetailScreen(
                     // Dados Externos
                     SelectiveBackupOptionCard(
                         title = "Dados Externos",
-                        subtitle = "Arquivos da memória compartilhada • ${formatStorageSize(externalDataSize)}",
+                        subtitle = stringResource(R.string.app_detail_shared_storage_files, formatStorageSize(externalDataSize)),
                         checked = checkedExternalData,
                         onCheckedChange = { checkedExternalData = it },
                         icon = Icons.Default.FolderShared,
@@ -2240,8 +2242,8 @@ fun AppDetailScreen(
 
                     // Arquivos adicionais e Mídia
                     SelectiveBackupOptionCard(
-                        title = "Arquivos adicionais e mídia",
-                        subtitle = "Recursos de jogos e mídias extras • ${formatStorageSize(obbAndMediaSize)}",
+                        title = stringResource(R.string.app_detail_additional_files_media),
+                        subtitle = stringResource(R.string.app_detail_game_media_resources, formatStorageSize(obbAndMediaSize)),
                         checked = checkedObb,
                         onCheckedChange = { checkedObb = it },
                         icon = Icons.Default.SportsEsports,
@@ -2250,8 +2252,8 @@ fun AppDetailScreen(
 
                     // Permissões do aplicativo
                     SelectiveBackupOptionCard(
-                        title = "Permissões do aplicativo",
-                        subtitle = "Permissões de sistema e configurações concedidas",
+                        title = stringResource(R.string.app_detail_app_permissions),
+                        subtitle = stringResource(R.string.app_detail_app_permissions_sub),
                         checked = checkedPermissions,
                         onCheckedChange = { checkedPermissions = it },
                         icon = Icons.Default.Security,
@@ -2288,7 +2290,7 @@ fun AppDetailScreen(
                     onClick = {
                         showSelectiveBackupSheet = false
                         val destLabel = when (selectiveDestType) {
-                            BackupDestinationType.SOMENTE_INTERNA -> "Memória interna"
+                            BackupDestinationType.SOMENTE_INTERNA -> context.getString(R.string.app_detail_internal_storage)
                             BackupDestinationType.SOMENTE_DRIVE -> "Google Drive"
                             BackupDestinationType.INTERNA_E_DRIVE -> "Interna + Drive"
                         }

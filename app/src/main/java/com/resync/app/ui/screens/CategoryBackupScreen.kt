@@ -1,5 +1,9 @@
 package com.resync.app.ui.screens
 
+import com.resync.app.R
+import androidx.compose.ui.res.stringResource
+
+
 import android.Manifest
 import android.app.WallpaperManager
 import android.bluetooth.BluetoothAdapter
@@ -106,13 +110,13 @@ fun CategoryBackupScreen(
 
     val (categoryTitle, categoryIcon, categoryKeywords) = remember(category) {
         when (category.lowercase()) {
-            "apps", "aplicativos" -> Triple("Backup de aplicativos", Icons.Default.Apps, listOf("app", "apps", "aplicativo", "aplicativos", "apk"))
+            "apps" -> Triple(context.getString(R.string.cat_backup_apps_title), Icons.Default.Apps, listOf("app", "apps", "apk"))
             "messages", "sms" -> Triple("Backup de mensagens", Icons.Default.Message, listOf("sms", "mensagem", "mensagens", "messages"))
-            "calls" -> Triple("Backup de chamadas", Icons.Default.Call, listOf("call", "chamada", "chamadas", "calls", "historico"))
-            "contacts" -> Triple("Backup de contatos", Icons.Default.Contacts, listOf("contact", "contato", "contatos", "contacts", "agenda"))
+            "calls" -> Triple(context.getString(R.string.cat_backup_calls_title), Icons.Default.Call, listOf("call", "chamada", "chamadas", "calls", "historico"))
+            "contacts" -> Triple(context.getString(R.string.cat_backup_contacts_title), Icons.Default.Contacts, listOf("contact", "contato", "contatos", "contacts", "agenda"))
             "wifi" -> Triple("Backup das redes Wi-Fi", Icons.Default.Wifi, listOf("wifi", "wi-fi", "rede", "redes"))
-            "wallpaper", "wallpapers" -> Triple("Backup de papéis de parede", Icons.Default.Wallpaper, listOf("wallpaper", "wallpapers", "papel", "papeis", "papeis de parede", "papéis de parede", "fundo"))
-            "bluetooth" -> Triple("Backup de dispositivos Bluetooth", Icons.Default.Bluetooth, listOf("bluetooth", "bt", "dispositivos bluetooth"))
+            "wallpaper", "wallpapers" -> Triple(context.getString(R.string.cat_backup_wallpapers_title), Icons.Default.Wallpaper, listOf("wallpaper", "wallpapers", "background"))
+            "bluetooth" -> Triple(context.getString(R.string.cat_backup_bt_title), Icons.Default.Bluetooth, listOf("bluetooth", "bt", "dispositivos bluetooth"))
             "dns" -> Triple("Backup de DNS Privado", Icons.Default.Dns, listOf("dns", "dns privado", "private dns"))
             else -> Triple("Backup de ${category.replaceFirstChar { it.uppercase() }}", Icons.Default.Category, listOf(category.lowercase()))
         }
@@ -120,12 +124,12 @@ fun CategoryBackupScreen(
 
     val categoryCleanName = remember(category) {
         when (category.lowercase()) {
-            "apps", "aplicativos" -> "Aplicativos"
+            "apps" -> context.getString(R.string.category_apps)
             "messages", "sms" -> "Mensagens"
             "calls" -> "Chamadas"
             "contacts" -> "Contatos"
             "wifi" -> "Redes Wi-Fi"
-            "wallpaper", "wallpapers" -> "Papéis de Parede"
+            "wallpaper", "wallpapers" -> context.getString(R.string.restore_wallpapers_title)
             "bluetooth" -> "Bluetooth"
             "dns" -> "DNS Privado"
             else -> category.replaceFirstChar { it.uppercase() }
@@ -182,13 +186,13 @@ fun CategoryBackupScreen(
 
     var previewWallpaperBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var previewWallpaperTitle by remember { mutableStateOf("") }
-    var selectedFilterChip by remember { mutableStateOf("Todos") }
+    var selectedFilterChip by remember { mutableStateOf(context.getString(R.string.filter_all)) }
     var revealedWifiPasswords by remember { mutableStateOf<Set<String>>(emptySet()) }
 
     suspend fun loadDeviceData() = withContext(Dispatchers.IO) {
         isLoadingRealData = true
         when (category.lowercase()) {
-            "apps", "aplicativos" -> {
+            "apps" -> {
                 viewModel.refreshInstalledApps(false)
                 withContext(Dispatchers.Main) {
                     val apps = viewModel.installedApps.value
@@ -265,7 +269,7 @@ fun CategoryBackupScreen(
     ) { results ->
         val allGranted = results.values.all { it }
         if (!allGranted) {
-            permissionDeniedExplanation = "Algumas permissões foram negadas. O ReSync utilizará acesso Root como alternativa, se disponível."
+            permissionDeniedExplanation = context.getString(R.string.cat_screen_perms_fallback)
         } else {
             permissionDeniedExplanation = null
         }
@@ -343,7 +347,7 @@ fun CategoryBackupScreen(
     }
 
     LaunchedEffect(installedApps) {
-        if (category.lowercase() in listOf("apps", "aplicativos") && selectedItemIds.isEmpty() && installedApps.isNotEmpty()) {
+        if (category.lowercase() in listOf("apps") && selectedItemIds.isEmpty() && installedApps.isNotEmpty()) {
             selectedItemIds = installedApps.filter { !it.isSystemApp }.map { it.packageName }.toSet()
         }
     }
@@ -442,11 +446,11 @@ fun CategoryBackupScreen(
             return categoryKeywords.any { kw -> normText.contains(normalize(kw)) }
         }
 
-        val isAppsCategory = category.lowercase() in listOf("apps", "aplicativos")
+        val isAppsCategory = category.lowercase() in listOf("apps")
         val localList = mutableListOf<UnifiedBackupEntry>()
         for (loc in validLocal) {
             val match = matchesCat("${loc.title} ${loc.filePath}") || when (category.lowercase()) {
-                "apps", "aplicativos" -> loc.includedAppsCount > 0 || matchesCat(loc.title)
+                "apps" -> loc.includedAppsCount > 0 || matchesCat(loc.title)
                 "contacts" -> loc.includedAppsCount == 0 && loc.itemCount > 0 && matchesCat(loc.title)
                 "dns" -> loc.includedDns || matchesCat(loc.title)
                 else -> false
@@ -567,7 +571,7 @@ fun CategoryBackupScreen(
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Voltar",
+                        contentDescription = stringResource(R.string.btn_back),
                         tint = bentoTextPrimary,
                         modifier = Modifier.size(18.dp)
                     )
@@ -577,7 +581,7 @@ fun CategoryBackupScreen(
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "EXECUÇÃO DE BACKUP",
+                        text = stringResource(R.string.cat_screen_backup_exec),
                         style = TextStyle(
                             fontSize = 10.5.sp,
                             fontWeight = FontWeight.Bold,
@@ -694,7 +698,7 @@ fun CategoryBackupScreen(
                 ) {
                     val totalSel = when (category.lowercase()) {
                         "wallpaper", "wallpapers" -> (if (isHomeWallpaperSelected) 1 else 0) + (if (isLockWallpaperSelected) 1 else 0)
-                        "apps", "aplicativos" -> selectedItemIds.size
+                        "apps" -> selectedItemIds.size
                         else -> selectedItemIds.size
                     }
                     Button(
@@ -783,14 +787,14 @@ fun CategoryBackupScreen(
                                     Column {
                                         Text(
                                             text = when (category.lowercase()) {
-                                                "bluetooth" -> "BLUETOOTH & PERIFÉRICOS"
+                                                "bluetooth" -> stringResource(R.string.cat_screen_bt_periph)
                                                 "messages", "sms" -> "MENSAGENS & CONVERSAS"
-                                                "calls" -> "HISTÓRICO DE CHAMADAS"
+                                                "calls" -> stringResource(R.string.cat_screen_call_history)
                                                 "contacts" -> "AGENDA DE CONTATOS"
-                                                "wallpaper", "wallpapers" -> "PAPÉIS DE PAREDE DO SISTEMA"
+                                                "wallpaper", "wallpapers" -> stringResource(R.string.cat_screen_sys_wallpapers)
                                                 "wifi" -> "REDES WI-FI SALVAS & CHAVES"
-                                                "apps", "aplicativos" -> "APLICATIVOS DO SISTEMA & USUÁRIO"
-                                                "dns" -> "CONFIGURAÇÃO DE DNS DO SISTEMA"
+                                                "apps" -> stringResource(R.string.cat_screen_sys_user_apps)
+                                                "dns" -> stringResource(R.string.cat_screen_sys_dns)
                                                 else -> categoryTitle.uppercase()
                                             },
                                             fontSize = 13.5.sp,
@@ -805,7 +809,7 @@ fun CategoryBackupScreen(
                                                 "contacts" -> "URI: content://com.android.contacts"
                                                 "wallpaper", "wallpapers" -> "PATH: /data/system/users/0/wallpaper"
                                                 "wifi" -> "PATH: /data/misc/wifi/WifiConfigStore.xml"
-                                                "apps", "aplicativos" -> "PATH: /data/app • /data/data"
+                                                "apps" -> "PATH: /data/app • /data/data"
                                                 "dns" -> "PATH: Settings.Global (private_dns_mode / specifier)"
                                                 else -> "PROVIDER: SYSTEM_BACKUP_SERVICE"
                                             },
@@ -849,10 +853,10 @@ fun CategoryBackupScreen(
                                     "wallpaper", "wallpapers" -> {
                                         val hasHome = realWallpapers.any { it.flag == WallpaperManager.FLAG_SYSTEM }
                                         val hasLock = realWallpapers.any { it.flag == WallpaperManager.FLAG_LOCK }
-                                        BentoMetricBox(modifier = Modifier.weight(1f), label = "TELA INICIAL", value = if (hasHome) "Ativo" else "Padrão", valueColor = bentoEmerald)
-                                        BentoMetricBox(modifier = Modifier.weight(1f), label = "BLOQUEIO", value = if (hasLock) "Ativo" else "Padrão", valueColor = bentoCyan)
+                                        BentoMetricBox(modifier = Modifier.weight(1f), label = "TELA INICIAL", value = if (hasHome) "Ativo" else stringResource(R.string.default_label), valueColor = bentoEmerald)
+                                        BentoMetricBox(modifier = Modifier.weight(1f), label = "BLOQUEIO", value = if (hasLock) "Ativo" else stringResource(R.string.default_label), valueColor = bentoCyan)
                                         val selCount = (if (isHomeWallpaperSelected) 1 else 0) + (if (isLockWallpaperSelected) 1 else 0)
-                                        BentoMetricBox(modifier = Modifier.weight(1f), label = "SELEÇÃO", value = "$selCount / 2", valueColor = bentoCoral)
+                                        BentoMetricBox(modifier = Modifier.weight(1f), label = stringResource(R.string.cat_screen_selection), value = "$selCount / 2", valueColor = bentoCoral)
                                     }
                                     "wifi" -> {
                                         BentoMetricBox(modifier = Modifier.weight(1f), label = "REDES SALVAS", value = "${realWifiList.size}", valueColor = bentoTextPrimary)
@@ -860,9 +864,9 @@ fun CategoryBackupScreen(
                                         val connSsid = realWifiList.find { it.isConnected }?.ssid ?: "Nenhuma"
                                         BentoMetricBox(modifier = Modifier.weight(1f), label = "CONECTADA", value = connSsid, valueColor = if (connSsid != "Nenhuma") bentoEmerald else bentoTextMuted)
                                     }
-                                    "apps", "aplicativos" -> {
+                                    "apps" -> {
                                         BentoMetricBox(modifier = Modifier.weight(1f), label = "INSTALADOS", value = "${installedApps.size}", valueColor = bentoTextPrimary)
-                                        BentoMetricBox(modifier = Modifier.weight(1f), label = "USUÁRIO", value = "${installedApps.count { !it.isSystemApp }}", valueColor = bentoCyan)
+                                        BentoMetricBox(modifier = Modifier.weight(1f), label = stringResource(R.string.cat_screen_user_cap), value = "${installedApps.count { !it.isSystemApp }}", valueColor = bentoCyan)
                                         BentoMetricBox(modifier = Modifier.weight(1f), label = "SELECIONADOS", value = "${selectedItemIds.size}", valueColor = bentoEmerald)
                                     }
                                     "dns" -> {
@@ -871,7 +875,7 @@ fun CategoryBackupScreen(
                                             "opportunistic" -> "Auto"
                                             else -> "Off"
                                         }, valueColor = bentoTextPrimary)
-                                        BentoMetricBox(modifier = Modifier.weight(1.3f), label = "PROVEDOR / HOST", value = realDnsInfo?.hostname?.ifBlank { "Automático" } ?: "Automático", valueColor = bentoCyan)
+                                        BentoMetricBox(modifier = Modifier.weight(1.3f), label = "PROVEDOR / HOST", value = realDnsInfo?.hostname?.ifBlank { stringResource(R.string.auto_label) } ?: stringResource(R.string.auto_label), valueColor = bentoCyan)
                                         BentoMetricBox(modifier = Modifier.weight(0.9f), label = "SERVIDORES", value = if (realDnsInfo?.isPrivateDnsActive == true) "1 Ativo" else "0", valueColor = if (realDnsInfo?.isPrivateDnsActive == true) bentoEmerald else bentoTextMuted)
                                     }
                                     else -> {
@@ -902,7 +906,7 @@ fun CategoryBackupScreen(
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = when (category.lowercase()) {
-                                        "bluetooth" -> "Fazer Backup das Conexões Bluetooth"
+                                        "bluetooth" -> stringResource(R.string.cat_screen_backup_bt_title)
                                         "dns" -> "⚡ Fazer Backup Imediato do DNS"
                                         else -> "Fazer Backup de $categoryCleanName"
                                     },
@@ -938,13 +942,13 @@ fun CategoryBackupScreen(
                                     Icon(Icons.Default.Security, contentDescription = null, tint = bentoAmber, modifier = Modifier.size(24.dp))
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Column {
-                                        Text("Permissão do sistema necessária", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = bentoTextPrimary)
+                                        Text(stringResource(R.string.cat_screen_sys_perm_req), fontWeight = FontWeight.Bold, fontSize = 13.sp, color = bentoTextPrimary)
                                         Text(
                                             text = when (category.lowercase()) {
-                                                "calls" -> "Conceda permissão de Histórico de Chamadas para listar e salvar registros."
-                                                "messages", "sms" -> "Conceda permissão de SMS para ler e exportar mensagens."
-                                                "contacts" -> "Conceda permissão de Contatos para mapear a agenda."
-                                                else -> "Conceda as permissões solicitadas."
+                                                "calls" -> stringResource(R.string.cat_grant_calls_perm)
+                                                "messages", "sms" -> stringResource(R.string.cat_grant_sms_perm)
+                                                "contacts" -> stringResource(R.string.cat_grant_contacts_perm)
+                                                else -> stringResource(R.string.cat_grant_permissions_req)
                                             },
                                             fontSize = 11.sp,
                                             color = bentoTextSecondary
@@ -1043,7 +1047,7 @@ fun CategoryBackupScreen(
                 // ==========================================
                 // 2. CONTEÚDO PRINCIPAL / LISTAS DE DADOS
                 // ==========================================
-                val isAppsCategory = category.lowercase() in listOf("apps", "aplicativos")
+                val isAppsCategory = category.lowercase() in listOf("apps")
                 val isNormalListCategory = category.lowercase() in listOf("messages", "sms", "calls", "contacts", "wifi", "bluetooth")
                 val isSpecialCategory = category.lowercase() in listOf("wallpaper", "wallpapers", "dns")
 
@@ -1065,7 +1069,7 @@ fun CategoryBackupScreen(
                                         Icon(Icons.Default.Apps, contentDescription = null, tint = bentoCoral, modifier = Modifier.size(20.dp))
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Text(
-                                            text = "Aplicativos Instalados (${installedApps.size})",
+                                            text = stringResource(R.string.cat_installed_apps_count, installedApps.size),
                                             fontWeight = FontWeight.Bold,
                                             color = bentoTextPrimary,
                                             fontSize = 14.sp
@@ -1245,7 +1249,7 @@ fun CategoryBackupScreen(
                                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                                 ) {
                                                     Text(
-                                                        text = if (!dns?.hostname.isNullOrBlank()) dns!!.hostname!! else "DNS Privado Automático (DoH / TLS)",
+                                                        text = if (!dns?.hostname.isNullOrBlank()) dns!!.hostname!! else stringResource(R.string.cat_auto_private_dns),
                                                         fontSize = 14.sp,
                                                         fontWeight = FontWeight.Bold,
                                                         color = bentoTextPrimary,
@@ -1259,7 +1263,7 @@ fun CategoryBackupScreen(
                                                         border = BorderStroke(1.dp, if (dns?.isPrivateDnsActive == true) bentoEmerald.copy(alpha = 0.4f) else bentoCardBorder)
                                                     ) {
                                                         Text(
-                                                            text = if (dns?.isPrivateDnsActive == true) "● ATIVO" else "● PADRÃO",
+                                                            text = if (dns?.isPrivateDnsActive == true) "● ATIVO" else stringResource(R.string.cat_dot_default),
                                                             fontSize = 9.5.sp,
                                                             fontWeight = FontWeight.Bold,
                                                             color = if (dns?.isPrivateDnsActive == true) bentoEmerald else bentoTextMuted,
@@ -1293,7 +1297,7 @@ fun CategoryBackupScreen(
                                                 color = bentoTextMuted
                                             )
                                             Text(
-                                                text = dns?.hostname?.ifBlank { "dns.google / Cloudflare / ISP" } ?: "Padrão da Operadora / Wi-Fi",
+                                                text = dns?.hostname?.ifBlank { "dns.google / Cloudflare / ISP" } ?: stringResource(R.string.cat_carrier_wifi_default),
                                                 fontSize = 11.5.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 fontFamily = FontFamily.Monospace,
@@ -1312,12 +1316,12 @@ fun CategoryBackupScreen(
                     val chipFilteredList: List<Any> = when (category.lowercase()) {
                         "bluetooth" -> when (selectedFilterChip) {
                             "Conectados" -> realBtList.filter { it.isConnected }
-                            "Áudio" -> realBtList.filter { it.deviceCategory in listOf("headphones", "speaker") }
+                            context.getString(R.string.category_audio) -> realBtList.filter { it.deviceCategory in listOf("headphones", "speaker") }
                             "Outros" -> realBtList.filter { !it.isConnected && it.deviceCategory !in listOf("headphones", "speaker") }
                             else -> realBtList
                         }
                         "messages", "sms" -> when (selectedFilterChip) {
-                            "Múltiplas msgs" -> realSmsList.filter { it.messageCount > 1 }
+                            context.getString(R.string.cat_multiple_msgs) -> realSmsList.filter { it.messageCount > 1 }
                             else -> realSmsList
                         }
                         "calls" -> when (selectedFilterChip) {
@@ -1401,7 +1405,7 @@ fun CategoryBackupScreen(
                                                     text = when (category.lowercase()) {
                                                         "bluetooth" -> "Buscar dispositivos pareados..."
                                                         "messages", "sms" -> "Buscar conversas ou mensagens..."
-                                                        "calls" -> "Buscar chamadas por contato ou número..."
+                                                        "calls" -> stringResource(R.string.cat_search_calls_hint)
                                                         "contacts" -> "Buscar contatos por nome ou telefone..."
                                                         "wifi" -> "Buscar rede salva..."
                                                         else -> "Buscar nesta categoria..."
@@ -1432,10 +1436,10 @@ fun CategoryBackupScreen(
 
                             // Chips de Filtro
                             val availableChips = when (category.lowercase()) {
-                                "bluetooth" -> listOf("Todos", "Conectados", "Áudio", "Outros")
-                                "messages", "sms" -> listOf("Todos", "Múltiplas msgs")
+                                "bluetooth" -> listOf(stringResource(R.string.filter_all), "Conectados", stringResource(R.string.category_audio), "Outros")
+                                "messages", "sms" -> listOf(stringResource(R.string.filter_all), stringResource(R.string.cat_multiple_msgs))
                                 "calls" -> listOf("Todas", "Recebidas", "Efetuadas", "Perdidas")
-                                "contacts" -> listOf("Todos", "Com Telefone", "Com Nome")
+                                "contacts" -> listOf(stringResource(R.string.filter_all), "Com Telefone", "Com Nome")
                                 "wifi" -> listOf("Todas", "Com Senha", "WPA/WPA2", "Conectada")
                                 else -> emptyList()
                             }
@@ -1450,7 +1454,7 @@ fun CategoryBackupScreen(
                                     availableChips.forEach { chipName ->
                                         BentoFilterChip(
                                             text = chipName,
-                                            isSelected = (selectedFilterChip == chipName) || (selectedFilterChip == "Todos" && chipName == "Todas"),
+                                            isSelected = (selectedFilterChip == chipName) || (selectedFilterChip == stringResource(R.string.filter_all) && chipName == "Todas"),
                                             onClick = { selectedFilterChip = chipName }
                                         )
                                     }
@@ -1502,7 +1506,7 @@ fun CategoryBackupScreen(
                                 border = BorderStroke(1.dp, bentoCardBorder)
                             ) {
                                 Box(modifier = Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                                    Text("Nenhum registro encontrado.", fontSize = 12.5.sp, color = bentoTextMuted)
+                                    Text(stringResource(R.string.cat_no_records_found), fontSize = 12.5.sp, color = bentoTextMuted)
                                 }
                             }
                         }
@@ -1986,7 +1990,7 @@ fun CategoryBackupScreen(
                                     Icon(Icons.Default.FolderZip, contentDescription = null, tint = bentoCoral, modifier = Modifier.size(20.dp))
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = "HISTÓRICO DE SNAPSHOTS LOCAIS (${localCategoryBackups.size})",
+                                        text = stringResource(R.string.cat_local_snapshots_history, localCategoryBackups.size),
                                         fontWeight = FontWeight.Bold,
                                         fontFamily = FontFamily.Monospace,
                                         color = bentoTextPrimary,
@@ -2003,7 +2007,7 @@ fun CategoryBackupScreen(
                                         .padding(vertical = 14.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text("Nenhum snapshot local no dispositivo", fontSize = 12.sp, color = bentoTextMuted)
+                                    Text(stringResource(R.string.cat_no_local_snapshots), fontSize = 12.sp, color = bentoTextMuted)
                                 }
                             } else {
                                 localCategoryBackups.forEach { entry ->
@@ -2025,7 +2029,7 @@ fun CategoryBackupScreen(
                                                             applyLock = isLockWallpaperSelected
                                                         )
                                                         if (res) {
-                                                            Toast.makeText(context, "Papéis de parede restaurados com sucesso!", Toast.LENGTH_SHORT).show()
+                                                            Toast.makeText(context, context.getString(R.string.cat_wallpapers_restored_success), Toast.LENGTH_SHORT).show()
                                                             loadDeviceData()
                                                         } else {
                                                             viewModel.restoreCategoryBackup(entry, category)
@@ -2085,7 +2089,7 @@ fun CategoryBackupScreen(
                                         onClick = { showDeleteAllDialog = true },
                                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                                     ) {
-                                        Text("Apagar todos", fontSize = 11.sp, color = StatusError, fontWeight = FontWeight.Bold)
+                                        Text(stringResource(R.string.action_delete_all), fontSize = 11.sp, color = StatusError, fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
@@ -2098,7 +2102,7 @@ fun CategoryBackupScreen(
                                         .padding(vertical = 14.dp),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text("Nenhum backup encontrado no Google Drive", fontSize = 12.sp, color = bentoTextMuted)
+                                    Text(stringResource(R.string.no_backup_found_drive), fontSize = 12.sp, color = bentoTextMuted)
                                 }
                             } else {
                                 cloudCategoryBackups.forEach { entry ->
@@ -2108,7 +2112,7 @@ fun CategoryBackupScreen(
                                         onRestore = {
                                             targetEntryToRestore = entry
                                             viewModel.restoreCategoryBackup(entry, category)
-                                            Toast.makeText(context, "Restaurando backup da nuvem...", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, context.getString(R.string.cat_restoring_cloud_backup), Toast.LENGTH_SHORT).show()
                                         },
                                         onDelete = { entryToDelete = entry },
                                         onUploadCloud = null,
@@ -2206,7 +2210,7 @@ fun CategoryBackupScreen(
             },
             dismissButton = {
                 TextButton(onClick = { entryToDelete = null }) {
-                    Text("Cancelar", color = bentoTextSecondary)
+                    Text(stringResource(R.string.action_cancel), color = bentoTextSecondary)
                 }
             }
         )
@@ -2217,8 +2221,8 @@ fun CategoryBackupScreen(
         AlertDialog(
             onDismissRequest = { showDeleteAllDialog = false },
             containerColor = bentoCard,
-            title = { Text("Apagar todos os backups na nuvem?", fontWeight = FontWeight.Bold, color = bentoTextPrimary) },
-            text = { Text("Deseja apagar todos os ${cloudCategoryBackups.size} backups remotos de $categoryTitle?", color = bentoTextSecondary, fontSize = 13.sp) },
+            title = { Text(stringResource(R.string.cat_delete_all_cloud_title), fontWeight = FontWeight.Bold, color = bentoTextPrimary) },
+            text = { Text(stringResource(R.string.cat_delete_remote_backups_prompt, cloudCategoryBackups.size, categoryTitle), color = bentoTextSecondary, fontSize = 13.sp) },
             confirmButton = {
                 Button(
                     onClick = {
@@ -2227,18 +2231,18 @@ fun CategoryBackupScreen(
                             for (c in cloudCategoryBackups) {
                                 c.remoteFileId?.let { viewModel.deleteRemoteDriveBackup(it) }
                             }
-                            Toast.makeText(context, "Backups da nuvem removidos.", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.cat_cloud_backups_removed), Toast.LENGTH_SHORT).show()
                             refreshAll()
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = StatusError)
                 ) {
-                    Text("APAGAR TODOS", color = Color.White, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.cat_delete_all_btn), color = Color.White, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteAllDialog = false }) {
-                    Text("Cancelar", color = bentoTextSecondary)
+                    Text(stringResource(R.string.action_cancel), color = bentoTextSecondary)
                 }
             }
         )
@@ -2278,7 +2282,7 @@ fun CategoryBackupScreen(
                     ) {
                         Icon(Icons.Default.PhoneAndroid, contentDescription = null, tint = bentoCoral, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Armazenamento interno", color = bentoTextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
+                        Text(stringResource(R.string.storage_internal), color = bentoTextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
@@ -2333,14 +2337,14 @@ fun CategoryBackupScreen(
                     ) {
                         Icon(Icons.Default.Sync, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Ambos (Dispositivo e Nuvem)", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
+                        Text(stringResource(R.string.cat_both_device_cloud), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false)
                     }
                 }
             },
             confirmButton = {},
             dismissButton = {
                 TextButton(onClick = { showCreateBackupDialog = false }) {
-                    Text("Cancelar", color = bentoTextSecondary)
+                    Text(stringResource(R.string.action_cancel), color = bentoTextSecondary)
                 }
             }
         )
@@ -2459,7 +2463,7 @@ private fun BentoWallpaperCard(
             }
 
             Spacer(modifier = Modifier.height(4.dp))
-            val resStr = if (bitmap != null) "${bitmap.width}×${bitmap.height}" else "Padrão Sistema"
+            val resStr = if (bitmap != null) "${bitmap.width}x${bitmap.height}" else stringResource(R.string.system_default)
             Text(
                 text = "$resStr • ARGB_8888",
                 fontSize = 9.5.sp,
@@ -2548,7 +2552,7 @@ private fun SelectAllHeader(
             contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
         ) {
             Text(
-                text = if (isAllSelected) "Desmarcar todos" else "Marcar todos",
+                text = if (isAllSelected) stringResource(R.string.unselect_all) else stringResource(R.string.select_all),
                 fontSize = 11.5.sp,
                 color = primaryAccent,
                 fontWeight = FontWeight.Bold
@@ -2566,6 +2570,7 @@ private fun CategoryBackupItemView(
     onUploadCloud: (() -> Unit)?,
     accent: Color
 ) {
+    val context = LocalContext.current
     var menuExpanded by remember { mutableStateOf(false) }
 
     val dateStr = remember(entry.record.timestamp) {
@@ -2575,14 +2580,14 @@ private fun CategoryBackupItemView(
 
     val contentDesc = remember(entry.record.itemCount, category) {
         when (category.lowercase()) {
-            "apps", "aplicativos" -> if (entry.record.includedAppsCount > 0) "${entry.record.includedAppsCount} aplicativos" else "Aplicativos e dados"
+            "apps" -> if (entry.record.includedAppsCount > 0) context.getString(R.string.cat_apps_count_format, entry.record.includedAppsCount) else context.getString(R.string.cat_apps_and_data)
             "messages", "sms" -> if (entry.record.itemCount > 0) "${entry.record.itemCount} conversas / mensagens" else "Conversas e mensagens SMS"
-            "calls" -> if (entry.record.itemCount > 0) "${entry.record.itemCount} registros" else "Histórico de chamadas"
-            "contacts" -> "Catálogo de contatos"
-            "wifi" -> "Configurações de redes Wi-Fi"
-            "wallpaper", "wallpapers" -> "Papéis de parede (Inicial e Bloqueio)"
+            "calls" -> if (entry.record.itemCount > 0) "${entry.record.itemCount} registros" else context.getString(R.string.restore_calls_history)
+            "contacts" -> context.getString(R.string.restore_contacts_catalog)
+            "wifi" -> context.getString(R.string.cat_wifi_networks_config)
+            "wallpaper", "wallpapers" -> context.getString(R.string.restore_wallpapers_title)
             "bluetooth" -> "Dispositivos Bluetooth pareados"
-            "dns" -> "Configuração de DNS Privado"
+            "dns" -> context.getString(R.string.cat_private_dns_config)
             else -> entry.record.title.ifBlank { "Backup de dados" }
         }
     }
@@ -2645,7 +2650,7 @@ private fun CategoryBackupItemView(
                             border = BorderStroke(1.dp, Color(0xFF1F2633))
                         ) {
                             Text(
-                                text = "tar.zst (Nível 3)",
+                                text = stringResource(R.string.cat_tar_zst_level3),
                                 fontSize = 8.5.sp,
                                 fontFamily = FontFamily.Monospace,
                                 color = Color(0xFF64748B),
@@ -2679,12 +2684,12 @@ private fun CategoryBackupItemView(
                     ) {
                         Icon(Icons.Default.Restore, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Restaurar", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text(stringResource(R.string.action_restore), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     }
 
                     Box {
                         IconButton(onClick = { menuExpanded = true }, modifier = Modifier.size(32.dp)) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "Opções", tint = Color(0xFF94A3B8), modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.options_title), tint = Color(0xFF94A3B8), modifier = Modifier.size(18.dp))
                         }
                         DropdownMenu(
                             expanded = menuExpanded,
@@ -2692,7 +2697,7 @@ private fun CategoryBackupItemView(
                             modifier = Modifier.background(Color(0xFF0E121A))
                         ) {
                             DropdownMenuItem(
-                                text = { Text("Restaurar", color = Color(0xFFF1F5F9)) },
+                                text = { Text(stringResource(R.string.action_restore), color = Color(0xFFF1F5F9)) },
                                 leadingIcon = { Icon(Icons.Default.Restore, contentDescription = null, tint = accent) },
                                 onClick = {
                                     menuExpanded = false
@@ -2701,7 +2706,7 @@ private fun CategoryBackupItemView(
                             )
                             if (onUploadCloud != null && !entry.hasDrive) {
                                 DropdownMenuItem(
-                                    text = { Text("Backup na nuvem", color = Color(0xFFF1F5F9)) },
+                                    text = { Text(stringResource(R.string.app_detail_cloud_backup), color = Color(0xFFF1F5F9)) },
                                     leadingIcon = { Icon(Icons.Default.CloudUpload, contentDescription = null, tint = Color(0xFF00E5FF)) },
                                     onClick = {
                                         menuExpanded = false
@@ -2790,11 +2795,11 @@ private fun RestoreMessagesScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar", tint = Color(0xFFF1F5F9))
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.btn_back), tint = Color(0xFFF1F5F9))
                 }
                 Spacer(modifier = Modifier.width(6.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Restaurar Mensagens", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), color = Color(0xFFF1F5F9))
+                    Text(stringResource(R.string.cat_restore_messages), style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), color = Color(0xFFF1F5F9))
                     Text("${selectedIds.size} de ${conversations.size} selecionadas", fontSize = 11.sp, color = Color(0xFF94A3B8))
                 }
                 Button(
@@ -2802,7 +2807,7 @@ private fun RestoreMessagesScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = accent),
                     enabled = selectedIds.isNotEmpty()
                 ) {
-                    Text("Restaurar", fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(stringResource(R.string.action_restore), fontWeight = FontWeight.Bold, color = Color.White)
                 }
             }
         }
@@ -2820,9 +2825,9 @@ private fun RestoreMessagesScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Selecione as conversas a restaurar:", fontSize = 12.sp, color = Color(0xFF94A3B8))
+                    Text(stringResource(R.string.cat_select_conversations_restore), fontSize = 12.sp, color = Color(0xFF94A3B8))
                     TextButton(onClick = { if (selectedIds.size == conversations.size) onDeselectAll() else onSelectAll() }) {
-                        Text(if (selectedIds.size == conversations.size) "Desmarcar todos" else "Marcar todos", color = accent, fontSize = 12.sp)
+                        Text(if (selectedIds.size == conversations.size) stringResource(R.string.unselect_all) else stringResource(R.string.select_all), color = accent, fontSize = 12.sp)
                     }
                 }
             }
@@ -2879,11 +2884,11 @@ private fun RestoreCallsScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar", tint = Color(0xFFF1F5F9))
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.btn_back), tint = Color(0xFFF1F5F9))
                 }
                 Spacer(modifier = Modifier.width(6.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Restaurar Chamadas", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), color = Color(0xFFF1F5F9))
+                    Text(stringResource(R.string.cat_restore_calls), style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold), color = Color(0xFFF1F5F9))
                     Text("${selectedIds.size} de ${callLogs.size} selecionadas", fontSize = 11.sp, color = Color(0xFF94A3B8))
                 }
                 Button(
@@ -2891,7 +2896,7 @@ private fun RestoreCallsScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = accent),
                     enabled = selectedIds.isNotEmpty()
                 ) {
-                    Text("Restaurar", fontWeight = FontWeight.Bold, color = Color.White)
+                    Text(stringResource(R.string.action_restore), fontWeight = FontWeight.Bold, color = Color.White)
                 }
             }
         }
@@ -2909,9 +2914,9 @@ private fun RestoreCallsScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Selecione os registros a restaurar:", fontSize = 12.sp, color = Color(0xFF94A3B8))
+                    Text(stringResource(R.string.cat_select_records_restore), fontSize = 12.sp, color = Color(0xFF94A3B8))
                     TextButton(onClick = { if (selectedIds.size == callLogs.size) onDeselectAll() else onSelectAll() }) {
-                        Text(if (selectedIds.size == callLogs.size) "Desmarcar todos" else "Marcar todos", color = accent, fontSize = 12.sp)
+                        Text(if (selectedIds.size == callLogs.size) stringResource(R.string.unselect_all) else stringResource(R.string.select_all), color = accent, fontSize = 12.sp)
                     }
                 }
             }

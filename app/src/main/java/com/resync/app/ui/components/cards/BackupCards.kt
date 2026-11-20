@@ -1,5 +1,8 @@
 package com.resync.app.ui.components.cards
 
+import androidx.compose.ui.res.stringResource
+import com.resync.app.R
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -180,7 +183,7 @@ fun BackupItemCard(
                 ) {
                     Icon(Icons.Default.Restore, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("RESTAURAR", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.action_restore), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }

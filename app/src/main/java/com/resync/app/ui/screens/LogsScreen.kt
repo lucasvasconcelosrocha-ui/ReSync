@@ -1,5 +1,8 @@
 package com.resync.app.ui.screens
 
+import com.resync.app.R
+import androidx.compose.ui.res.stringResource
+
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -83,7 +86,7 @@ fun LogsScreen(
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         val clip = ClipData.newPlainText("ReSync Logs", textToCopy)
         clipboard.setPrimaryClip(clip)
-        Toast.makeText(context, "Logs copiados para a área de transferência", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, context.getString(R.string.logs_copied_clipboard), Toast.LENGTH_SHORT).show()
     }
 
     fun exportAndShareLogs() {
@@ -107,7 +110,7 @@ fun LogsScreen(
             }
             context.startActivity(Intent.createChooser(shareIntent, "Exportar Logs"))
         } catch (e: Exception) {
-            Toast.makeText(context, "Falha ao exportar logs: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.logs_export_failed, e.message ?: ""), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -130,7 +133,7 @@ fun LogsScreen(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = onBack) {
-                            Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Voltar", tint = TextPrimary)
+                            Icon(imageVector = Icons.Default.ArrowBack, contentDescription = stringResource(R.string.btn_back), tint = TextPrimary)
                         }
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
@@ -165,7 +168,7 @@ fun LogsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(50.dp),
-                    placeholder = { Text("Buscar em mensagens, módulos, erros...", fontSize = 13.sp, color = TextMuted) },
+                    placeholder = { Text(stringResource(R.string.logs_search_placeholder), fontSize = 13.sp, color = TextMuted) },
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TextMuted, modifier = Modifier.size(18.dp)) },
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
@@ -196,7 +199,7 @@ fun LogsScreen(
                     val levels = listOf(null, LogLevel.INFO, LogLevel.WARN, LogLevel.ERROR, LogLevel.DEBUG)
                     for (lvl in levels) {
                         val isSelected = lvl == selectedLevelFilter
-                        val label = lvl?.name ?: "Todos"
+                        val label = lvl?.name ?: stringResource(R.string.filter_all)
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(8.dp))
@@ -239,7 +242,7 @@ fun LogsScreen(
                         color = TextMuted
                     )
                     Text(
-                        text = "Toque em um erro para ver detalhes",
+                        text = stringResource(R.string.logs_tap_error_details),
                         style = MaterialTheme.typography.bodySmall,
                         color = primaryAccent,
                         fontSize = 11.sp
@@ -271,7 +274,7 @@ fun LogsScreen(
                                     errorId = "err_${log.id}",
                                     timestamp = log.timestamp,
                                     module = log.tag,
-                                    operation = "Operação de Sistema",
+                                    operation = context.getString(R.string.logs_system_operation),
                                     message = log.message,
                                     rootCauseMessage = null,
                                     exceptionType = null,
@@ -345,7 +348,7 @@ fun LogsScreen(
                                             errorId = "err_${log.id}",
                                             timestamp = log.timestamp,
                                             module = log.tag,
-                                            operation = "Visualização de Falha",
+                                            operation = context.getString(R.string.logs_failure_view),
                                             message = log.message,
                                             rootCauseMessage = null,
                                             exceptionType = null,
@@ -382,14 +385,14 @@ fun LogsScreen(
         AlertDialog(
             onDismissRequest = { showClearConfirmation = false },
             title = { Text("Limpar Logs", color = TextPrimary) },
-            text = { Text("Deseja apagar todos os registros de log do sistema e do arquivo de diagnóstico?", color = TextSecondary) },
+            text = { Text(stringResource(R.string.logs_clear_confirm), color = TextSecondary) },
             confirmButton = {
                 Button(
                     onClick = {
                         AppLogger.clearLogs()
                         viewModel.loadData()
                         showClearConfirmation = false
-                        Toast.makeText(context, "Logs apagados com sucesso", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.logs_cleared_success), Toast.LENGTH_SHORT).show()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = StatusError)
                 ) {
@@ -398,7 +401,7 @@ fun LogsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showClearConfirmation = false }) {
-                    Text("Cancelar", color = TextSecondary)
+                    Text(stringResource(R.string.action_cancel), color = TextSecondary)
                 }
             },
             containerColor = DarkSurface

@@ -79,7 +79,7 @@ sealed class ManifestInspectState {
         val totalBytes: Long = 0L,
         val speedBytesPerSec: Long = 0L,
         val progressPercent: Float = 0f,
-        val stage: String = "Lendo índice do Google Drive..."
+        val stage: String = "Reading Google Drive index..."
     ) : ManifestInspectState()
     data class Ready(val manifest: BackupManifest, val fileToRestore: File?) : ManifestInspectState()
     data class Error(val message: String, val canRetry: Boolean = true) : ManifestInspectState()
@@ -584,7 +584,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     ) {
         _individualRestoreUiState.value = IndividualRestoreUiState.Running(
             progressPercent = 0.05f,
-            stage = "Iniciando restauração de ${app.appName}...",
+            stage = "Starting restoration of ${app.appName}...",
             currentStep = "Preparando container",
             appName = app.appName
         )
@@ -608,7 +608,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             )
                         }
                         RestoreExecutionState.ERROR -> {
-                            val errMsg = RestoreRepository.restoreSummary.value?.errorMessage ?: "Falha na restauração"
+                            val errMsg = RestoreRepository.restoreSummary.value?.errorMessage ?: "Restoration failed"
                             _individualRestoreUiState.value = IndividualRestoreUiState.Error(errMsg)
                         }
                         else -> {
@@ -1116,7 +1116,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                                 includedAppsCount = manifest.items.count { it.type == BackupItemType.APP_APK || it.type == BackupItemType.APP_DATA },
                                 includedFilesCount = manifest.items.count { it.type == BackupItemType.FILE },
                                 includedDns = manifest.items.any { it.type == BackupItemType.DNS_CONFIG },
-                                destination = "Memória interna",
+                                destination = "Internal storage",
                                 syncStatus = SyncStatus.LOCAL_ONLY
                             )
                             discovered.add(rec)
@@ -1251,7 +1251,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 id = id,
                 status = QueueStatus.FAILED,
                 errorCode = "CANCELLED",
-                errorMessage = "Cancelado pelo usuário."
+                errorMessage = "Cancelled by user."
             )
             loadSyncQueue()
         }
@@ -1343,13 +1343,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
                             val (title, isAbnormal) = when (exitInfo.reason) {
                                 android.app.ApplicationExitInfo.REASON_ANR -> "ANR (Sem Resposta)" to true
-                                android.app.ApplicationExitInfo.REASON_CRASH -> "Crash (Exceção não tratada)" to true
+                                android.app.ApplicationExitInfo.REASON_CRASH -> "Crash (Unhandled exception)" to true
                                 android.app.ApplicationExitInfo.REASON_CRASH_NATIVE -> "Crash Nativo (C/C++)" to true
-                                android.app.ApplicationExitInfo.REASON_LOW_MEMORY -> "Falta de Memória RAM (LMK)" to false
+                                android.app.ApplicationExitInfo.REASON_LOW_MEMORY -> "Low RAM (LMK)" to false
                                 android.app.ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE -> "Uso de Recursos (Sistema)" to false
                                 android.app.ApplicationExitInfo.REASON_SIGNALED -> "Terminado pelo Kernel (Sinal/Reboot)" to false
                                 android.app.ApplicationExitInfo.REASON_EXIT_SELF -> "Encerramento Normal (Exit Self)" to false
-                                android.app.ApplicationExitInfo.REASON_USER_REQUESTED -> "Fechado pelo Usuário" to false
+                                android.app.ApplicationExitInfo.REASON_USER_REQUESTED -> "Closed by User" to false
                                 else -> "Outro Motivo (${exitInfo.reason})" to false
                             }
 
@@ -1791,7 +1791,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     dbHelper.insertLog(LogLevel.INFO, "Restore", "Manifesto lido com sucesso: ${manifest.items.size} itens encontrados.")
                     _manifestInspectState.value = ManifestInspectState.Ready(manifest, localFile)
                 } catch (e: Exception) {
-                    val errMsg = "Não foi possível ler o arquivo local: ${e.localizedMessage ?: e.message}"
+                    val errMsg = "Could not read local file: ${e.localizedMessage ?: e.message}"
                     Log.e("RestoreInspection", "[INSPECT] $errMsg", e)
                     dbHelper.insertLog(LogLevel.ERROR, "Restore", errMsg)
                     _manifestInspectState.value = ManifestInspectState.Error(errMsg, canRetry = false)
@@ -1805,7 +1805,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     record.destination.contains("Drive", ignoreCase = true)
 
             if (!isCloudBackup) {
-                val errMsg = "Arquivo de backup não encontrado no aparelho e não está disponível na nuvem."
+                val errMsg = "Backup file not found on device and not available in cloud."
                 Log.e("RestoreInspection", "[INSPECT] $errMsg")
                 dbHelper.insertLog(LogLevel.ERROR, "Restore", errMsg)
                 _manifestInspectState.value = ManifestInspectState.Error(errMsg, canRetry = false)
@@ -1814,7 +1814,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             // Verificar conectividade de rede
             if (!_activeNetworkDetails.value.isConnected) {
-                val errMsg = "Sem conexão com a internet para baixar o backup do Google Drive."
+                val errMsg = "No internet connection to download backup from Google Drive."
                 Log.e("RestoreInspection", "[INSPECT] $errMsg")
                 dbHelper.insertLog(LogLevel.ERROR, "Restore", errMsg)
                 _manifestInspectState.value = ManifestInspectState.Error(errMsg, canRetry = true)
@@ -1846,7 +1846,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             if (fileId.isNullOrBlank()) {
-                val errMsg = "Arquivo não encontrado no Google Drive. Ele pode ter sido excluído ou a conta não está conectada."
+                val errMsg = "File not found on Google Drive. It may have been deleted or account is not connected."
                 Log.e("RestoreInspection", "[INSPECT] $errMsg")
                 dbHelper.insertLog(LogLevel.ERROR, "Restore", errMsg)
                 _manifestInspectState.value = ManifestInspectState.Error(errMsg, canRetry = true)
@@ -3536,7 +3536,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     includedAppsCount = manifest.items.count { it.type == BackupItemType.APP_APK || it.type == BackupItemType.APP_DATA },
                     includedFilesCount = manifest.items.count { it.type == BackupItemType.FILE },
                     includedDns = manifest.items.any { it.type == BackupItemType.DNS_CONFIG },
-                    destination = "Memória interna",
+                    destination = "Internal storage",
                     syncStatus = SyncStatus.LOCAL_ONLY
                 )
                 dbHelper.insertBackupRecord(rec)

@@ -92,10 +92,10 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 enum class AssistantStep(val stepNumber: Int, val title: String) {
-    SELECTION(1, "O que você deseja fazer backup?"),
-    DESTINATION(2, "Destino do Backup"),
-    SECURITY(3, "Segurança e Compactação"),
-    SUMMARY(4, "Resumo e Execução")
+    SELECTION(1, "Data Selection"),
+    DESTINATION(2, "Backup Destination"),
+    SECURITY(3, "Security & Password"),
+    SUMMARY(4, "Summary & Execution")
 }
 
 data class WizardMediaFolder(
@@ -128,7 +128,7 @@ private fun getFileOrFolderIcon(name: String, isDir: Boolean): ImageVector {
             lower in listOf("download", "downloads") -> Icons.Default.Download
             lower in listOf("documents", "documentos") -> Icons.Default.Description
             lower in listOf("movies", "video", "videos") -> Icons.Default.VideoLibrary
-            lower in listOf("music", "musica", "músicas") -> Icons.Default.MusicNote
+            lower in listOf("music", "musica", "music") -> Icons.Default.MusicNote
             lower in listOf("podcasts", "audiobooks") -> Icons.Default.Podcasts
             lower in listOf("notifications", "ringtones", "alarms", "recordings") -> Icons.Default.Notifications
             lower in listOf("android") -> Icons.Default.Android
@@ -251,7 +251,7 @@ fun BackupWizardScreen(
         }
     }
 
-    // Dados reais para "Dados dos aplicativos"
+    // Dados reais para stringResource(R.string.wizard_apps_data)
     var appDataFoldersCount by remember { mutableIntStateOf(0) }
     var apkBaseCount by remember { mutableIntStateOf(0) }
     var apkBaseTotalBytes by remember { mutableLongStateOf(0L) }
@@ -263,7 +263,7 @@ fun BackupWizardScreen(
     var obbTotalBytes by remember { mutableLongStateOf(0L) }
     var permissionsCount by remember { mutableIntStateOf(0) }
 
-    // Dados reais para "Sistema e Comunicação"
+    // Dados reais para stringResource(R.string.wizard_sys_comm)
     var systemWifiCount by remember { mutableIntStateOf(0) }
     var systemDnsText by remember { mutableStateOf("Configurado") }
     var systemSmsCount by remember { mutableIntStateOf(0) }
@@ -271,7 +271,7 @@ fun BackupWizardScreen(
     var systemContactsCount by remember { mutableIntStateOf(0) }
     var systemBtCount by remember { mutableIntStateOf(0) }
 
-    // Dados reais para "Arquivos e Mídia"
+    // Dados reais para stringResource(R.string.wizard_files_media)
     var wizardMediaFolders by remember { mutableStateOf<List<WizardMediaFolder>>(emptyList()) }
 
     // Reativo: cálculo das pastas reais de aplicativos e seus componentes
@@ -368,7 +368,7 @@ fun BackupWizardScreen(
             runCatching { systemWifiCount = DeviceCategoryInspector.getSavedWifiNetworks(context).size }
             runCatching {
                 val dns = DeviceCategoryInspector.getDnsInfo(context)
-                systemDnsText = if (dns.mode.isNotBlank()) dns.mode else "Automático"
+                systemDnsText = if (dns.mode.isNotBlank()) dns.mode else "Automatic"
             }
             runCatching { systemSmsCount = DeviceCategoryInspector.getSmsConversations(context).size }
             runCatching { systemCallsCount = DeviceCategoryInspector.getCallLogs(context).size }
@@ -516,7 +516,7 @@ fun BackupWizardScreen(
     ) { isGranted ->
         viewModel.refreshAllPermissions()
         if (!isGranted) {
-            Toast.makeText(context, "Permissão necessária para ler os dados deste item no backup.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.wizard_perm_req_item), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -525,7 +525,7 @@ fun BackupWizardScreen(
         if (status == PackageManager.PERMISSION_GRANTED) {
             onProceed()
         } else {
-            Toast.makeText(context, "Conceda permissão para incluir $itemLabel no backup.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.wizard_grant_perm_item, itemLabel), Toast.LENGTH_SHORT).show()
             permissionLauncher.launch(perm)
             onProceed()
         }
@@ -670,9 +670,9 @@ fun BackupWizardScreen(
         val req = pendingPermissionRequest
         if (isGranted) {
             req?.onGranted?.invoke()
-            Toast.makeText(context, "Permissão concedida para ${req?.title ?: "o item"}.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.wizard_perm_granted, req?.title ?: context.getString(R.string.item_label)), Toast.LENGTH_SHORT).show()
         } else {
-            Toast.makeText(context, "Permissão necessária para incluir ${req?.title ?: "o item"} no backup.", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, context.getString(R.string.wizard_perm_req_for, req?.title ?: context.getString(R.string.item_label)), Toast.LENGTH_LONG).show()
         }
         pendingPermissionRequest = null
     }
@@ -693,7 +693,7 @@ fun BackupWizardScreen(
     val isBackupPaused by viewModel.isBackupPaused.collectAsStateWithLifecycle()
     val selectedDriveEmailFromVm by viewModel.selectedDriveAccountEmail.collectAsStateWithLifecycle()
 
-    var storageDestination by remember { mutableStateOf("Armazenamento Local") } // "Armazenamento Local", "Google Drive", "Ambos (Local + Google Drive)"
+    var storageDestination by remember { mutableStateOf(context.getString(R.string.wizard_storage_local)) } // stringResource(R.string.wizard_storage_local), "Google Drive", "Ambos (Local + Google Drive)"
     var selectedDriveAccount by remember { mutableStateOf<String?>(null) }
     var pendingCloudBackupLauncher by remember { mutableStateOf<((String) -> Unit)?>(null) }
 
@@ -707,7 +707,7 @@ fun BackupWizardScreen(
     var passwordInput by remember { mutableStateOf("") }
     var isPasswordVisible by remember { mutableStateOf(false) }
 
-    var compressionMode by remember { mutableStateOf("Padrão (ZIP-MIXED)") } // "Padrão (ZIP-MIXED)", "Rápida (STORED)"
+    var compressionMode by remember { mutableStateOf(context.getString(R.string.wizard_comp_zip_mixed)) } // stringResource(R.string.wizard_comp_zip_mixed), stringResource(R.string.wizard_comp_stored)
 
     // ==========================================
     // PARENT TRISTATE CALCULATIONS
@@ -823,12 +823,12 @@ fun BackupWizardScreen(
                             onBack()
                         }
                     }) {
-                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar", tint = TextPrimary)
+                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.btn_back), tint = TextPrimary)
                     }
 
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = "Backup Rápido (${currentStep.stepNumber}/${AssistantStep.values().size})",
+                            text = stringResource(R.string.wizard_quick_backup_step, currentStep.stepNumber, AssistantStep.values().size),
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             color = TextPrimary
                         )
@@ -845,7 +845,7 @@ fun BackupWizardScreen(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = if (isRootActive) "Modo: Root (Superusuário)" else "Modo: Sem root",
+                                text = if (isRootActive) stringResource(R.string.wizard_mode_root) else "Modo: Sem root",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = if (isRootActive) StatusSuccess else StatusWarning
                             )
@@ -931,7 +931,7 @@ fun BackupWizardScreen(
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = "VOLTAR",
+                                        text = stringResource(R.string.btn_back),
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 13.sp,
                                         color = TextPrimary,
@@ -1013,7 +1013,7 @@ fun BackupWizardScreen(
 
                                             val startBackupJob = { accountEmail: String? ->
                                                 viewModel.launchBackup(
-                                                    title = "Backup Rápido ReSync",
+                                                    title = context.getString(R.string.wizard_title),
                                                     selectedApps = selectedAppsList,
                                                     selectedFiles = deduplicatedFiles,
                                                     includeSms = includeSms,
@@ -1100,13 +1100,13 @@ fun BackupWizardScreen(
                         // Header Titles
                         Column {
                             Text(
-                                text = "O que você deseja fazer backup?",
+                                text = stringResource(R.string.wizard_step1_title),
                                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                                 color = TextPrimary
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Selecione as categorias e componentes que serão incluídos no seu arquivo de cofre.",
+                                text = stringResource(R.string.wizard_vault_categories_desc),
                                 color = TextSecondary,
                                 fontSize = 13.sp
                             )
@@ -1221,7 +1221,7 @@ fun BackupWizardScreen(
                             ) {
                                 Icon(Icons.Default.Deselect, contentDescription = null, modifier = Modifier.size(16.dp), tint = StatusError)
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("LIMPAR SELEÇÃO", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = StatusError)
+                                Text(stringResource(R.string.wizard_clear_selection), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = StatusError)
                             }
                         }
 
@@ -1231,8 +1231,8 @@ fun BackupWizardScreen(
                         CategorySelectionCard(
                             icon = Icons.Default.Apps,
                             iconTint = primaryAccent,
-                            title = "Aplicativos selecionados",
-                            subtitle = "${selectedAppPackages.size} de ${apps.size} selecionados • Escolha quais aplicativos farão parte do backup",
+                            title = stringResource(R.string.wizard_selected_apps),
+                            subtitle = stringResource(R.string.wizard_select_apps_part, selectedAppPackages.size, apps.size),
                             parentState = appsSelectionParentState,
                             onParentToggle = {
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -1292,8 +1292,8 @@ fun BackupWizardScreen(
                         CategorySelectionCard(
                             icon = Icons.Default.FolderShared,
                             iconTint = AccentElectricCyan,
-                            title = "Dados dos aplicativos",
-                            subtitle = "$appDataFoldersCount ${if (appDataFoldersCount == 1) "pasta" else "pastas"} • Aplicativo, componentes, dados e permissões",
+                            title = stringResource(R.string.wizard_apps_data),
+                            subtitle = stringResource(R.string.wizard_app_components_data),
                             parentState = appDataParentState,
                             onParentToggle = {
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -1331,7 +1331,7 @@ fun BackupWizardScreen(
                                         SubOptionItem(
                                             icon = Icons.Default.Android,
                                             label = "APK base",
-                                            description = "Binário do aplicativo instalável • $apkBaseCount apps (${FormatUtils.formatBytes(apkBaseTotalBytes)})",
+                                            description = stringResource(R.string.wizard_base_apk_bytes, apkBaseCount, FormatUtils.formatBytes(apkBaseTotalBytes)),
                                             checked = includeBaseApk,
                                             onCheckedChange = {
                                                 includeBaseApk = it
@@ -1347,7 +1347,7 @@ fun BackupWizardScreen(
                                         SubOptionItem(
                                             icon = Icons.Default.PieChart,
                                             label = "Splits",
-                                            description = "Módulos de densidade e ABI • $splitsCount módulos (${FormatUtils.formatBytes(splitsTotalBytes)})",
+                                            description = stringResource(R.string.wizard_splits_bytes, splitsCount, FormatUtils.formatBytes(splitsTotalBytes)),
                                             checked = includeAppSplits,
                                             onCheckedChange = {
                                                 includeAppSplits = it
@@ -1362,11 +1362,11 @@ fun BackupWizardScreen(
                                     item {
                                         SubOptionItem(
                                             icon = Icons.Default.Storage,
-                                            label = if (isRootActive) "Dados internos (/data/data)" else "Dados internos (Requer acesso avançado)",
+                                            label = if (isRootActive) "Dados internos (/data/data)" else stringResource(R.string.wizard_internal_data_title),
                                             description = if (isRootActive) {
-                                                "Bancos de dados e preferências (/data/data) • $internalDataCount pastas (${FormatUtils.formatBytes(internalDataTotalBytes)})"
+                                                stringResource(R.string.wizard_internal_data_folders, internalDataCount, FormatUtils.formatBytes(internalDataTotalBytes))
                                             } else {
-                                                "Requer acesso avançado. Em modo sem root, APKs, recursos extras e mídia são copiados • $internalDataCount pastas"
+                                                stringResource(R.string.wizard_non_root_data_notice, internalDataCount)
                                             },
                                             checked = if (isRootActive) includeAppData else false,
                                             onCheckedChange = {
@@ -1384,8 +1384,8 @@ fun BackupWizardScreen(
                                     item {
                                         SubOptionItem(
                                             icon = Icons.Default.SportsEsports,
-                                            label = "Recursos e mídia",
-                                            description = "Recursos adicionais e mídias pesadas de jogos • $obbCount pastas (${FormatUtils.formatBytes(obbTotalBytes)})",
+                                            label = stringResource(R.string.wizard_resources_media),
+                                            description = stringResource(R.string.wizard_obb_folders, obbCount, FormatUtils.formatBytes(obbTotalBytes)),
                                             checked = includeObb,
                                             onCheckedChange = {
                                                 includeObb = it
@@ -1400,8 +1400,8 @@ fun BackupWizardScreen(
                                     item {
                                         SubOptionItem(
                                             icon = Icons.Default.Security,
-                                            label = "Permissões",
-                                            description = "Privilégios concedidos pelo usuário • $permissionsCount apps",
+                                            label = stringResource(R.string.wizard_permissions_title),
+                                            description = stringResource(R.string.wizard_permissions_desc, permissionsCount),
                                             checked = includeAppPermissions,
                                             onCheckedChange = {
                                                 includeAppPermissions = it
@@ -1422,7 +1422,7 @@ fun BackupWizardScreen(
                         CategorySelectionCard(
                             icon = Icons.Default.SettingsCell,
                             iconTint = AccentNeonPurple,
-                            title = "Sistema e Comunicação",
+                            title = stringResource(R.string.wizard_sys_comm),
                             subtitle = "Wi-Fi, DNS, SMS, Chamadas, Contatos, Bluetooth e Papel de parede",
                             parentState = systemParentState,
                             onParentToggle = {
@@ -1500,7 +1500,7 @@ fun BackupWizardScreen(
                                                     requestWithExplanation(
                                                         android.Manifest.permission.READ_SMS,
                                                         "SMS e MMS",
-                                                        "O ReSync precisa da permissão de leitura de SMS para exportar as conversas."
+                                                        context.getString(R.string.wizard_sms_perm_desc)
                                                     ) {
                                                         includeSms = true
                                                         persistCurrentSelection()
@@ -1525,8 +1525,8 @@ fun BackupWizardScreen(
                                                 if (checked) {
                                                     requestWithExplanation(
                                                         android.Manifest.permission.READ_CALL_LOG,
-                                                        "Histórico de Chamadas",
-                                                        "O ReSync precisa da permissão de leitura de chamadas para exportar o registro de ligações."
+                                                        context.getString(R.string.wizard_call_log_title),
+                                                        context.getString(R.string.wizard_call_read_req)
                                                     ) {
                                                         includeCalls = true
                                                         persistCurrentSelection()
@@ -1552,7 +1552,7 @@ fun BackupWizardScreen(
                                                     requestWithExplanation(
                                                         android.Manifest.permission.READ_CONTACTS,
                                                         "Contatos",
-                                                        "O ReSync precisa da permissão de leitura de contatos para gerar o arquivo vCard."
+                                                        context.getString(R.string.wizard_contacts_vcard_req)
                                                     ) {
                                                         includeContacts = true
                                                         persistCurrentSelection()
@@ -1579,7 +1579,7 @@ fun BackupWizardScreen(
                                                         requestWithExplanation(
                                                             android.Manifest.permission.BLUETOOTH_CONNECT,
                                                             "Bluetooth",
-                                                            "Permissão necessária para listar dispositivos Bluetooth pareados."
+                                                            context.getString(R.string.wizard_bt_perm_desc)
                                                         ) {
                                                             includeBluetooth = true
                                                             persistCurrentSelection()
@@ -1623,9 +1623,9 @@ fun BackupWizardScreen(
                         CategorySelectionCard(
                             icon = Icons.Default.FolderCopy,
                             iconTint = AccentSunsetOrange,
-                            title = "Arquivos e Mídia",
+                            title = stringResource(R.string.wizard_files_media),
                             subtitle = when {
-                                quickBackupPaths.isEmpty() -> "Nenhum item selecionado"
+                                quickBackupPaths.isEmpty() -> stringResource(R.string.wizard_no_item_selected)
                                 else -> "${quickBackupPaths.size} ${if (quickBackupPaths.size == 1) "item selecionado" else "itens selecionados"}"
                             },
                             parentState = filesParentState,
@@ -1672,14 +1672,14 @@ fun BackupWizardScreen(
                                                 Icon(Icons.Default.Security, contentDescription = null, tint = StatusWarning, modifier = Modifier.size(18.dp))
                                                 Spacer(modifier = Modifier.width(6.dp))
                                                 Text(
-                                                    text = "Acesso a todos os arquivos necessário",
+                                                    text = stringResource(R.string.wizard_all_files_req),
                                                     color = StatusWarning,
                                                     fontWeight = FontWeight.Bold,
                                                     fontSize = 12.sp
                                                 )
                                             }
                                             Text(
-                                                text = "Para incluir todas as pastas e arquivos de /storage/emulated/0 no backup, conceda permissão de acesso a todos os arquivos.",
+                                                text = stringResource(R.string.wizard_all_files_perm_req),
                                                 color = TextSecondary,
                                                 fontSize = 11.sp
                                             )
@@ -1700,7 +1700,7 @@ fun BackupWizardScreen(
                                                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                                                 modifier = Modifier.height(30.dp)
                                             ) {
-                                                Text("CONCEDER PERMISSÃO", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 10.5.sp)
+                                                Text(stringResource(R.string.storage_picker_grant_perm), color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 10.5.sp)
                                             }
                                         }
                                     }
@@ -1814,7 +1814,7 @@ fun BackupWizardScreen(
                             color = TextPrimary
                         )
                         Text(
-                            text = "Escolha onde o container .resync será gravado ou sincronizado.",
+                            text = stringResource(R.string.wizard_choose_dest_desc),
                             color = TextSecondary,
                             fontSize = 13.sp
                         )
@@ -1825,10 +1825,10 @@ fun BackupWizardScreen(
                         SelectionOptionCard(
                             icon = Icons.Default.PhoneAndroid,
                             iconTint = AccentSunsetOrange,
-                            title = "Armazenamento Local",
-                            subtitle = "Salvar o cofre .resync na memória interna do aparelho (/sdcard/ReSyncBackups)",
-                            selected = storageDestination == "Armazenamento Local",
-                            onSelect = { storageDestination = "Armazenamento Local" },
+                            title = stringResource(R.string.wizard_storage_local),
+                            subtitle = stringResource(R.string.wizard_save_internal_path),
+                            selected = storageDestination == stringResource(R.string.wizard_storage_local),
+                            onSelect = { storageDestination = context.getString(R.string.wizard_storage_local) },
                             badge = "Offline",
                             haptic = haptic
                         )
@@ -1838,10 +1838,10 @@ fun BackupWizardScreen(
                             icon = Icons.Default.CloudDone,
                             iconTint = AccentElectricCyan,
                             title = "Google Drive",
-                            subtitle = "Sincronização na nuvem com integridade MD5 e SHA-256",
+                            subtitle = stringResource(R.string.wizard_cloud_sync_desc),
                             selected = storageDestination == "Google Drive",
                             onSelect = { storageDestination = "Google Drive" },
-                            badge = "Nuvem",
+                            badge = stringResource(R.string.cloud_title),
                             haptic = haptic
                         )
 
@@ -1850,7 +1850,7 @@ fun BackupWizardScreen(
                             icon = Icons.Default.Sync,
                             iconTint = AccentEmeraldGreen,
                             title = "Ambos (Local + Google Drive)",
-                            subtitle = "Salva uma cópia na memória interna e sincroniza no Google Drive",
+                            subtitle = stringResource(R.string.wizard_save_both_desc),
                             selected = storageDestination == "Ambos (Local + Google Drive)",
                             onSelect = { storageDestination = "Ambos (Local + Google Drive)" },
                             badge = "Recomendado",
@@ -1859,7 +1859,7 @@ fun BackupWizardScreen(
 
                         // Google Drive Account Selector (when Drive or Both is chosen)
                         AnimatedVisibility(
-                            visible = storageDestination != "Armazenamento Local",
+                            visible = storageDestination != stringResource(R.string.wizard_storage_local),
                             enter = fadeIn() + expandVertically(),
                             exit = fadeOut() + shrinkVertically()
                         ) {
@@ -1890,7 +1890,7 @@ fun BackupWizardScreen(
                                                 fontSize = 14.sp
                                             )
                                             Text(
-                                                text = "Selecione a conta para onde o backup será enviado",
+                                                text = stringResource(R.string.wizard_select_drive_account),
                                                 color = TextSecondary,
                                                 fontSize = 11.sp
                                             )
@@ -1946,7 +1946,7 @@ fun BackupWizardScreen(
                                                                 )
                                                                 if (acc.isDefault) {
                                                                     Text(
-                                                                        text = "Conta padrão",
+                                                                        text = stringResource(R.string.wizard_default_account),
                                                                         color = StatusSuccess,
                                                                         fontSize = 10.sp,
                                                                         fontWeight = FontWeight.Medium
@@ -1991,7 +1991,7 @@ fun BackupWizardScreen(
                                                     Icon(Icons.Default.WarningAmber, contentDescription = null, tint = StatusWarning, modifier = Modifier.size(20.dp))
                                                     Spacer(modifier = Modifier.width(10.dp))
                                                     Text(
-                                                        text = "Nenhuma conta Google conectada. Conecte sua conta para fazer backup na nuvem.",
+                                                        text = stringResource(R.string.wizard_no_google_account),
                                                         fontSize = 12.sp,
                                                         color = TextPrimary,
                                                         lineHeight = 16.sp
@@ -2028,12 +2028,12 @@ fun BackupWizardScreen(
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         Text(
-                            text = "Segurança e Compactação",
+                            text = stringResource(R.string.wizard_step2_title),
                             style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                             color = TextPrimary
                         )
                         Text(
-                            text = "Configure a proteção por senha e o algoritmo de compressão do arquivo.",
+                            text = stringResource(R.string.wizard_security_compress_config),
                             color = TextSecondary,
                             fontSize = 13.sp
                         )
@@ -2052,7 +2052,7 @@ fun BackupWizardScreen(
                             icon = Icons.Default.LockOpen,
                             iconTint = TextSecondary,
                             title = "Sem Criptografia",
-                            subtitle = "Container padrão aberto. Restauração rápida em qualquer aparelho.",
+                            subtitle = stringResource(R.string.wizard_default_vault_open),
                             selected = securityMode == "Sem criptografia",
                             onSelect = { securityMode = "Sem criptografia" },
                             haptic = haptic
@@ -2063,10 +2063,10 @@ fun BackupWizardScreen(
                             icon = Icons.Default.EnhancedEncryption,
                             iconTint = AccentCyberPurple,
                             title = "Criptografia com Senha (AES-256)",
-                            subtitle = "Proteção militar de alta segurança com cifra AES-256-GCM",
+                            subtitle = stringResource(R.string.wizard_military_protection),
                             selected = securityMode == "Criptografia com senha",
                             onSelect = { securityMode = "Criptografia com senha" },
-                            badge = "Alta Segurança",
+                            badge = stringResource(R.string.wizard_high_security),
                             haptic = haptic
                         ) {
                             Column(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
@@ -2074,7 +2074,7 @@ fun BackupWizardScreen(
                                     value = passwordInput,
                                     onValueChange = { passwordInput = it },
                                     label = { Text("Digite a Senha do Cofre") },
-                                    placeholder = { Text("Mínimo de 6 caracteres recomendado") },
+                                    placeholder = { Text(stringResource(R.string.wizard_min_pass_chars)) },
                                     singleLine = true,
                                     visualTransformation = if (isPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                                     trailingIcon = {
@@ -2095,7 +2095,7 @@ fun BackupWizardScreen(
                                 )
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Text(
-                                    text = "Atenção: Guarde esta senha. Sem ela, os dados não poderão ser restaurados.",
+                                    text = stringResource(R.string.wizard_pass_warning),
                                     fontSize = 11.sp,
                                     color = StatusWarning,
                                     lineHeight = 14.sp
@@ -2106,7 +2106,7 @@ fun BackupWizardScreen(
                         Spacer(modifier = Modifier.height(6.dp))
 
                         Text(
-                            text = "ALGORITMO DE COMPACTAÇÃO",
+                            text = stringResource(R.string.wizard_comp_algorithm),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = AccentElectricCyan
@@ -2117,9 +2117,9 @@ fun BackupWizardScreen(
                             icon = Icons.Default.FolderZip,
                             iconTint = AccentElectricCyan,
                             title = "Inteligente (ZIP-MIXED)",
-                            subtitle = "Equilíbrio recomendado: comprime scripts e dados; preserva APKs e mídias sem recompressão para máxima velocidade",
-                            selected = compressionMode == "Padrão (ZIP-MIXED)",
-                            onSelect = { compressionMode = "Padrão (ZIP-MIXED)" },
+                            subtitle = stringResource(R.string.wizard_recommended_balance),
+                            selected = compressionMode == stringResource(R.string.wizard_comp_zip_mixed),
+                            onSelect = { compressionMode = context.getString(R.string.wizard_comp_zip_mixed) },
                             badge = "Recomendado",
                             haptic = haptic
                         )
@@ -2128,11 +2128,11 @@ fun BackupWizardScreen(
                         SelectionOptionCard(
                             icon = Icons.Default.Speed,
                             iconTint = AccentSunsetOrange,
-                            title = "Gravação Direta (STORED)",
-                            subtitle = "Armazenamento direto sem compactação para menor uso de CPU",
-                            selected = compressionMode == "Rápida (STORED)",
-                            onSelect = { compressionMode = "Rápida (STORED)" },
-                            badge = "Mais Rápido",
+                            title = stringResource(R.string.wizard_stored_direct),
+                            subtitle = stringResource(R.string.wizard_stored_direct_desc),
+                            selected = compressionMode == stringResource(R.string.wizard_comp_stored),
+                            onSelect = { compressionMode = context.getString(R.string.wizard_comp_stored) },
+                            badge = stringResource(R.string.wizard_faster),
                             haptic = haptic
                         )
 
@@ -2155,7 +2155,7 @@ fun BackupWizardScreen(
                                 color = TextPrimary
                             )
                             Text(
-                                text = "Revise tudo o que será gravado no cofre antes de iniciar.",
+                                text = stringResource(R.string.wizard_review_vault_desc),
                                 color = TextSecondary,
                                 fontSize = 13.sp
                             )
@@ -2163,7 +2163,7 @@ fun BackupWizardScreen(
                             Spacer(modifier = Modifier.height(2.dp))
 
                             Text(
-                                text = "CONTEÚDO SELECIONADO",
+                                text = stringResource(R.string.wizard_selected_content),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = primaryAccent
@@ -2177,13 +2177,13 @@ fun BackupWizardScreen(
                                 if (includeAppData) appChips.add("Dados")
                                 if (includeExternalData) appChips.add("Externos")
                                 if (includeObb) appChips.add("Recursos")
-                                if (includeAppPermissions) appChips.add("Permissões")
+                                if (includeAppPermissions) appChips.add(stringResource(R.string.wizard_permissions_title))
 
                                 SummaryCategoryCard(
                                     icon = Icons.Default.Android,
                                     iconTint = AccentCyberPurple,
                                     title = "${selectedAppPackages.size} Aplicativo(s) Selecionado(s)",
-                                    subtitle = "Pacotes instalados e estruturas de dados do usuário",
+                                    subtitle = stringResource(R.string.wizard_installed_pkgs_desc),
                                     chips = appChips
                                 )
                             }
@@ -2203,8 +2203,8 @@ fun BackupWizardScreen(
                                 SummaryCategoryCard(
                                     icon = Icons.Default.SettingsCell,
                                     iconTint = AccentElectricCyan,
-                                    title = "Sistema e Comunicação",
-                                    subtitle = "Ajustes de conectividade, mensagens e registros telefônicos",
+                                    title = stringResource(R.string.wizard_sys_comm),
+                                    subtitle = stringResource(R.string.wizard_connectivity_desc),
                                     chips = sysChips
                                 )
                             }
@@ -2224,8 +2224,8 @@ fun BackupWizardScreen(
                                 SummaryCategoryCard(
                                     icon = Icons.Default.Folder,
                                     iconTint = AccentSunsetOrange,
-                                    title = "Arquivos e Mídias",
-                                    subtitle = "$customItemCount item(ns) selecionado(s) em todos os locais",
+                                    title = stringResource(R.string.wizard_files_media),
+                                    subtitle = stringResource(R.string.wizard_custom_items_selected, customItemCount),
                                     chips = fileChips
                                 )
                             }
@@ -2233,7 +2233,7 @@ fun BackupWizardScreen(
                             Spacer(modifier = Modifier.height(4.dp))
 
                             Text(
-                                text = "PARÂMETROS DE SAÍDA",
+                                text = stringResource(R.string.wizard_output_params),
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = primaryAccent
@@ -2250,10 +2250,10 @@ fun BackupWizardScreen(
                                 "Ambos (Local + Google Drive)" -> AccentEmeraldGreen
                                 else -> AccentSunsetOrange
                             }
-                            val destSubtitle = if (storageDestination != "Armazenamento Local") {
+                            val destSubtitle = if (storageDestination != stringResource(R.string.wizard_storage_local)) {
                                 "Conta: ${selectedDriveAccount ?: "Conta padrão conectada"}"
                             } else {
-                                "Armazenamento interno: /sdcard/ReSyncBackups"
+                                stringResource(R.string.wizard_save_internal_path)
                             }
 
                             SummaryCategoryCard(
@@ -2268,7 +2268,7 @@ fun BackupWizardScreen(
                                 icon = if (securityMode != "Sem criptografia") Icons.Default.EnhancedEncryption else Icons.Default.LockOpen,
                                 iconTint = if (securityMode != "Sem criptografia") AccentCyberPurple else TextSecondary,
                                 title = if (securityMode != "Sem criptografia") "Criptografia AES-256 Ativada" else "Sem Criptografia",
-                                subtitle = "Compressão: $compressionMode"
+                                subtitle = stringResource(R.string.wizard_compression_mode, compressionMode)
                             )
 
                             Spacer(modifier = Modifier.height(6.dp))
@@ -2313,7 +2313,7 @@ fun BackupWizardScreen(
                                                 fontSize = 14.sp
                                             )
                                             Text(
-                                                text = "$selectedCount itens selecionados para gravação",
+                                                text = stringResource(R.string.wizard_items_selected_count, selectedCount),
                                                 color = TextSecondary,
                                                 fontSize = 11.sp
                                             )
@@ -2343,12 +2343,12 @@ fun BackupWizardScreen(
             onDismissRequest = { showFolderSourceChoiceDialog = false },
             containerColor = DarkSurface,
             title = {
-                Text("Adicionar Pastas ou Arquivos", fontWeight = FontWeight.Bold, color = TextPrimary)
+                Text(stringResource(R.string.wizard_add_folders_files), fontWeight = FontWeight.Bold, color = TextPrimary)
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = "Selecione o método de navegação para escolher itens:",
+                        text = stringResource(R.string.wizard_select_nav_method),
                         fontSize = 13.sp,
                         color = TextSecondary
                     )
@@ -2378,7 +2378,7 @@ fun BackupWizardScreen(
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
                                 Text("Navegador Root Interno (Recomendado)", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp)
-                                Text("Acesso com root a pastas restritas como /sdcard/Android/data e navegação por breadcrumb", fontSize = 11.sp, color = TextSecondary)
+                                Text(stringResource(R.string.wizard_root_folders_nav), fontSize = 11.sp, color = TextSecondary)
                             }
                         }
                     }
@@ -2437,8 +2437,8 @@ fun BackupWizardScreen(
                             }
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
-                                Text("Seletor de Arquivos do Sistema", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp)
-                                Text("Escolher múltiplos arquivos individuais", fontSize = 11.sp, color = TextSecondary)
+                                Text(stringResource(R.string.wizard_sys_file_picker), fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp)
+                                Text(stringResource(R.string.wizard_choose_mult_files), fontSize = 11.sp, color = TextSecondary)
                             }
                         }
                     }
@@ -2447,7 +2447,7 @@ fun BackupWizardScreen(
             confirmButton = {},
             dismissButton = {
                 TextButton(onClick = { showFolderSourceChoiceDialog = false }) {
-                    Text("Cancelar", color = TextSecondary)
+                    Text(stringResource(R.string.action_cancel), color = TextSecondary)
                 }
             }
         )
@@ -2546,7 +2546,7 @@ fun BackupWizardScreen(
                     Box(modifier = Modifier.fillMaxWidth()) {
                         val currentFilterLabel = when (selectedTypeFilter) {
                             "SYSTEM" -> stringResource(R.string.filter_system, systemAppsCount)
-                            "ALL" -> stringResource(R.string.filter_all, allAppsCount)
+                            "ALL" -> stringResource(R.string.filter_all_count, allAppsCount)
                             else -> stringResource(R.string.filter_installed, installedAppsCount)
                         }
                         Surface(
@@ -2607,7 +2607,7 @@ fun BackupWizardScreen(
                                 }
                             )
                             DropdownMenuItem(
-                                text = { Text(stringResource(R.string.filter_all, allAppsCount), color = TextPrimary, fontSize = 12.sp, maxLines = 1) },
+                                text = { Text(stringResource(R.string.filter_all_count, allAppsCount), color = TextPrimary, fontSize = 12.sp, maxLines = 1) },
                                 onClick = {
                                     selectedTypeFilter = "ALL"
                                     isFilterDropdownExpanded = false
@@ -2795,7 +2795,7 @@ fun BackupWizardScreen(
                     border = BorderStroke(1.dp, TextSecondary.copy(alpha = 0.5f)),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text("Voltar", color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                    Text(stringResource(R.string.btn_back), color = TextSecondary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
                 }
             },
             confirmButton = {
@@ -2833,7 +2833,7 @@ fun BackupWizardScreen(
             },
             text = {
                 Text(
-                    text = "O backup de dados internos de aplicativos (/data/data) exige privilégios de Root.\n\nComo o dispositivo está em Modo Sem Root, o ReSync fará o backup apenas dos APKs dos aplicativos selecionados, sem gerar falhas.\n\nDeseja continuar com o backup dos APKs?",
+                    text = stringResource(R.string.non_root_warning_desc),
                     color = TextSecondary,
                     fontSize = 13.sp,
                     lineHeight = 18.sp
@@ -2860,7 +2860,7 @@ fun BackupWizardScreen(
                     showNonRootConfirmationDialog = false
                     pendingNonRootConfirmationAction = null
                 }) {
-                    Text("Cancelar", color = TextMuted, fontSize = 12.sp)
+                    Text(stringResource(R.string.action_cancel), color = TextMuted, fontSize = 12.sp)
                 }
             },
             containerColor = DarkSurface,
@@ -2898,7 +2898,7 @@ fun BackupWizardScreen(
             icon = { Icon(Icons.Default.Security, contentDescription = null, tint = AccentElectricCyan) },
             title = {
                 Text(
-                    text = "Permissão necessária: ${req.title}",
+                    text = stringResource(R.string.wizard_perm_req_title, req.title),
                     fontWeight = FontWeight.Bold,
                     color = TextPrimary
                 )
@@ -2919,12 +2919,12 @@ fun BackupWizardScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = AccentElectricCyan)
                 ) {
-                    Text("Conceder Permissão", color = Color.Black, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.wizard_grant_perm_title), color = Color.Black, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { pendingPermissionRequest = null }) {
-                    Text("Cancelar", color = TextSecondary)
+                    Text(stringResource(R.string.action_cancel), color = TextSecondary)
                 }
             }
         )

@@ -1,5 +1,8 @@
 package com.resync.app.ui.components
 
+import com.resync.app.R
+import androidx.compose.ui.res.stringResource
+
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -42,20 +45,20 @@ fun ErrorDetailDialog(
     val formattedTime = SimpleDateFormat("dd/MM/yyyy HH:mm:ss.SSS", Locale.getDefault()).format(Date(errorDetail.timestamp))
 
     val fullLogText = buildString {
-        appendLine("=== DETALHES DO ERRO - RESYNC ===")
+        appendLine(context.getString(R.string.err_detail_header))
         appendLine("Data/Hora: $formattedTime")
-        appendLine("Módulo: ${errorDetail.module}")
-        appendLine("Operação: ${errorDetail.operation}")
-        appendLine("Exceção: ${errorDetail.exceptionType ?: "N/A"}")
+        appendLine(context.getString(R.string.err_detail_module, errorDetail.module))
+        appendLine(context.getString(R.string.err_detail_operation, errorDetail.operation))
+        appendLine("Exception: ${errorDetail.exceptionType ?: "N/A"}")
         appendLine("Mensagem: ${errorDetail.message}")
         if (errorDetail.rootCauseMessage != null) appendLine("Causa Raiz: ${errorDetail.rootCauseMessage}")
-        if (errorDetail.httpCode != null) appendLine("Código HTTP: ${errorDetail.httpCode}")
+        if (errorDetail.httpCode != null) appendLine(context.getString(R.string.err_detail_http_code, errorDetail.httpCode.toString()))
         if (errorDetail.httpUrl != null) appendLine("URL: ${errorDetail.httpUrl}")
         if (!errorDetail.httpResponseBody.isNullOrBlank()) appendLine("Resposta HTTP:\n${errorDetail.httpResponseBody}")
         if (errorDetail.networkState != null) appendLine("Rede: ${errorDetail.networkState}")
-        if (errorDetail.thermalState != null) appendLine("Térmico: ${errorDetail.thermalState}")
+        if (errorDetail.thermalState != null) appendLine(context.getString(R.string.err_detail_thermal, errorDetail.thermalState))
         if (errorDetail.extraParams.isNotEmpty()) {
-            appendLine("Parâmetros:")
+            appendLine(context.getString(R.string.err_detail_parameters))
             errorDetail.extraParams.forEach { (k, v) -> appendLine("  - $k: $v") }
         }
         if (!errorDetail.deviceContext.isNullOrBlank()) {
@@ -104,7 +107,7 @@ fun ErrorDetailDialog(
                         )
                         Column {
                             Text(
-                                text = "Detalhes Técnicos da Falha",
+                                text = stringResource(R.string.error_dialog_tech_details),
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                 color = TextPrimary
                             )
@@ -154,7 +157,7 @@ fun ErrorDetailDialog(
                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                             val clip = ClipData.newPlainText("ReSync Error Details", fullLogText)
                             clipboard.setPrimaryClip(clip)
-                            Toast.makeText(context, "Log copiado para a área de transferência", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.error_dialog_log_copied), Toast.LENGTH_SHORT).show()
                         },
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),

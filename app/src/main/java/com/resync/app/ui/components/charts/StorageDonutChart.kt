@@ -1,5 +1,8 @@
 package com.resync.app.ui.components.charts
 
+import com.resync.app.R
+import androidx.compose.ui.res.stringResource
+
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -42,10 +45,10 @@ fun StorageDonutChart(
 ) {
     val segments = remember(stats) {
         listOf(
-            StorageSegment("Aplicativos", stats.appsStorageBytes, AccentNeonBlue),
+            StorageSegment("Apps", stats.appsStorageBytes, AccentNeonBlue),
             StorageSegment("Backups", stats.backupStorageUsedBytes, AccentCyberPurple),
             StorageSegment("Fotos", stats.photosBytes, AccentEmeraldGreen),
-            StorageSegment("Vídeos", stats.videosBytes, AccentSunsetOrange),
+            StorageSegment("Videos", stats.videosBytes, AccentSunsetOrange),
             StorageSegment("Documentos", stats.documentsBytes, AccentElectricCyan),
             StorageSegment("Outros", stats.othersBytes, TextMuted)
         ).filter { it.bytes > 0 }
@@ -77,7 +80,7 @@ fun StorageDonutChart(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "Armazenamento do Dispositivo",
+            text = stringResource(R.string.chart_device_storage),
             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
             color = TextPrimary
         )

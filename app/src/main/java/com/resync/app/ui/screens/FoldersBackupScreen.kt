@@ -1,5 +1,8 @@
 package com.resync.app.ui.screens
 
+import com.resync.app.R
+import androidx.compose.ui.res.stringResource
+
 import android.net.Uri
 import android.os.Environment
 import android.widget.Toast
@@ -119,7 +122,7 @@ fun FoldersBackupScreen(
                     IconButton(onClick = onBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Voltar",
+                            contentDescription = stringResource(R.string.btn_back),
                             tint = TextPrimary
                         )
                     }
@@ -166,14 +169,14 @@ fun FoldersBackupScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Sincronização de Pastas",
+                                text = stringResource(R.string.folders_sync_title),
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 13.5.sp,
                                 color = TextPrimary
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Gerencie pastas locais para backup de arquivos ou sincronização direta com a nuvem.",
+                                text = stringResource(R.string.folders_sync_desc),
                                 fontSize = 11.sp,
                                 color = TextSecondary,
                                 lineHeight = 15.sp
@@ -312,7 +315,7 @@ fun FoldersBackupScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = if (folder.totalSizeBytes > 0L) FormatUtils.formatBytes(folder.totalSizeBytes) else "Diretório local",
+                                    text = if (folder.totalSizeBytes > 0L) FormatUtils.formatBytes(folder.totalSizeBytes) else stringResource(R.string.folders_local_dir),
                                     fontSize = 11.5.sp,
                                     color = TextSecondary,
                                     fontWeight = FontWeight.Medium
@@ -320,7 +323,7 @@ fun FoldersBackupScreen(
 
                                 Button(
                                     onClick = {
-                                        Toast.makeText(context, "Sincronização de ${folder.name} iniciada!", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, context.getString(R.string.folders_sync_started, folder.name), Toast.LENGTH_SHORT).show()
                                     },
                                     shape = RoundedCornerShape(8.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = primaryAccent),

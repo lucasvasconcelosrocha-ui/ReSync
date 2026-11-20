@@ -1,5 +1,8 @@
 package com.resync.app.ui.components
 
+import com.resync.app.R
+import androidx.compose.ui.res.stringResource
+
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -69,7 +72,7 @@ fun StoragePickerModal(
             volumes.firstOrNull() ?: StorageVolumeInfo(
                 id = "/storage/emulated/0",
                 rootFile = Environment.getExternalStorageDirectory() ?: File("/storage/emulated/0"),
-                title = "Armazenamento Interno",
+                title = context.getString(R.string.storage_internal),
                 isPrimary = true,
                 isRemovable = false,
                 totalBytes = 0L,
@@ -168,20 +171,20 @@ fun StoragePickerModal(
                                             Icons.AutoMirrored.Filled.ArrowBack
                                         else
                                             Icons.Default.Close,
-                                        contentDescription = "Fechar / Voltar",
+                                        contentDescription = stringResource(R.string.btn_back),
                                         tint = TextPrimary
                                     )
                                 }
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Column {
                                     Text(
-                                        text = "Selecionar no Armazenamento",
+                                        text = stringResource(R.string.storage_picker_select_in_storage),
                                         fontWeight = FontWeight.Bold,
                                         color = TextPrimary,
                                         fontSize = 16.sp
                                     )
                                     Text(
-                                        text = "Escolha pastas e arquivos para o backup rápido",
+                                        text = stringResource(R.string.storage_picker_choose_folders),
                                         color = TextSecondary,
                                         fontSize = 11.sp
                                     )
@@ -440,11 +443,11 @@ fun StoragePickerModal(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Icons.Default.Warning, contentDescription = null, tint = StatusWarning, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Acesso Total aos Arquivos Necessário", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp)
+                                    Text(stringResource(R.string.storage_picker_all_files_req), fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp)
                                 }
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = "Para visualizar e selecionar pastas como DCIM, Documentos e cartões SD no Android 11+, conceda a permissão especial de armazenamento.",
+                                    text = stringResource(R.string.storage_picker_all_files_desc),
                                     fontSize = 11.sp,
                                     color = TextSecondary
                                 )
@@ -467,7 +470,7 @@ fun StoragePickerModal(
                                     shape = RoundedCornerShape(6.dp),
                                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                                 ) {
-                                    Text("CONCEDER PERMISSÃO", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                    Text(stringResource(R.string.storage_picker_grant_perm), color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                                 }
                             }
                         }
@@ -538,7 +541,7 @@ fun StoragePickerModal(
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(Icons.Default.FolderOpen, contentDescription = null, tint = TextMuted, modifier = Modifier.size(44.dp))
                                 Spacer(modifier = Modifier.height(8.dp))
-                                Text("Nenhum arquivo ou pasta nesta pasta.", color = TextSecondary, fontSize = 13.sp)
+                                Text(stringResource(R.string.storage_picker_no_files_folder), color = TextSecondary, fontSize = 13.sp)
                             }
                         }
                     } else {
@@ -636,7 +639,7 @@ fun StoragePickerModal(
                                             Spacer(modifier = Modifier.height(2.dp))
 
                                             val detailText = when {
-                                                isParentSelected -> "✓ Incluído pela pasta pai"
+                                                isParentSelected -> stringResource(R.string.storage_picker_included_by_parent)
                                                 item.isDirectory && isCalculatingThis -> "Calculando tamanho..."
                                                 item.isDirectory && calculatedSize != null -> "${StorageRepository.formatFileSize(calculatedSize)} • Toque para abrir"
                                                 item.isDirectory -> "Pasta • Toque para abrir"

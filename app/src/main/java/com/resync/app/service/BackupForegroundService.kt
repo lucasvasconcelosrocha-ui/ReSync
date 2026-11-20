@@ -189,7 +189,7 @@ class BackupForegroundService : Service() {
 
                     val notifTitle = when {
                         progress.isPaused -> if (isDriveUpload) "Drive ↑ Pausado ($pct%)" else "Backup Pausado ($pct%)"
-                        !com.resync.app.cloud.gdrive.CloudNetworkMonitor.isConnected() && isDriveUpload -> "Aguardando conexão... ($pct%)"
+                        !com.resync.app.cloud.gdrive.CloudNetworkMonitor.isConnected() && isDriveUpload -> "Waiting for connection... ($pct%)"
                         isDriveUpload -> "Google Drive ↑ ($pct%)"
                         else -> "Realizando Backup ($pct%)"
                     }
@@ -234,7 +234,7 @@ class BackupForegroundService : Service() {
                         sizeDest = sizeDest,
                         batchRate = batchRateLine,
                         speed = speedLine,
-                        subText = if (progress.isPaused) "Pausado" else progress.stage.ifBlank { "Em andamento" },
+                        subText = if (progress.isPaused) "Paused" else progress.stage.ifBlank { "In progress" },
                         paused = progress.isPaused,
                         remainingSeconds = remainingSec
                     )
@@ -308,7 +308,7 @@ class BackupForegroundService : Service() {
             sizeDest = "0 B • $destStr",
             batchRate = "Lote: 0/0 • Taxa: 0%",
             speed = "Velocidade: 0,0 MB/s",
-            subText = "Preparando transferência...",
+            subText = "Preparing transfer...",
             paused = false
         )
         try {
@@ -384,7 +384,7 @@ class BackupForegroundService : Service() {
             BackupRepository.resumeBackup()
         }
         updateNotification(
-            title = if (pause) "Operação Pausada" else "Retomando Operação...",
+            title = if (pause) "Operation Paused" else "Resuming Operation...",
             progress = -1,
             sizeDest = "Em espera",
             batchRate = "Lote: Pausado • Taxa: --",
@@ -415,7 +415,7 @@ class BackupForegroundService : Service() {
                     roomDb.activeOperationDao().insertOrUpdate(
                         op.copy(
                             status = "CANCELLED",
-                            stage = "Cancelado pelo usuário",
+                            stage = "Cancelled by user",
                             updatedAt = System.currentTimeMillis()
                         )
                     )

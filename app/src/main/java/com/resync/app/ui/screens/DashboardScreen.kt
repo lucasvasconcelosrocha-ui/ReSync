@@ -265,7 +265,7 @@ fun DashboardScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Lock,
-                            contentDescription = "Permissões e Segurança",
+                            contentDescription = stringResource(R.string.dashboard_perm_security),
                             tint = Color.White,
                             modifier = Modifier.size(19.dp)
                         )
@@ -278,7 +278,7 @@ fun DashboardScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Terminal,
-                            contentDescription = "Logs",
+                            contentDescription = stringResource(R.string.account_logger_title),
                             tint = Color.White,
                             modifier = Modifier.size(20.dp)
                         )
@@ -291,7 +291,7 @@ fun DashboardScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Settings,
-                            contentDescription = "Configurações",
+                            contentDescription = stringResource(R.string.dashboard_settings),
                             tint = Color.White,
                             modifier = Modifier.size(20.dp)
                         )
@@ -334,7 +334,7 @@ fun DashboardScreen(
                             } else {
                                 Icon(
                                     imageVector = Icons.Default.Person,
-                                    contentDescription = "Conta Google",
+                                    contentDescription = stringResource(R.string.dashboard_google_account),
                                     tint = Color(0xFFFF8A92),
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -378,7 +378,7 @@ fun DashboardScreen(
                         Icon(Icons.Default.NotificationsOff, contentDescription = null, tint = StatusWarning, modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "Notificações desativadas • Toque para ativar",
+                            text = stringResource(R.string.dashboard_notif_disabled_tap),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = TextPrimary,
@@ -406,13 +406,13 @@ fun DashboardScreen(
                         Icon(Icons.Default.Warning, contentDescription = null, tint = StatusWarning, modifier = Modifier.size(20.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Diagnóstico: ${banner.reasonTitle}",
+                            text = stringResource(R.string.dashboard_diag_prefix, banner.reasonTitle),
                             fontSize = 12.sp,
                             color = TextPrimary,
                             modifier = Modifier.weight(1f)
                         )
                         IconButton(onClick = { viewModel.dismissProcessExitBanner() }, modifier = Modifier.size(24.dp)) {
-                            Icon(Icons.Default.Close, contentDescription = "Fechar", tint = TextSecondary, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.btn_close), tint = TextSecondary, modifier = Modifier.size(16.dp))
                         }
                     }
                 }
@@ -453,14 +453,14 @@ fun DashboardScreen(
                 completedOps.maxByOrNull { it.timestamp }?.let {
                     if (it.timestamp > maxTime) {
                         maxTime = it.timestamp
-                        type = if (it.title.contains("agendad", ignoreCase = true)) "Agendado" else if (it.destinationOrSource.contains("cloud", ignoreCase = true) || it.destinationOrSource.contains("drive", ignoreCase = true)) "Nuvem" else "Manual"
+                        type = if (it.title.contains("agendad", ignoreCase = true)) "Agendado" else if (it.destinationOrSource.contains("cloud", ignoreCase = true) || it.destinationOrSource.contains("drive", ignoreCase = true)) context.getString(R.string.cloud_title) else "Manual"
                     }
                 }
 
                 remoteList.maxByOrNull { it.modifiedTime }?.let {
                     if (it.modifiedTime > maxTime) {
                         maxTime = it.modifiedTime
-                        type = "Nuvem"
+                        type = context.getString(R.string.cloud_title)
                     }
                 }
 
@@ -473,7 +473,7 @@ fun DashboardScreen(
 
                 if (maxTime == 0L && activeAccount?.lastSyncTimestamp != null && activeAccount.lastSyncTimestamp > 0L) {
                     maxTime = activeAccount.lastSyncTimestamp
-                    type = "Nuvem"
+                    type = context.getString(R.string.cloud_title)
                 }
 
                 if (maxTime > 0L) {
@@ -493,7 +493,7 @@ fun DashboardScreen(
                     }
                     Triple(timeStr, "$relativeDateStr • $type", true)
                 } else {
-                    Triple("Nenhum", "Toque para iniciar", false)
+                    Triple(context.getString(R.string.none), "Toque para iniciar", false)
                 }
             }
 
@@ -501,8 +501,8 @@ fun DashboardScreen(
             val totalPackagesCount = localBackupFiles.size + remoteList.size
             val totalMirroredBytes = localBackupFiles.sumOf { it.length() } + remoteList.sumOf { it.sizeBytes }
 
-            val totalPackagesStr = if (totalPackagesCount > 0) "$totalPackagesCount pacotes" else "0 pacotes"
-            val mirroredSizeStr = if (totalMirroredBytes > 0L) "${FormatUtils.formatBytes(totalMirroredBytes)} espelhados" else "0 B espelhados"
+            val totalPackagesStr = if (totalPackagesCount > 0) stringResource(R.string.dashboard_packages_count, totalPackagesCount) else stringResource(R.string.dashboard_packages_zero)
+            val mirroredSizeStr = if (totalMirroredBytes > 0L) stringResource(R.string.dashboard_mirrored_format, FormatUtils.formatBytes(totalMirroredBytes)) else stringResource(R.string.dashboard_mirrored_zero)
 
             // 4. Detecção dinâmica de Gerenciador Root e Permissões
             val installedRootManagers = remember(context) { RootManagers.detectInstalledManagers(context) }
@@ -510,9 +510,9 @@ fun DashboardScreen(
             val hasSuBinary = remember(context) { CapabilityManager(context).hasSuBinary() }
 
             val rootTitle = when {
-                isRootGranted -> "${detectedRootManager ?: "Root"} ativo"
-                detectedRootManager != null || hasSuBinary -> "${detectedRootManager ?: "Root"} detectado"
-                else -> "Sem Root"
+                isRootGranted -> "${detectedRootManager ?: "Root"} ${stringResource(R.string.status_active)}"
+                detectedRootManager != null || hasSuBinary -> "${detectedRootManager ?: "Root"} ${stringResource(R.string.status_detected)}"
+                else -> stringResource(R.string.status_no_root)
             }
             val rootTitleColor = when {
                 isRootGranted -> Color(0xFF10B981)
@@ -520,9 +520,9 @@ fun DashboardScreen(
                 else -> TextSecondary
             }
             val rootSubtitle = when {
-                isRootGranted -> "Modo Estrito (uid 0)"
-                detectedRootManager != null || hasSuBinary -> "Permissão pendente"
-                else -> "Modo Usuário (sem su)"
+                isRootGranted -> stringResource(R.string.dashboard_root_strict)
+                detectedRootManager != null || hasSuBinary -> stringResource(R.string.dashboard_root_pending)
+                else -> stringResource(R.string.dashboard_root_user_mode)
             }
 
             Card(
@@ -560,7 +560,7 @@ fun DashboardScreen(
                                     modifier = Modifier.padding(end = 6.dp)
                                 )
                                 Text(
-                                    text = "SISTEMA PROTEGIDO",
+                                    text = stringResource(R.string.dashboard_system_protected),
                                     color = Color(0xFF10B981),
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
@@ -602,7 +602,7 @@ fun DashboardScreen(
                                 .weight(1f)
                                 .clickable { showHistoryBottomSheet = true },
                             icon = Icons.Default.Schedule,
-                            label = "Último Backup",
+                            label = stringResource(R.string.dashboard_latest_backup),
                             title = latestBackupInfo.first,
                             subtitle = latestBackupInfo.second,
                             subtitleColor = if (latestBackupInfo.third) Color(0xFF10B981) else TextMuted
@@ -614,7 +614,7 @@ fun DashboardScreen(
                                 .weight(1f)
                                 .clickable(onClick = onNavigateToBackupManager),
                             icon = Icons.Default.Inventory2,
-                            label = "Total Arquivos",
+                            label = stringResource(R.string.dashboard_total_files),
                             title = totalPackagesStr,
                             subtitle = mirroredSizeStr,
                             subtitleColor = TextSecondary
@@ -1037,14 +1037,14 @@ fun DashboardScreen(
                         Spacer(modifier = Modifier.height(8.dp))
 
                         Text(
-                            text = "Nenhuma operação em andamento no momento",
+                            text = stringResource(R.string.dashboard_no_running_ops),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Medium,
                             color = Color.White
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "O sistema está pronto para executar novos backups com verificação de integridade SHA-256.",
+                            text = stringResource(R.string.dashboard_ready_for_backups),
                             fontSize = 11.5.sp,
                             color = TextSecondary,
                             lineHeight = 15.sp
@@ -1065,7 +1065,7 @@ fun DashboardScreen(
                             ) {
                                 Icon(Icons.Default.History, contentDescription = null, tint = Color(0xFF38BDF8), modifier = Modifier.size(14.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Histórico", fontSize = 11.sp, color = Color.White)
+                                Text(stringResource(R.string.dashboard_history), fontSize = 11.sp, color = Color.White)
                             }
 
                             OutlinedButton(
@@ -1077,7 +1077,7 @@ fun DashboardScreen(
                             ) {
                                 Icon(Icons.Default.Terminal, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(14.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Logs", fontSize = 11.sp, color = Color.White)
+                                Text(stringResource(R.string.account_logger_title), fontSize = 11.sp, color = Color.White)
                             }
                         }
                     }
@@ -1125,7 +1125,7 @@ fun DashboardScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Alocação de Dados",
+                                text = stringResource(R.string.dashboard_data_allocation),
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
@@ -1149,7 +1149,7 @@ fun DashboardScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Armazenamento Local (/data)",
+                            text = stringResource(R.string.dashboard_local_storage_data),
                             fontSize = 12.sp,
                             color = Color.White,
                             fontWeight = FontWeight.Medium
@@ -1195,7 +1195,7 @@ fun DashboardScreen(
                     ) {
                         LegendItem(color = Color(0xFFFF3B47), label = "Apps")
                         LegendItem(color = Color(0xFF38BDF8), label = "Root Data")
-                        LegendItem(color = Color(0xFF10B981), label = "Mídia")
+                        LegendItem(color = Color(0xFF10B981), label = stringResource(R.string.category_media))
                         LegendItem(color = Color(0xFF64748B), label = "Cache")
                     }
                 }
@@ -1292,10 +1292,10 @@ fun DashboardScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        LegendItem(color = Color(0xFFFF3B47), label = "Backups Nuvem")
-                        LegendItem(color = Color(0xFF38BDF8), label = "Outros Arquivos")
-                        LegendItem(color = Color(0xFF10B981), label = "Sincronizado")
-                        LegendItem(color = Color(0xFF64748B), label = "Livre")
+                        LegendItem(color = Color(0xFFFF3B47), label = stringResource(R.string.dashboard_cloud_backups))
+                        LegendItem(color = Color(0xFF38BDF8), label = stringResource(R.string.dashboard_other_files))
+                        LegendItem(color = Color(0xFF10B981), label = stringResource(R.string.dashboard_synced))
+                        LegendItem(color = Color(0xFF64748B), label = stringResource(R.string.dashboard_free))
                     }
                 }
             }
@@ -1313,7 +1313,7 @@ fun DashboardScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "MÓDULOS DE DADOS",
+                    text = stringResource(R.string.dashboard_data_modules),
                     fontSize = 12.5.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
@@ -1321,7 +1321,7 @@ fun DashboardScreen(
                     fontFamily = FontFamily.Monospace
                 )
                 Text(
-                    text = "9 ATIVOS",
+                    text = stringResource(R.string.dashboard_active_badge, 9),
                     fontSize = 11.5.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF10B981),
@@ -1343,7 +1343,7 @@ fun DashboardScreen(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Default.Apps,
                     title = stringResource(R.string.nav_tab_apps),
-                    subtitle = "$appsCount instalados",
+                    subtitle = stringResource(R.string.dashboard_apps_installed_count, appsCount),
                     badgeText = "$userAppsCount OK",
                     badgeColor = Color(0xFF10B981),
                     onClick = onNavigateToApps
@@ -1583,7 +1583,7 @@ private fun BackupHistoryBottomSheet(
             val remoteList = (remoteBackupsState as RemoteBackupsState.Loaded).backups
             remoteList.forEach { driveFile ->
                 val dateStr = SimpleDateFormat("dd/MM/yyyy • HH:mm", Locale.getDefault()).format(Date(driveFile.modifiedTime))
-                val hashVal = if (!driveFile.md5Checksum.isNullOrBlank()) "Backup verificado" else "Backup na nuvem"
+                val hashVal = if (!driveFile.md5Checksum.isNullOrBlank()) "Backup verificado" else context.getString(R.string.app_detail_cloud_backup)
                 list.add(
                     BackupHistoryItem(
                         title = driveFile.name.removeSuffix(".tar.zst").removeSuffix(".zst"),
@@ -1669,13 +1669,13 @@ private fun BackupHistoryBottomSheet(
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
-                            text = "Histórico de Backups",
+                            text = stringResource(R.string.dashboard_history_title),
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
                         Text(
-                            text = if (historyItems.isNotEmpty()) "${historyItems.size} backups gravados com SHA-256" else "Nenhum backup encontrado",
+                            text = if (historyItems.isNotEmpty()) stringResource(R.string.dashboard_history_recorded, historyItems.size) else stringResource(R.string.dashboard_no_backup_found),
                             fontSize = 11.5.sp,
                             color = TextSecondary
                         )
@@ -1685,7 +1685,7 @@ private fun BackupHistoryBottomSheet(
                 IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
                     Icon(
                         imageVector = Icons.Default.Close,
-                        contentDescription = "Fechar",
+                        contentDescription = stringResource(R.string.btn_close),
                         tint = TextSecondary,
                         modifier = Modifier.size(18.dp)
                     )
@@ -1716,14 +1716,14 @@ private fun BackupHistoryBottomSheet(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Nenhum backup registrado",
+                            text = stringResource(R.string.dashboard_no_backup_registered),
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Inicie um novo backup completo para gerar o histórico com hashes SHA-256 e status de sincronização.",
+                            text = stringResource(R.string.dashboard_start_new_backup_hint),
                             fontSize = 11.5.sp,
                             color = TextSecondary,
                             textAlign = TextAlign.Center
@@ -1883,7 +1883,7 @@ private fun BackupHistoryBottomSheet(
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Text(
-                                            text = "Restaurar Lote",
+                                            text = stringResource(R.string.btn_restore_batch),
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.SemiBold,
                                             color = Color(0xFF38BDF8)
@@ -1912,14 +1912,14 @@ private fun RootDiagBottomSheet(
     val currentTemp by com.resync.app.engine.CpuGovernor.currentDeviceTemperature.collectAsState()
 
     val installedManagers = remember(context) { RootManagers.detectInstalledManagers(context) }
-    val managerName = installedManagers.firstOrNull()?.name ?: "Nenhum gerenciador detectado"
+    val managerName = installedManagers.firstOrNull()?.name ?: stringResource(R.string.dashboard_no_root_manager)
 
     val suPath = remember {
         val candidates = listOf("/system/bin/su", "/system/xbin/su", "/sbin/su", "/data/local/xbin/su", "/system/bin/ksud")
         candidates.firstOrNull { File(it).exists() } ?: "which su: " + (try {
             val p = Runtime.getRuntime().exec(arrayOf("which", "su"))
             p.inputStream.bufferedReader().readLine()
-        } catch (_: Throwable) { null } ?: "não encontrado")
+        } catch (_: Throwable) { null } ?: context.getString(R.string.dashboard_su_not_found))
     }
 
     val kernelVer = remember {
@@ -1995,12 +1995,12 @@ private fun RootDiagBottomSheet(
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF1A2230))
             ) {
                 Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    DiagRow("Status de Execução", if (isRootGranted) "Privilegiado (uid 0)" else "Sandbox (Modo Padrão)", if (isRootGranted) Color(0xFF10B981) else Color(0xFFF59E0B))
-                    DiagRow("Gerenciador Root", managerName, Color.White)
-                    DiagRow("Caminho do Binário su", suPath, Color(0xFF38BDF8))
+                    DiagRow(stringResource(R.string.dashboard_exec_status), if (isRootGranted) stringResource(R.string.dashboard_root_strict) else stringResource(R.string.dashboard_sandbox_default), if (isRootGranted) Color(0xFF10B981) else Color(0xFFF59E0B))
+                    DiagRow(stringResource(R.string.dashboard_root_status), managerName, Color.White)
+                    DiagRow(stringResource(R.string.dashboard_su_path), suPath, Color(0xFF38BDF8))
                     DiagRow("SELinux Enforce", selinuxMode, Color(0xFF10B981))
                     DiagRow("Kernel Linux", kernelVer, TextSecondary)
-                    DiagRow("Temperatura Térmica", "%.1f°C".format(Locale.US, currentTemp), if (currentTemp > 45f) Color(0xFFFF5252) else Color(0xFF10B981))
+                    DiagRow(stringResource(R.string.dashboard_thermal_temp), "%.1f°C".format(Locale.US, currentTemp), if (currentTemp > 45f) Color(0xFFFF5252) else Color(0xFF10B981))
                     DiagRow("Ambiente Android", "Android ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})", TextSecondary)
                 }
             }
@@ -2012,7 +2012,7 @@ private fun RootDiagBottomSheet(
                 Button(
                     onClick = {
                         viewModel.requestRootPermission()
-                        Toast.makeText(context, "Solicitando privilégios de Root...", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.dashboard_requesting_root), Toast.LENGTH_SHORT).show()
                     },
                     modifier = Modifier.weight(1.1f).heightIn(min = 50.dp),
                     shape = RoundedCornerShape(10.dp),
@@ -2100,11 +2100,11 @@ private fun SecurityModal(
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF1A2230))
             ) {
                 Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    DiagRow("Cifra Simétrica", "AES-256-GCM (AEAD 128-bit)", Color(0xFF10B981))
+                    DiagRow(stringResource(R.string.dashboard_symmetric_cipher), "AES-256-GCM (AEAD 128-bit)", Color(0xFF10B981))
                     DiagRow("Hardware KeyStore", "AndroidKeyStore (TEE / StrongBox)", Color(0xFF38BDF8))
-                    DiagRow("Derivação de Chave", "PBKDF2WithHmacSHA256", Color.White)
+                    DiagRow(stringResource(R.string.dashboard_key_derivation), "PBKDF2WithHmacSHA256", Color.White)
                     DiagRow("Integridade de Hash", "SHA-256 Bloco a Bloco", Color(0xFF10B981))
-                    DiagRow("Assinatura do App", "V2/V3 APK Scheme Válido", Color(0xFF10B981))
+                    DiagRow(stringResource(R.string.dashboard_apk_scheme_valid), "V2/V3 APK Scheme", Color(0xFF10B981))
                     DiagRow("Criptografia em Repouso", "Ativa (Local & Google Drive)", Color(0xFF38BDF8))
                 }
             }

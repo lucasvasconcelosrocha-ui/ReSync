@@ -1,5 +1,7 @@
 package com.resync.app.ui.screens
 
+import androidx.compose.ui.res.stringResource
+
 import android.Manifest
 import android.content.Context
 import android.content.Intent
@@ -260,7 +262,7 @@ fun InitialSetupScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showRootManagerChooser = false }) {
-                    Text("Cancelar", color = TextSecondary)
+                    Text(stringResource(R.string.action_cancel), color = TextSecondary)
                 }
             },
             containerColor = DarkSurfaceVariant
@@ -311,7 +313,7 @@ fun InitialSetupScreen(
                     Spacer(modifier = Modifier.height(4.dp))
 
                     Text(
-                        text = "Backup Granular & Proteção Avançada",
+                        text = stringResource(R.string.setup_welcome_title),
                         style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
                         color = primaryAccent
                     )
@@ -378,16 +380,16 @@ fun InitialSetupScreen(
                             )
                             Spacer(modifier = Modifier.height(10.dp))
                             Text(
-                                text = "Para utilizar todos os recursos do aplicativo, algumas permissões e acesso root são necessários.",
+                                text = stringResource(R.string.setup_permissions_root_needed),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = TextSecondary,
                                 lineHeight = 20.sp
                             )
                             Spacer(modifier = Modifier.height(14.dp))
                             Text(
-                                text = "• O aplicativo respeita a invariância do Kotlin Flow e não fecha durante operações.\n" +
-                                        "• Utiliza apenas Google Drive para armazenamento na nuvem.\n" +
-                                        "• Sem dados simulados: todo status é real e auditado.",
+                                text = stringResource(R.string.setup_flow_invariant_bullet2) +
+                                        stringResource(R.string.setup_gdrive_bullet) +
+                                        stringResource(R.string.setup_real_status_bullet),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TextMuted,
                                 lineHeight = 18.sp
@@ -447,7 +449,7 @@ fun InitialSetupScreen(
                                         .padding(horizontal = 8.dp, vertical = 4.dp)
                                 ) {
                                     Text(
-                                        text = if (isRootOk) "● Root Autorizado" else "✕ Root não autorizado",
+                                        text = if (isRootOk) stringResource(R.string.setup_root_authorized) else stringResource(R.string.setup_root_not_authorized),
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = rootBadgeText
@@ -459,7 +461,7 @@ fun InitialSetupScreen(
 
                             if (isRootOk) {
                                 Text(
-                                    text = "✓ ReSync está autorizado no gerenciador de root. Recursos avançados como backup completo de dados de aplicativos (/data/data), chaves de Bluetooth e extração de senhas de Wi-Fi estão disponíveis.",
+                                    text = stringResource(R.string.setup_root_active_features),
                                     color = StatusSuccess,
                                     fontSize = 13.sp,
                                     lineHeight = 18.sp
@@ -505,7 +507,7 @@ fun InitialSetupScreen(
                                         }
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Text(
-                                            text = "O aplicativo opera em modo seguro padrão. Backups de Arquivos, Mídias, Fotos, Vídeos, SMS, Contatos, Chamadas e extração de APKs funcionam com 100% de suporte sem superusuário.",
+                                            text = stringResource(R.string.setup_safe_mode_standard_desc),
                                             fontSize = 11.sp,
                                             color = TextSecondary,
                                             lineHeight = 15.sp
@@ -529,7 +531,7 @@ fun InitialSetupScreen(
                                         )
                                         Spacer(modifier = Modifier.height(2.dp))
                                         Text(
-                                            text = "• Backup e restauração de dados internos de apps (/data/data)\n• Chaves de pareamento Bluetooth\n• Senhas de Wi-Fi salvas do sistema",
+                                            text = stringResource(R.string.setup_root_features_bullets),
                                             fontSize = 11.sp,
                                             color = TextSecondary,
                                             lineHeight = 15.sp
@@ -540,7 +542,7 @@ fun InitialSetupScreen(
                                 if (rootManagers.isEmpty()) {
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Text(
-                                        text = "Nenhum gerenciador de root detectado. Se você usa Magisk, KernelSU ou APatch oculto, abra-o manualmente e autorize o ReSync.",
+                                        text = stringResource(R.string.setup_no_root_manager_found),
                                         fontSize = 11.sp,
                                         color = StatusWarning,
                                         lineHeight = 15.sp
@@ -552,7 +554,7 @@ fun InitialSetupScreen(
                                     Text(
                                         text = feedback,
                                         fontSize = 11.sp,
-                                        color = if (feedback.contains("autorizado", ignoreCase = true) && !feedback.contains("não", ignoreCase = true)) StatusSuccess else StatusWarning,
+                                        color = if (feedback.contains("authorized", true) || feedback.contains("autorizado", true)) StatusSuccess else StatusWarning,
                                         fontWeight = FontWeight.Medium
                                     )
                                 }
@@ -596,7 +598,7 @@ fun InitialSetupScreen(
                                         onClick = {
                                             rootFeedbackMessage = null
                                             viewModel.requestRootPermission { granted ->
-                                                rootFeedbackMessage = if (granted) "Root autorizado com sucesso!" else "Root não autorizado ou pendente."
+                                                rootFeedbackMessage = if (granted) context.getString(R.string.setup_root_authorized_toast) else context.getString(R.string.setup_root_pending_toast)
                                             }
                                         },
                                         enabled = !isRequestingRoot,
@@ -637,7 +639,7 @@ fun InitialSetupScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = continueStep2Color)
                     ) {
                         Text(
-                            text = if (isRootOk) "AVANÇAR PARA PERMISSÕES" else "CONTINUAR",
+                            text = if (isRootOk) stringResource(R.string.setup_next_permissions) else stringResource(R.string.btn_continue),
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp
                         )
@@ -673,19 +675,19 @@ fun InitialSetupScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "PERMISSÕES & ACESSOS",
+                                    text = stringResource(R.string.setup_permissions_access_header),
                                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                     color = TextPrimary
                                 )
                                 Text(
-                                    text = "Role para ver todos",
+                                    text = stringResource(R.string.setup_scroll_to_see_all),
                                     fontSize = 11.sp,
                                     color = TextMuted
                                 )
                             }
                             Spacer(modifier = Modifier.height(6.dp))
                             Text(
-                                text = "Centralizamos todos os acessos essenciais, otimizações e autorizações em uma lista interativa única com status em tempo real.",
+                                text = stringResource(R.string.setup_central_permissions_desc),
                                 fontSize = 12.sp,
                                 color = TextSecondary
                             )
@@ -708,7 +710,7 @@ fun InitialSetupScreen(
                                     SetupPermissionItemRow(
                                         icon = Icons.Default.Folder,
                                         iconTint = AccentEmeraldGreen,
-                                        title = "Acesso ao Armazenamento",
+                                        title = stringResource(R.string.setup_storage_access_title),
                                         isGranted = hasStorage,
                                         grantedLabel = "Concedido",
                                         pendingLabel = "Conceder",
@@ -719,7 +721,7 @@ fun InitialSetupScreen(
                                     SetupPermissionItemRow(
                                         icon = Icons.Default.Notifications,
                                         iconTint = StatusWarning,
-                                        title = "Notificações do Sistema",
+                                        title = stringResource(R.string.setup_system_notifications),
                                         isGranted = hasNotifs,
                                         grantedLabel = "Ativado",
                                         pendingLabel = "Ativar",
@@ -730,7 +732,7 @@ fun InitialSetupScreen(
                                     SetupPermissionItemRow(
                                         icon = Icons.Default.PowerSettingsNew,
                                         iconTint = AccentElectricCyan,
-                                        title = "Início Automático (Autostart)",
+                                        title = stringResource(R.string.setup_autostart_label),
                                         isGranted = hasAutostart,
                                         grantedLabel = "Configurado",
                                         pendingLabel = "Configurar",
@@ -741,9 +743,9 @@ fun InitialSetupScreen(
                                     SetupPermissionItemRow(
                                         icon = Icons.Default.BatteryChargingFull,
                                         iconTint = StatusWarning,
-                                        title = "Otimização de Bateria",
+                                        title = stringResource(R.string.perm_battery_opt_title),
                                         isGranted = hasBattery,
-                                        grantedLabel = "Sem Restrições",
+                                        grantedLabel = stringResource(R.string.perm_unrestricted),
                                         pendingLabel = "Configurar",
                                         onClick = { openBatteryOptimizationSettings() }
                                     )
@@ -764,7 +766,7 @@ fun InitialSetupScreen(
                                     SetupPermissionItemRow(
                                         icon = Icons.Default.Wifi,
                                         iconTint = AccentEmeraldGreen,
-                                        title = "Localização (Nome da rede Wi-Fi)",
+                                        title = stringResource(R.string.setup_location_wifi_ssid),
                                         isGranted = hasLocation,
                                         grantedLabel = "Concedido",
                                         pendingLabel = "Permitir",
@@ -775,7 +777,7 @@ fun InitialSetupScreen(
                                     SetupPermissionItemRow(
                                         icon = Icons.Default.Bluetooth,
                                         iconTint = primaryAccent,
-                                        title = "Dispositivos Próximos (Bluetooth)",
+                                        title = stringResource(R.string.setup_nearby_devices_bt),
                                         isGranted = hasBluetooth,
                                         grantedLabel = "Concedido",
                                         pendingLabel = "Permitir",
@@ -817,7 +819,7 @@ fun InitialSetupScreen(
                             ) {
                                 Icon(Icons.Default.Security, contentDescription = null)
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("SOLICITAR TODAS AS PERMISSÕES", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                Text(stringResource(R.string.setup_request_all_perms), fontWeight = FontWeight.Bold, fontSize = 12.sp)
                             }
 
                             // Acesso a todos os arquivos (Android 11+) se pendente
@@ -830,7 +832,7 @@ fun InitialSetupScreen(
                                 ) {
                                     Icon(Icons.Default.FolderSpecial, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("CONCEDER ACESSO A TODOS OS ARQUIVOS", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = primaryAccent)
+                                    Text(stringResource(R.string.setup_grant_all_files), fontWeight = FontWeight.Bold, fontSize = 11.sp, color = primaryAccent)
                                 }
                             }
                         }
@@ -850,7 +852,7 @@ fun InitialSetupScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = advancePermsColor)
                     ) {
                         Text(
-                            text = if (allPermsOk) "AVANÇAR PARA ARMAZENAMENTO" else "CONTINUAR",
+                            text = if (allPermsOk) stringResource(R.string.setup_next_storage) else stringResource(R.string.btn_continue),
                             fontWeight = FontWeight.Bold,
                             fontSize = 15.sp
                         )
@@ -870,7 +872,7 @@ fun InitialSetupScreen(
                     ) {
                         Column(modifier = Modifier.padding(20.dp)) {
                             Text(
-                                text = "ARMAZENAMENTO",
+                                text = stringResource(R.string.setup_storage_header),
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                 color = TextPrimary
                             )
@@ -879,8 +881,8 @@ fun InitialSetupScreen(
                             val totalGb = "%.1f GB".format(java.util.Locale("pt", "BR"), stats.storageTotalBytes.toDouble() / (1024 * 1024 * 1024))
                             val freeGb = "%.1f GB".format(java.util.Locale("pt", "BR"), stats.storageFreeBytes.toDouble() / (1024 * 1024 * 1024))
 
-                            InfoRow("Acesso", "✓ Disponível", StatusSuccess)
-                            InfoRow("Espaço", "$usedGb / $totalGb")
+                            InfoRow("Access", "✓ " + stringResource(R.string.sys_settings_available), StatusSuccess)
+                            InfoRow(stringResource(R.string.setup_space_label), "$usedGb / $totalGb")
                             InfoRow("Livre", freeGb, StatusSuccess)
 
                             Spacer(modifier = Modifier.height(16.dp))
@@ -888,7 +890,7 @@ fun InitialSetupScreen(
                             Spacer(modifier = Modifier.height(16.dp))
 
                             Text(
-                                text = "REDE & CONEXÃO",
+                                text = stringResource(R.string.setup_network_connection_header),
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                 color = TextPrimary
                             )
@@ -900,7 +902,7 @@ fun InitialSetupScreen(
                                 InfoRow("Tipo de Rede", "Wi-Fi", StatusSuccess)
                                 val hasLocationPerm = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
                                 val rawSsid = wifiDetails.ssid
-                                val cleanSsid = if (rawSsid.contains("Permissão") || rawSsid == "<unknown ssid>") {
+                                val cleanSsid = if (rawSsid.contains("Permission") || rawSsid.contains("Permiss") || rawSsid == "<unknown ssid>") {
                                     "Wi-Fi Conectado"
                                 } else {
                                     rawSsid.ifBlank { "Wi-Fi Conectado" }
@@ -921,7 +923,7 @@ fun InitialSetupScreen(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(
-                                            text = "ℹ Conceder localização para exibir o nome da rede Wi-Fi",
+                                            text = stringResource(R.string.setup_grant_location_wifi),
                                             fontSize = 11.sp,
                                             color = primaryAccent,
                                             modifier = Modifier.weight(1f)
@@ -937,13 +939,13 @@ fun InitialSetupScreen(
                                     Spacer(modifier = Modifier.height(4.dp))
                                 }
                                 InfoRow("Velocidade", "${wifiDetails.linkSpeedMbps} Mbps")
-                                InfoRow("Frequência", wifiDetails.frequencyGhz)
+                                InfoRow(stringResource(R.string.setup_frequency_label), wifiDetails.frequencyGhz)
                                 if (wifiDetails.signalDbm != 0) {
                                     InfoRow("Sinal", "${wifiDetails.signalDbm} dBm")
                                 }
                             } else if (isMobileActive) {
                                 val primarySim = activeNetworkDetails.mobileSims.firstOrNull()
-                                InfoRow("Tipo de Rede", "Dados Móveis", primaryAccent)
+                                InfoRow("Tipo de Rede", stringResource(R.string.setup_mobile_data_label), primaryAccent)
                                 InfoRow("Operadora", primarySim?.carrierName ?: "Rede Celular")
                                 InfoRow("Tecnologia", primarySim?.networkType ?: "4G/5G")
                                 if (!primarySim?.mccMnc.isNullOrBlank()) {
@@ -956,8 +958,8 @@ fun InitialSetupScreen(
                                 val activeSimSlot = if (primarySim != null) "SIM ${primarySim.simSlotIndex + 1}" else "SIM 1"
                                 InfoRow("SIM Ativo", activeSimSlot)
                             } else {
-                                InfoRow("Conexão", "Desconectado", StatusWarning)
-                                InfoRow("Status", "Sem conexão com a internet ativa", TextMuted)
+                                InfoRow(stringResource(R.string.setup_connection_label), "Desconectado", StatusWarning)
+                                InfoRow("Status", stringResource(R.string.setup_no_internet_conn), TextMuted)
                             }
                         }
                     }
@@ -985,14 +987,14 @@ fun InitialSetupScreen(
                                     Icon(Icons.Default.CloudSync, contentDescription = null, tint = AccentElectricCyan, modifier = Modifier.size(22.dp))
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = "Backups encontrados na nuvem",
+                                        text = stringResource(R.string.setup_cloud_backups_found),
                                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                         color = TextPrimary
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Text(
-                                    text = "Identificamos backups da sua conta Google prontos para restauração neste aparelho:",
+                                    text = stringResource(R.string.setup_cloud_backups_ready),
                                     fontSize = 12.sp,
                                     color = TextSecondary
                                 )
@@ -1040,7 +1042,7 @@ fun InitialSetupScreen(
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                         ) {
                             Text(
-                                text = "Começar do zero",
+                                text = stringResource(R.string.setup_start_from_scratch),
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.5.sp,
                                 color = TextSecondary,
@@ -1063,7 +1065,7 @@ fun InitialSetupScreen(
                             Icon(if (cloudBackups.isNotEmpty()) Icons.Default.Restore else Icons.Default.CheckCircle, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (cloudBackups.isNotEmpty()) "RESTAURAR" else "CONCLUIR",
+                                text = if (cloudBackups.isNotEmpty()) stringResource(R.string.action_restore) else stringResource(R.string.setup_finish),
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.5.sp,
                                 color = Color.White,

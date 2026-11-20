@@ -1,5 +1,8 @@
 package com.resync.app.ui.components
 
+import androidx.compose.ui.res.stringResource
+import com.resync.app.R
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -137,9 +140,9 @@ fun AppSelectionListComponent(
         // 2. Filtro Dropdown (Instalados, Sistema, Todos)
         Box(modifier = Modifier.fillMaxWidth()) {
             val filterLabel = when (selectedFilter) {
-                "SYSTEM" -> "Sistema ($systemCount)"
-                "ALL" -> "Todos os apps ($allCount)"
-                else -> "Instalados ($installedCount)"
+                "SYSTEM" -> stringResource(R.string.selection_system_apps, systemCount)
+                "ALL" -> stringResource(R.string.selection_all_apps, allCount)
+                else -> stringResource(R.string.selection_user_installed, installedCount)
             }
 
             Surface(
@@ -182,21 +185,21 @@ fun AppSelectionListComponent(
                     .background(DarkSurfaceVariant)
             ) {
                 DropdownMenuItem(
-                    text = { Text("Instalados pelo usuário ($installedCount)", color = TextPrimary, fontSize = 12.sp) },
+                    text = { Text(stringResource(R.string.selection_user_installed, installedCount), color = TextPrimary, fontSize = 12.sp) },
                     onClick = {
                         selectedFilter = "INSTALLED"
                         isFilterDropdownExpanded = false
                     }
                 )
                 DropdownMenuItem(
-                    text = { Text("Aplicativos do Sistema ($systemCount)", color = TextPrimary, fontSize = 12.sp) },
+                    text = { Text(stringResource(R.string.selection_system_apps, systemCount), color = TextPrimary, fontSize = 12.sp) },
                     onClick = {
                         selectedFilter = "SYSTEM"
                         isFilterDropdownExpanded = false
                     }
                 )
                 DropdownMenuItem(
-                    text = { Text("Todos os Aplicativos ($allCount)", color = TextPrimary, fontSize = 12.sp) },
+                    text = { Text(stringResource(R.string.selection_all_apps, allCount), color = TextPrimary, fontSize = 12.sp) },
                     onClick = {
                         selectedFilter = "ALL"
                         isFilterDropdownExpanded = false
@@ -229,7 +232,7 @@ fun AppSelectionListComponent(
             ) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
-                        text = "Marcar todos",
+                        text = stringResource(R.string.selection_select_all),
                         color = primaryAccent,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -251,7 +254,7 @@ fun AppSelectionListComponent(
             ) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text(
-                        text = "Desmarcar todos",
+                        text = stringResource(R.string.selection_deselect_all),
                         color = TextSecondary,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -292,14 +295,14 @@ fun AppSelectionListComponent(
                         CircularProgressIndicator(modifier = Modifier.size(16.dp), color = primaryAccent, strokeWidth = 2.dp)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Carregando aplicativos instalados...",
+                            text = stringResource(R.string.selection_loading_apps),
                             color = TextMuted,
                             fontSize = 12.sp
                         )
                     }
                 } else {
                     Text(
-                        text = if (searchQuery.isNotEmpty()) "Nenhum aplicativo encontrado para a busca" else "Nenhum aplicativo neste filtro",
+                        text = if (searchQuery.isNotEmpty()) stringResource(R.string.selection_no_apps_search) else stringResource(R.string.selection_no_apps_filter),
                         color = TextMuted,
                         fontSize = 12.sp
                     )

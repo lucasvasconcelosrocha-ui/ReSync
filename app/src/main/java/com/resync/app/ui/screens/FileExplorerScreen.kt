@@ -1,5 +1,9 @@
 package com.resync.app.ui.screens
 
+import com.resync.app.R
+import androidx.compose.ui.res.stringResource
+
+
 import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
@@ -287,7 +291,7 @@ fun FileExplorerScreen(
     viewModel: MainViewModel,
     onBack: () -> Unit,
     onStartBackupWithFiles: (List<String>, BackupFilter?) -> Unit,
-    title: String = "Arquivos"
+    title: String = "Files"
 ) {
     val context = LocalContext.current
     val currentAccent by viewModel.themeAccent.collectAsState()
@@ -609,7 +613,7 @@ fun FileExplorerScreen(
                         }) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Voltar",
+                                contentDescription = stringResource(R.string.btn_back),
                                 tint = TextPrimary
                             )
                         }
@@ -624,7 +628,7 @@ fun FileExplorerScreen(
                                 softWrap = false
                             )
                             Text(
-                                text = if (isRootActive) "● Acesso Root Autorizado" else "Acesso Padrão",
+                                text = if (isRootActive) "● Acesso Root Autorizado" else stringResource(R.string.explorer_standard_access),
                                 fontSize = 11.sp,
                                 color = if (isRootActive) StatusSuccess else TextMuted,
                                 maxLines = 1,
@@ -699,7 +703,7 @@ fun FileExplorerScreen(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
                         modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("Pesquisar arquivos na pasta...", color = TextMuted) },
+                        placeholder = { Text(stringResource(R.string.explorer_search_placeholder), color = TextMuted) },
                         leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = primaryAccent) },
                         trailingIcon = {
                             if (searchQuery.isNotEmpty()) {
@@ -785,7 +789,7 @@ fun FileExplorerScreen(
                                 )
                                 Spacer(modifier = Modifier.width(5.dp))
                                 Text(
-                                    text = if (currentPath.startsWith(rootDir.absolutePath)) "Armazenamento Interno" else "Raiz (/)",
+                                    text = if (currentPath.startsWith(rootDir.absolutePath)) stringResource(R.string.storage_internal) else "Raiz (/)",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = TextPrimary
@@ -815,7 +819,7 @@ fun FileExplorerScreen(
                                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
                                 )
                                 DropdownMenuItem(
-                                    text = { Text("Armazenamento Interno (/storage/emulated/0)", color = TextPrimary, fontSize = 12.5.sp) },
+                                    text = { Text(stringResource(R.string.storage_internal), color = TextPrimary, fontSize = 12.5.sp) },
                                     leadingIcon = { Icon(Icons.Default.PhoneAndroid, contentDescription = null, tint = AccentSunsetOrange) },
                                     onClick = {
                                         currentPath = rootDir.absolutePath
@@ -844,18 +848,18 @@ fun FileExplorerScreen(
                                 )
 
                                 val shortcuts = listOf(
-                                    "/data" to "Dados do Usuário",
-                                    "/data/data" to "Dados dos Aplicativos",
+                                    "/data" to stringResource(R.string.storage_user_data),
+                                    "/data/data" to stringResource(R.string.storage_apps_data),
                                     "/data/app" to "APKs Instalados",
                                     "/system" to "Sistema Android",
                                     "/vendor" to "Drivers do Fabricante",
-                                    "/product" to "Customizações de ROM",
-                                    "/system_ext" to "Extensões do Sistema",
-                                    "/odm" to "Configurações ODM",
-                                    "/apex" to "Módulos APEX",
+                                    "/product" to stringResource(R.string.storage_rom_customizations),
+                                    "/system_ext" to stringResource(R.string.storage_system_extensions),
+                                    "/odm" to stringResource(R.string.storage_odm_settings),
+                                    "/apex" to stringResource(R.string.storage_apex_modules),
                                     "/cache" to "Cache do Sistema",
                                     "/mnt" to "Pontos de Montagem",
-                                    "/storage" to "Dispositivos de Armazenamento"
+                                    "/storage" to stringResource(R.string.storage_devices)
                                 )
 
                                 shortcuts.forEach { (path, label) ->
@@ -921,7 +925,7 @@ fun FileExplorerScreen(
                         ) {
                             Icon(
                                 imageVector = if (showHiddenFiles) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                                contentDescription = if (showHiddenFiles) "Ocultar arquivos ocultos" else "Mostrar arquivos ocultos",
+                                contentDescription = if (showHiddenFiles) stringResource(R.string.storage_hide_hidden_files) else stringResource(R.string.storage_show_hidden_files),
                                 tint = if (showHiddenFiles) primaryAccent else TextMuted,
                                 modifier = Modifier.size(18.dp)
                             )
@@ -984,7 +988,7 @@ fun FileExplorerScreen(
                             Icon(Icons.Default.Lock, contentDescription = null, tint = StatusWarning, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Partição Somente Leitura (RO)",
+                                text = stringResource(R.string.explorer_ro_partition),
                                 fontSize = 11.sp,
                                 color = TextPrimary,
                                 fontWeight = FontWeight.Medium
@@ -1069,7 +1073,7 @@ fun FileExplorerScreen(
                                                 }
                                             }
                                             directoryRefreshTrigger++
-                                            Toast.makeText(context, if (clip.isMove) "Item movido com sucesso" else "Item copiado com sucesso", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, if (clip.isMove) context.getString(R.string.explorer_item_moved_success) else context.getString(R.string.explorer_item_copied_success), Toast.LENGTH_SHORT).show()
                                             clipboard = null
                                         }
                                     },
@@ -1083,7 +1087,7 @@ fun FileExplorerScreen(
                                     onClick = { clipboard = null },
                                     modifier = Modifier.size(28.dp)
                                 ) {
-                                    Icon(Icons.Default.Close, contentDescription = "Cancelar", tint = TextMuted, modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Default.Close, contentDescription = stringResource(R.string.action_cancel), tint = TextMuted, modifier = Modifier.size(16.dp))
                                 }
                             }
                         }
@@ -1155,7 +1159,7 @@ fun FileExplorerScreen(
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
                                         text = when {
-                                            selectedPaths.isEmpty() -> "Nenhum selecionado"
+                                            selectedPaths.isEmpty() -> stringResource(R.string.explorer_none_selected)
                                             allSelectedForBar -> "${FormatUtils.formatItemCount(selectedPaths.size)} selecionados • ${FormatUtils.formatBytes(totalBytes)}"
                                             itemsAvailableForBar.size != selectedPaths.size -> "$countInView de ${itemsAvailableForBar.size} selecionados • ${FormatUtils.formatBytes(totalBytes)}"
                                             else -> "${FormatUtils.formatItemCount(selectedPaths.size)} selecionados • ${FormatUtils.formatBytes(totalBytes)}"
@@ -1175,7 +1179,7 @@ fun FileExplorerScreen(
                                     ) {
                                         Icon(
                                             Icons.Default.Close,
-                                            contentDescription = "Limpar seleção",
+                                            contentDescription = stringResource(R.string.explorer_clear_selection),
                                             tint = TextSecondary,
                                             modifier = Modifier.size(16.dp)
                                         )
@@ -1183,7 +1187,7 @@ fun FileExplorerScreen(
                                 }
                             }
 
-                            // Linha 2: dois botões lado a lado: "Marcar todos (N)" e "Desmarcar todos"
+                            // Linha 2: dois botões lado a lado: "Marcar todos (N)" e stringResource(R.string.storage_unmark_all)
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1202,7 +1206,7 @@ fun FileExplorerScreen(
                                     contentPadding = PaddingValues(horizontal = 4.dp)
                                 ) {
                                     Text(
-                                        text = "Marcar todos (${itemsAvailableForBar.size})",
+                                        text = stringResource(R.string.storage_mark_all_count, itemsAvailableForBar.size),
                                         fontSize = 11.5.sp,
                                         color = primaryAccent,
                                         fontWeight = FontWeight.SemiBold,
@@ -1223,7 +1227,7 @@ fun FileExplorerScreen(
                                     contentPadding = PaddingValues(horizontal = 4.dp)
                                 ) {
                                     Text(
-                                        text = "Desmarcar todos",
+                                        text = stringResource(R.string.storage_unmark_all),
                                         fontSize = 11.5.sp,
                                         color = TextSecondary,
                                         fontWeight = FontWeight.SemiBold,
@@ -1234,7 +1238,7 @@ fun FileExplorerScreen(
 
                             // Linha 2: ações em lote (apenas quando há itens selecionados)
                             if (selectedPaths.isNotEmpty()) {
-                                // Linha 2: dois botões lado a lado, com a mesma largura: "Nuvem" e "Memória interna"
+                                // Linha 2: dois botões lado a lado, com a mesma largura: stringResource(R.string.cloud_title) e stringResource(R.string.app_detail_internal_storage)
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1266,7 +1270,7 @@ fun FileExplorerScreen(
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Text(
-                                            text = "Nuvem",
+                                            text = stringResource(R.string.cloud_title),
                                             fontSize = 11.sp,
                                             color = AccentElectricCyan,
                                             fontWeight = FontWeight.Bold,
@@ -1311,7 +1315,7 @@ fun FileExplorerScreen(
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Text(
-                                            text = "Memória interna",
+                                            text = stringResource(R.string.app_detail_internal_storage),
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 11.sp,
                                             maxLines = 1,
@@ -1364,11 +1368,11 @@ fun FileExplorerScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.Warning, contentDescription = null, tint = StatusWarning, modifier = Modifier.size(20.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Acesso Completo aos Arquivos", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 14.sp)
+                                Text(stringResource(R.string.explorer_full_access_title), fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 14.sp)
                             }
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Para listar e fazer backup de todos os arquivos do dispositivo, conceda a permissão especial do Android.",
+                                text = stringResource(R.string.explorer_full_access_desc),
                                 fontSize = 12.sp,
                                 color = TextSecondary
                             )
@@ -1472,7 +1476,7 @@ fun FileExplorerScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = "Mostrar também instalados",
+                                        text = stringResource(R.string.explorer_also_show_installed),
                                         fontSize = 12.sp,
                                         color = TextPrimary
                                     )
@@ -1501,7 +1505,7 @@ fun FileExplorerScreen(
                         ) {
                             CircularProgressIndicator(modifier = Modifier.size(22.dp), color = primaryAccent, strokeWidth = 2.dp)
                             Spacer(modifier = Modifier.width(10.dp))
-                            Text("Buscando ${selectedCategory.label.lowercase()} no armazenamento...", color = TextSecondary, fontSize = 13.sp)
+                            Text(stringResource(R.string.explorer_searching_category, selectedCategory.label.lowercase()), color = TextSecondary, fontSize = 13.sp)
                         }
                     }
                 }
@@ -1516,7 +1520,7 @@ fun FileExplorerScreen(
                         ) {
                             Icon(Icons.Default.FolderOpen, contentDescription = null, tint = TextMuted, modifier = Modifier.size(48.dp))
                             Spacer(modifier = Modifier.height(12.dp))
-                            Text("Nenhum arquivo encontrado nesta categoria", color = TextSecondary, fontSize = 14.sp)
+                            Text(stringResource(R.string.explorer_no_files_category), color = TextSecondary, fontSize = 14.sp)
                         }
                     }
                 }
@@ -1592,7 +1596,7 @@ fun FileExplorerScreen(
                                                 color = if (item.isInstalled) StatusSuccess.copy(alpha = 0.2f) else StatusWarning.copy(alpha = 0.2f)
                                             ) {
                                                 Text(
-                                                    text = if (item.isInstalled) "Instalado" else "Não instalado",
+                                                    text = if (item.isInstalled) "Instalado" else stringResource(R.string.explorer_not_installed),
                                                     fontSize = 9.5.sp,
                                                     fontWeight = FontWeight.Bold,
                                                     color = if (item.isInstalled) StatusSuccess else StatusWarning,
@@ -1632,7 +1636,7 @@ fun FileExplorerScreen(
                                     }
 
                                     IconButton(onClick = { showItemMenu = true }, modifier = Modifier.size(32.dp)) {
-                                        Icon(Icons.Default.MoreVert, contentDescription = "Mais opções", tint = TextSecondary, modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.explorer_more_options), tint = TextSecondary, modifier = Modifier.size(18.dp))
                                     }
 
                                     DropdownMenu(
@@ -1657,7 +1661,7 @@ fun FileExplorerScreen(
                                             }
                                         )
                                         DropdownMenuItem(
-                                            text = { Text("Backup na nuvem", color = TextPrimary) },
+                                            text = { Text(stringResource(R.string.app_detail_cloud_backup), color = TextPrimary) },
                                             leadingIcon = { Icon(Icons.Default.CloudUpload, contentDescription = null, tint = AccentElectricCyan) },
                                             onClick = {
                                                 showItemMenu = false
@@ -1665,7 +1669,7 @@ fun FileExplorerScreen(
                                             }
                                         )
                                         DropdownMenuItem(
-                                            text = { Text("Backup na memória interna", color = TextPrimary) },
+                                            text = { Text(stringResource(R.string.explorer_internal_storage_backup), color = TextPrimary) },
                                             leadingIcon = { Icon(Icons.Default.Save, contentDescription = null, tint = primaryAccent) },
                                             onClick = {
                                                 showItemMenu = false
@@ -1684,7 +1688,7 @@ fun FileExplorerScreen(
                                             }
                                         )
                                         DropdownMenuItem(
-                                            text = { Text("Informações", color = TextPrimary) },
+                                            text = { Text(stringResource(R.string.app_detail_info), color = TextPrimary) },
                                             leadingIcon = { Icon(Icons.Default.Info, contentDescription = null, tint = TextSecondary) },
                                             onClick = {
                                                 showItemMenu = false
@@ -1838,7 +1842,7 @@ fun FileExplorerScreen(
 
                                 Box {
                                     IconButton(onClick = { showItemMenu = true }, modifier = Modifier.size(36.dp)) {
-                                        Icon(Icons.Default.MoreVert, contentDescription = "Mais opções", tint = TextSecondary, modifier = Modifier.size(20.dp))
+                                        Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.explorer_more_options), tint = TextSecondary, modifier = Modifier.size(20.dp))
                                     }
 
                                     DropdownMenu(
@@ -1863,7 +1867,7 @@ fun FileExplorerScreen(
                                             }
                                         )
                                         DropdownMenuItem(
-                                            text = { Text("Backup na nuvem", color = TextPrimary) },
+                                            text = { Text(stringResource(R.string.app_detail_cloud_backup), color = TextPrimary) },
                                             leadingIcon = { Icon(Icons.Default.CloudUpload, contentDescription = null, tint = AccentElectricCyan) },
                                             onClick = {
                                                 showItemMenu = false
@@ -1871,7 +1875,7 @@ fun FileExplorerScreen(
                                             }
                                         )
                                         DropdownMenuItem(
-                                            text = { Text("Backup na memória interna", color = TextPrimary) },
+                                            text = { Text(stringResource(R.string.explorer_internal_storage_backup), color = TextPrimary) },
                                             leadingIcon = { Icon(Icons.Default.Save, contentDescription = null, tint = primaryAccent) },
                                             onClick = {
                                                 showItemMenu = false
@@ -1899,7 +1903,7 @@ fun FileExplorerScreen(
                                             }
                                         )
                                         DropdownMenuItem(
-                                            text = { Text("Informações", color = TextPrimary) },
+                                            text = { Text(stringResource(R.string.app_detail_info), color = TextPrimary) },
                                             leadingIcon = { Icon(Icons.Default.Info, contentDescription = null, tint = TextSecondary) },
                                             onClick = {
                                                 showItemMenu = false
@@ -1961,7 +1965,7 @@ fun FileExplorerScreen(
                         ) {
                             Icon(Icons.Default.FolderOpen, contentDescription = null, tint = TextMuted, modifier = Modifier.size(48.dp))
                             Spacer(modifier = Modifier.height(12.dp))
-                            Text("Nenhum arquivo encontrado nesta pasta", color = TextSecondary, fontSize = 14.sp)
+                            Text(stringResource(R.string.explorer_no_files_folder), color = TextSecondary, fontSize = 14.sp)
                         }
                     }
                 }
@@ -2104,7 +2108,7 @@ fun FileExplorerScreen(
                             // Context menu for individual file operations
                             Box {
                                 IconButton(onClick = { showItemMenu = true }, modifier = Modifier.size(36.dp)) {
-                                    Icon(Icons.Default.MoreVert, contentDescription = "Mais opções", tint = TextSecondary, modifier = Modifier.size(20.dp))
+                                    Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.explorer_more_options), tint = TextSecondary, modifier = Modifier.size(20.dp))
                                 }
 
                                 DropdownMenu(
@@ -2134,7 +2138,7 @@ fun FileExplorerScreen(
                                                         if (previewFile.exists()) {
                                                             openFile(context, previewFile)
                                                         } else {
-                                                            Toast.makeText(context, "Não foi possível extrair o arquivo para visualização", Toast.LENGTH_SHORT).show()
+                                                            Toast.makeText(context, context.getString(R.string.explorer_err_extract_preview), Toast.LENGTH_SHORT).show()
                                                         }
                                                     }
                                                 }
@@ -2153,7 +2157,7 @@ fun FileExplorerScreen(
                                                 itemName = item.name,
                                                 isDirectory = item.isDirectory
                                             )
-                                            Toast.makeText(context, "Item copiado. Navegue até o destino e toque em 'Colar aqui'", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, context.getString(R.string.explorer_copied_toast), Toast.LENGTH_SHORT).show()
                                         }
                                     )
 
@@ -2168,7 +2172,7 @@ fun FileExplorerScreen(
                                                 itemName = item.name,
                                                 isDirectory = item.isDirectory
                                             )
-                                            Toast.makeText(context, "Item selecionado para mover. Navegue até o destino e toque em 'Mover aqui'", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, context.getString(R.string.explorer_move_toast), Toast.LENGTH_SHORT).show()
                                         }
                                     )
 
@@ -2214,7 +2218,7 @@ fun FileExplorerScreen(
                                     }
 
                                     DropdownMenuItem(
-                                        text = { Text("Backup na nuvem (Google Drive)", color = TextPrimary) },
+                                        text = { Text(stringResource(R.string.explorer_cloud_backup_gdrive), color = TextPrimary) },
                                         leadingIcon = { Icon(Icons.Default.CloudUpload, contentDescription = null, tint = AccentElectricCyan) },
                                         onClick = {
                                             showItemMenu = false
@@ -2223,7 +2227,7 @@ fun FileExplorerScreen(
                                     )
 
                                     DropdownMenuItem(
-                                        text = { Text("Backup na memória interna", color = TextPrimary) },
+                                        text = { Text(stringResource(R.string.explorer_internal_storage_backup), color = TextPrimary) },
                                         leadingIcon = { Icon(Icons.Default.Save, contentDescription = null, tint = primaryAccent) },
                                         onClick = {
                                             showItemMenu = false
@@ -2292,11 +2296,11 @@ fun FileExplorerScreen(
                         fontSize = 12.sp
                     )
                     Text("Tamanho: ${FormatUtils.formatBytes(item.sizeBytes)} (${item.sizeBytes} bytes)", color = TextSecondary, fontSize = 12.sp)
-                    Text("Permissões: ${item.permissions.ifEmpty { "Padrão" }}", color = StatusSuccess, fontSize = 12.sp)
+                    Text("Permissions: ${item.permissions.ifEmpty { "Default" }}", color = StatusSuccess, fontSize = 12.sp)
                     Text("Dono / Grupo: ${item.owner.ifEmpty { "root" }}:${item.group.ifEmpty { "root" }}", color = AccentCyberPurple, fontSize = 12.sp)
                     Text("Modificado em: ${formatFileDate(item.lastModified)}", color = TextSecondary, fontSize = 12.sp)
                     Text(
-                        "Status da Partição: ${if (isReadOnlyPartition(item.path)) "🔒 Somente Leitura (RO)" else "🔓 Leitura e Escrita (RW)"}",
+                        "Partition Status: ${if (isReadOnlyPartition(item.path)) "🔒 Read-Only (RO)" else "🔓 Read-Write (RW)"}",
                         color = if (isReadOnlyPartition(item.path)) StatusWarning else StatusSuccess,
                         fontSize = 12.sp
                     )
@@ -2338,12 +2342,12 @@ fun FileExplorerScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "Deseja tentar remontar a partição de sistema ($currentPath) como Leitura e Escrita (RW)?",
+                        text = stringResource(R.string.explorer_remount_rw_prompt, currentPath),
                         color = TextPrimary,
                         fontSize = 13.sp
                     )
                     Text(
-                        text = "Isso executará comandos de Superusuário (Root) via `mount -o remount,rw`. Em sistemas modernos com EROFS ou System-as-Root sem overlay, a partição física pode permanecer somente leitura a nível de kernel.",
+                        text = stringResource(R.string.explorer_remount_rw_explain),
                         color = TextSecondary,
                         fontSize = 12.sp
                     )
@@ -2359,10 +2363,10 @@ fun FileExplorerScreen(
                                 Shell.cmd("mount -o remount,rw /", "mount -o remount,rw $targetEsc").exec()
                             }
                             if (result.isSuccess) {
-                                Toast.makeText(context, "Partição remontada como Leitura/Escrita!", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, context.getString(R.string.explorer_remount_success), Toast.LENGTH_SHORT).show()
                                 directoryRefreshTrigger++
                             } else {
-                                Toast.makeText(context, "Não foi possível remontar a partição como RW", Toast.LENGTH_LONG).show()
+                                Toast.makeText(context, context.getString(R.string.explorer_remount_failed), Toast.LENGTH_LONG).show()
                             }
                             showRemountDialog = false
                         }
@@ -2374,7 +2378,7 @@ fun FileExplorerScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showRemountDialog = false }) {
-                    Text("Cancelar", color = TextSecondary)
+                    Text(stringResource(R.string.action_cancel), color = TextSecondary)
                 }
             }
         )
@@ -2418,9 +2422,9 @@ fun FileExplorerScreen(
                                 }
                                 if (success) {
                                     directoryRefreshTrigger++
-                                    Toast.makeText(context, "Renomeado com sucesso", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, context.getString(R.string.explorer_renamed_success), Toast.LENGTH_SHORT).show()
                                 } else {
-                                    Toast.makeText(context, "Falha ao renomear arquivo", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, context.getString(R.string.explorer_rename_failed), Toast.LENGTH_SHORT).show()
                                 }
                                 itemToRename = null
                             }
@@ -2435,7 +2439,7 @@ fun FileExplorerScreen(
             },
             dismissButton = {
                 TextButton(onClick = { itemToRename = null }) {
-                    Text("Cancelar", color = TextSecondary)
+                    Text(stringResource(R.string.action_cancel), color = TextSecondary)
                 }
             }
         )
@@ -2463,7 +2467,7 @@ fun FileExplorerScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                     }
                     Text(
-                        text = if (isCritical) "Exclusão em Área Crítica do Sistema" else "Excluir ${item.name}?",
+                        text = if (isCritical) stringResource(R.string.explorer_critical_area_del) else stringResource(R.string.explorer_delete_item_prompt, item.name),
                         fontWeight = FontWeight.Bold,
                         color = StatusError
                     )
@@ -2482,7 +2486,7 @@ fun FileExplorerScreen(
                                 strokeWidth = 2.dp
                             )
                             Text(
-                                text = if (isFolder) "Excluindo pasta e conteúdos..." else "Excluindo arquivo...",
+                                text = if (isFolder) stringResource(R.string.explorer_deleting_folder) else stringResource(R.string.explorer_deleting_file),
                                 color = TextPrimary,
                                 fontSize = 13.sp
                             )
@@ -2496,13 +2500,13 @@ fun FileExplorerScreen(
                             ) {
                                 Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     Text(
-                                        text = "AVISO DE SEGURANÇA ROOT",
+                                        text = stringResource(R.string.explorer_root_safety_warning),
                                         fontWeight = FontWeight.Bold,
                                         color = StatusError,
                                         fontSize = 12.sp
                                     )
                                     Text(
-                                        text = "Você está prestes a excluir um arquivo ou diretório do sistema Android (${item.path}). Isso pode corromper a ROM, impedir a inicialização (bootloop) ou desestabilizar aplicativos.",
+                                        text = stringResource(R.string.explorer_root_delete_danger, item.path),
                                         fontSize = 11.5.sp,
                                         color = TextPrimary
                                     )
@@ -2532,7 +2536,7 @@ fun FileExplorerScreen(
                             }
                         } else {
                             Text(
-                                text = "Esta ação não pode ser desfeita.",
+                                text = stringResource(R.string.explorer_action_cannot_undone),
                                 color = TextSecondary,
                                 fontSize = 13.sp
                             )
@@ -2540,7 +2544,7 @@ fun FileExplorerScreen(
 
                         if (deleteState == DeletionState.DELETE_ERROR && !deleteErrorMessage.isNullOrBlank()) {
                             Text(
-                                text = deleteErrorMessage ?: "Não foi possível excluir o item.",
+                                text = deleteErrorMessage ?: stringResource(R.string.explorer_could_not_delete),
                                 color = StatusError,
                                 fontSize = 12.sp
                             )
@@ -2581,7 +2585,7 @@ fun FileExplorerScreen(
                                     deleteState = DeletionState.DELETE_SUCCESS
                                     Toast.makeText(
                                         context,
-                                        if (isFolder) "Pasta excluída com sucesso" else "Arquivo excluído com sucesso",
+                                        if (isFolder) context.getString(R.string.explorer_folder_deleted_success) else context.getString(R.string.explorer_file_deleted_success),
                                         Toast.LENGTH_SHORT
                                     ).show()
                                     itemToDelete = null
@@ -2589,8 +2593,8 @@ fun FileExplorerScreen(
                                     deleteState = DeletionState.IDLE
                                 } else {
                                     deleteState = DeletionState.DELETE_ERROR
-                                    deleteErrorMessage = "Falha ao excluir o item. O arquivo pode estar em partição somente leitura."
-                                    Toast.makeText(context, "Falha ao excluir o item", Toast.LENGTH_SHORT).show()
+                                    deleteErrorMessage = context.getString(R.string.explorer_delete_failed_ro)
+                                    Toast.makeText(context, context.getString(R.string.explorer_delete_failed), Toast.LENGTH_SHORT).show()
                                 }
                             }
                         },
@@ -2608,7 +2612,7 @@ fun FileExplorerScreen(
                         isReinforcedConfirmed = false
                         deleteState = DeletionState.IDLE
                     }) {
-                        Text("Cancelar", color = TextSecondary)
+                        Text(stringResource(R.string.action_cancel), color = TextSecondary)
                     }
                 }
             }
@@ -2621,12 +2625,12 @@ fun FileExplorerScreen(
         AlertDialog(
             onDismissRequest = { showBackupConfirmDialog = false },
             containerColor = DarkSurface,
-            title = { Text("Iniciar Backup de Arquivos", fontWeight = FontWeight.Bold, color = TextPrimary) },
+            title = { Text(stringResource(R.string.explorer_start_backup_title), fontWeight = FontWeight.Bold, color = TextPrimary) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("${selectedPaths.size} arquivos selecionados para backup.", color = TextSecondary, fontSize = 13.sp)
+                    Text(stringResource(R.string.explorer_selected_files_count, selectedPaths.size), color = TextSecondary, fontSize = 13.sp)
                     Text("Tamanho total estimado: ${formatFileSize(totalBytes)}", fontWeight = FontWeight.SemiBold, color = primaryAccent, fontSize = 13.sp)
-                    Text("Os arquivos serão empacotados com verificação de integridade no container ReSync.", color = TextMuted, fontSize = 12.sp)
+                    Text(stringResource(R.string.explorer_backup_packaged_notice), color = TextMuted, fontSize = 12.sp)
                 }
             },
             confirmButton = {
@@ -2642,7 +2646,7 @@ fun FileExplorerScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showBackupConfirmDialog = false }) {
-                    Text("Cancelar", color = TextSecondary)
+                    Text(stringResource(R.string.action_cancel), color = TextSecondary)
                 }
             }
         )
@@ -2658,7 +2662,7 @@ fun FileExplorerScreen(
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Selecione um filtro pré-configurado:", fontSize = 13.sp, color = TextSecondary)
+                    Text(stringResource(R.string.explorer_select_filter_prompt), fontSize = 13.sp, color = TextSecondary)
 
                     for (filter in savedFilters) {
                         Card(
@@ -2675,7 +2679,7 @@ fun FileExplorerScreen(
                             Column(modifier = Modifier.padding(10.dp)) {
                                 Text(filter.name, fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp)
                                 if (filter.includedExtensions.isNotEmpty()) {
-                                    Text("Extensões: ${filter.includedExtensions.joinToString(", ")}", fontSize = 11.sp, color = TextMuted)
+                                    Text(stringResource(R.string.explorer_extensions_label, filter.includedExtensions.joinToString(", ")), fontSize = 11.sp, color = TextMuted)
                                 }
                                 if (filter.minSizeBytes > 0) {
                                     Text("Tamanho > ${filter.minSizeBytes / (1024 * 1024)} MB", fontSize = 11.sp, color = TextMuted)
@@ -2806,7 +2810,7 @@ fun FileExplorerScreen(
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Backup na nuvem (Google Drive)", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 14.sp, maxLines = 1)
+                            Text(stringResource(R.string.explorer_cloud_backup_gdrive), fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 14.sp, maxLines = 1)
                             Text("Salva na pasta 'ReSync' e sincroniza na conta Google ativa", color = TextSecondary, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
                     }
@@ -2862,8 +2866,8 @@ fun FileExplorerScreen(
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("Backup na memória interna", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 14.sp)
-                            Text("Grava o arquivo .resync em ReSyncBackups na memória interna", color = TextSecondary, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Text(stringResource(R.string.explorer_internal_storage_backup), fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 14.sp)
+                            Text(stringResource(R.string.explorer_save_internal_desc), color = TextSecondary, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 }
@@ -2906,7 +2910,7 @@ fun FileExplorerScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Excluir", fontWeight = FontWeight.Bold, color = StatusError, fontSize = 14.sp)
-                            Text("Apagar permanentemente do armazenamento do dispositivo", color = TextSecondary, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Text(stringResource(R.string.explorer_delete_internal_desc), color = TextSecondary, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 }
@@ -2974,7 +2978,7 @@ fun FileExplorerScreen(
                     }
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = if (!bp.isFinished) "Executando Backup" else if (bp.error == null) "Backup Concluído" else "Backup Finalizado com Avisos",
+                        text = if (!bp.isFinished) stringResource(R.string.explorer_executing_backup) else if (bp.error == null) stringResource(R.string.explorer_backup_completed) else stringResource(R.string.explorer_backup_finished_warnings),
                         fontWeight = FontWeight.Bold,
                         color = TextPrimary,
                         fontSize = 16.sp
@@ -3036,7 +3040,7 @@ fun FileExplorerScreen(
                             }
                         } else {
                             Text(
-                                text = "O backup foi empacotado no container .resync e salvo com sucesso.",
+                                text = stringResource(R.string.explorer_backup_packaged_success),
                                 color = TextSecondary,
                                 fontSize = 13.sp
                             )
@@ -3071,7 +3075,7 @@ fun FileExplorerScreen(
                                         )
                                         Spacer(modifier = Modifier.width(6.dp))
                                         Text(
-                                            text = if (item.success) "✓ OK" else "✕ Falha",
+                                            text = if (item.success) "✓ OK" else stringResource(R.string.explorer_item_failed_badge),
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = if (item.success) StatusSuccess else StatusError
@@ -3099,8 +3103,8 @@ fun FileExplorerScreen(
                         onClick = {
                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                             val details = buildString {
-                                appendLine("=== Relatório de Backup ReSync ===")
-                                appendLine("Estágio: ${bp.stage}")
+                                appendLine("=== ReSync Backup Report ===")
+                                appendLine("Stage: ${bp.stage}")
                                 appendLine("Status: ${if (bp.error == null) "Sucesso" else "Avisos/Falha"}")
                                 if (!bp.error.isNullOrBlank()) appendLine("Detalhes: ${bp.error}")
                                 appendLine("Itens: ${bp.completedItems.size} (${bp.completedItems.count { it.success }} ok, ${bp.completedItems.count { !it.success }} falhas)")
@@ -3113,7 +3117,7 @@ fun FileExplorerScreen(
                                 }
                             }
                             clipboard.setPrimaryClip(ClipData.newPlainText("ReSync Backup", details))
-                            Toast.makeText(context, "Detalhes copiados para a área de transferência", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.explorer_details_copied_toast), Toast.LENGTH_SHORT).show()
                         },
                         border = BorderStroke(1.dp, primaryAccent)
                     ) {
@@ -3138,7 +3142,7 @@ fun FileExplorerScreen(
                                 viewModel.cancelBackup()
                             }
                         ) {
-                            Text("Cancelar", color = StatusError)
+                            Text(stringResource(R.string.action_cancel), color = StatusError)
                         }
                         TextButton(onClick = { isDirectBackupActive = false }) {
                             Text("Minimizar", color = TextMuted)
@@ -3274,7 +3278,7 @@ private fun openFile(context: Context, file: File) {
         }
         context.startActivity(Intent.createChooser(intent, "Abrir com"))
     } catch (e: Exception) {
-        Toast.makeText(context, "Não foi possível abrir o arquivo: ${e.message}", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, context.getString(R.string.explorer_err_open_file, e.message ?: ""), Toast.LENGTH_SHORT).show()
     }
 }
 
@@ -3294,7 +3298,7 @@ private fun shareFile(context: Context, file: File) {
         }
         context.startActivity(Intent.createChooser(intent, "Compartilhar arquivo"))
     } catch (e: Exception) {
-        Toast.makeText(context, "Erro ao compartilhar: ${e.message}", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, context.getString(R.string.explorer_err_share_file, e.message ?: ""), Toast.LENGTH_SHORT).show()
     }
 }
 
@@ -3312,7 +3316,7 @@ private fun installApk(context: Context, file: File) {
         }
         context.startActivity(intent)
     } catch (e: Exception) {
-        Toast.makeText(context, "Não foi possível iniciar o instalador: ${e.message}", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, context.getString(R.string.explorer_err_launch_installer, e.message ?: ""), Toast.LENGTH_SHORT).show()
     }
 }
 

@@ -1,5 +1,8 @@
 package com.resync.app.ui.components
 
+import com.resync.app.R
+import androidx.compose.ui.res.stringResource
+
 import android.os.Environment
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
@@ -368,12 +371,12 @@ fun StorageExplorerListComponent(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        text = "A pasta \"$targetPath\" é uma partição ou área protegida do sistema.",
+                        text = stringResource(R.string.storage_exp_protected_desc, targetPath),
                         color = TextPrimary,
                         fontSize = 13.sp
                     )
                     Text(
-                        text = "O backup pode ser grande e demorado, e exigirá autorização Root para preservar permissões e metadados SELinux.",
+                        text = stringResource(R.string.storage_exp_root_req_desc),
                         color = TextSecondary,
                         fontSize = 12.sp
                     )
@@ -392,7 +395,7 @@ fun StorageExplorerListComponent(
             },
             dismissButton = {
                 OutlinedButton(onClick = { systemFolderToConfirm = null }) {
-                    Text("CANCELAR", color = TextSecondary, fontSize = 12.sp)
+                    Text(stringResource(R.string.cancel_action), color = TextSecondary, fontSize = 12.sp)
                 }
             },
             containerColor = DarkSurface,
@@ -430,7 +433,7 @@ fun StorageExplorerListComponent(
                             )
                             Spacer(modifier = Modifier.width(5.dp))
                             Text(
-                                text = if (currentPath.startsWith(internalRoot.absolutePath)) "Armazenamento Interno" else "Raiz (/)",
+                                text = if (currentPath.startsWith(internalRoot.absolutePath)) stringResource(R.string.storage_internal) else "Raiz (/)",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = TextPrimary
@@ -461,7 +464,7 @@ fun StorageExplorerListComponent(
                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
                         )
                         DropdownMenuItem(
-                            text = { Text("Armazenamento Interno (/storage/emulated/0)", color = TextPrimary, fontSize = 12.sp) },
+                            text = { Text(stringResource(R.string.storage_internal), color = TextPrimary, fontSize = 12.sp) },
                             leadingIcon = { Icon(Icons.Default.PhoneAndroid, contentDescription = null, tint = AccentSunsetOrange) },
                             onClick = {
                                 onPathChange(internalRoot.absolutePath)
@@ -488,18 +491,18 @@ fun StorageExplorerListComponent(
                         )
 
                         val shortcuts = listOf(
-                            "/data" to "Dados do Usuário",
-                            "/data/data" to "Dados dos Aplicativos",
+                            "/data" to stringResource(R.string.storage_user_data),
+                            "/data/data" to stringResource(R.string.storage_apps_data),
                             "/data/app" to "APKs Instalados",
                             "/system" to "Sistema Android",
                             "/vendor" to "Drivers do Fabricante",
-                            "/product" to "Customizações de ROM",
-                            "/system_ext" to "Extensões do Sistema",
-                            "/odm" to "Configurações ODM",
-                            "/apex" to "Módulos APEX",
+                            "/product" to stringResource(R.string.storage_rom_customizations),
+                            "/system_ext" to stringResource(R.string.storage_system_extensions),
+                            "/odm" to stringResource(R.string.storage_odm_settings),
+                            "/apex" to stringResource(R.string.storage_apex_modules),
                             "/cache" to "Cache do Sistema",
                             "/mnt" to "Pontos de Montagem",
-                            "/storage" to "Dispositivos de Armazenamento"
+                            "/storage" to stringResource(R.string.storage_devices)
                         )
 
                         shortcuts.forEach { (path, label) ->
@@ -528,7 +531,7 @@ fun StorageExplorerListComponent(
                     ) {
                         Icon(
                             imageVector = if (showHiddenFiles) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                            contentDescription = if (showHiddenFiles) "Ocultar arquivos ocultos" else "Mostrar arquivos ocultos",
+                            contentDescription = if (showHiddenFiles) stringResource(R.string.storage_hide_hidden_files) else stringResource(R.string.storage_show_hidden_files),
                             tint = if (showHiddenFiles) primaryAccent else TextMuted,
                             modifier = Modifier.size(18.dp)
                         )
@@ -591,7 +594,7 @@ fun StorageExplorerListComponent(
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Subir nível",
+                            contentDescription = stringResource(R.string.storage_up_level),
                             tint = primaryAccent,
                             modifier = Modifier.size(16.dp)
                         )
@@ -602,7 +605,7 @@ fun StorageExplorerListComponent(
                 // Base root badge
                 val isInternal = currentPath.startsWith(internalRoot.absolutePath)
                 Text(
-                    text = if (isInternal) "Armazenamento Interno" else "/",
+                    text = if (isInternal) stringResource(R.string.storage_internal) else "/",
                     fontSize = 11.5.sp,
                     color = if (currentPath == internalRoot.absolutePath || currentPath == "/") TextPrimary else primaryAccent,
                     fontWeight = FontWeight.SemiBold,
@@ -669,7 +672,7 @@ fun StorageExplorerListComponent(
                 contentPadding = PaddingValues(horizontal = 4.dp)
             ) {
                 Text(
-                    text = "Marcar todos (${filteredItems.size})",
+                    text = stringResource(R.string.storage_mark_all_count, filteredItems.size),
                     fontSize = 11.5.sp,
                     color = primaryAccent,
                     fontWeight = FontWeight.SemiBold
@@ -690,7 +693,7 @@ fun StorageExplorerListComponent(
                 contentPadding = PaddingValues(horizontal = 4.dp)
             ) {
                 Text(
-                    text = "Desmarcar todos",
+                    text = stringResource(R.string.storage_unmark_all),
                     fontSize = 11.5.sp,
                     color = TextSecondary,
                     fontWeight = FontWeight.SemiBold
@@ -720,7 +723,7 @@ fun StorageExplorerListComponent(
                         color = primaryAccent
                     )
                     Text(
-                        text = "Carregando diretório...",
+                        text = stringResource(R.string.storage_loading_dir),
                         color = TextSecondary,
                         fontSize = 12.sp
                     )
@@ -736,7 +739,7 @@ fun StorageExplorerListComponent(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = if (searchQuery.isNotEmpty()) "Nenhum arquivo ou pasta encontrado" else "Pasta vazia ou protegida",
+                    text = if (searchQuery.isNotEmpty()) stringResource(R.string.storage_no_files_found) else "Pasta vazia ou protegida",
                     color = TextMuted,
                     fontSize = 12.sp
                 )

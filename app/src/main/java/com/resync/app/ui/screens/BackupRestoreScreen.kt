@@ -81,10 +81,10 @@ fun BackupRestoreScreen(
                 isImporting = false
                 if (res.isSuccess) {
                     val imported = res.getOrThrow()
-                    importMessage = "Backup '${imported.title}' importado com sucesso!"
+                    importMessage = context.getString(R.string.backup_imported_success, imported.title)
                     selectedBackupForSelection = Pair(imported, RestoreSource.LOCAL)
                 } else {
-                    importMessage = "Falha ao importar backup: ${res.exceptionOrNull()?.message}"
+                    importMessage = context.getString(R.string.backup_import_failed, res.exceptionOrNull()?.message ?: "")
                 }
             }
         }
@@ -234,7 +234,7 @@ fun BackupRestoreScreen(
                     },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
-                            Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Voltar", tint = TextPrimary)
+                            Icon(imageVector = Icons.Default.ArrowBack, contentDescription = stringResource(R.string.btn_back), tint = TextPrimary)
                         }
                     },
                     actions = {
@@ -294,7 +294,7 @@ fun BackupRestoreScreen(
                         },
                         label = {
                             Text(
-                                "Todos ($totalCount)",
+                                stringResource(R.string.total_items_count, totalCount),
                                 fontSize = 11.5.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 maxLines = 1,
@@ -394,7 +394,7 @@ fun BackupRestoreScreen(
                         Card(
                             modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                             colors = CardDefaults.cardColors(containerColor = DarkSurfaceVariant),
-                            border = BorderStroke(1.dp, if (importMessage!!.startsWith("Falha")) StatusError else StatusSuccess)
+                            border = BorderStroke(1.dp, if (importMessage!!.startsWith(stringResource(R.string.status_failed))) StatusError else StatusSuccess)
                         ) {
                             Row(
                                 modifier = Modifier.padding(12.dp),
@@ -412,7 +412,7 @@ fun BackupRestoreScreen(
 
                 item {
                     Text(
-                        text = "Backups disponíveis (${filteredEntries.size}):",
+                        text = stringResource(R.string.backups_available_count, filteredEntries.size),
                         style = MaterialTheme.typography.bodySmall,
                         color = TextSecondary,
                         modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
@@ -433,9 +433,9 @@ fun BackupRestoreScreen(
                                 Spacer(modifier = Modifier.height(10.dp))
                                 Text(
                                     text = when (activeFilter) {
-                                        BackupOriginFilter.ALL -> "Nenhum backup encontrado no dispositivo ou Google Drive."
-                                        BackupOriginFilter.LOCAL -> "Nenhum backup encontrado no armazenamento interno."
-                                        BackupOriginFilter.DRIVE -> "Nenhum backup encontrado no Google Drive."
+                                        BackupOriginFilter.ALL -> stringResource(R.string.no_backup_found_all)
+                                        BackupOriginFilter.LOCAL -> stringResource(R.string.no_backup_found_device)
+                                        BackupOriginFilter.DRIVE -> stringResource(R.string.no_backup_found_drive)
                                     },
                                     color = TextSecondary,
                                     fontSize = 13.sp
@@ -488,7 +488,7 @@ fun BackupRestoreScreen(
                             )
                         }
                         Text(
-                            text = "Backups antigos sem manifesto granular. Refaça o backup para habilitar restauração seletiva.",
+                            text = stringResource(R.string.old_backup_no_manifest),
                             fontSize = 11.sp,
                             color = TextMuted
                         )
@@ -502,7 +502,7 @@ fun BackupRestoreScreen(
                             description = legacy.description.ifBlank { "Backup antigo sem manifesto" },
                             dateFormatted = dateStr,
                             sizeBytes = legacy.sizeBytes,
-                            location = if (legacy.remoteDriveFileId != null) "Google Drive" else "Memória interna",
+                            location = if (legacy.remoteDriveFileId != null) "Google Drive" else stringResource(R.string.app_detail_internal_storage),
                             onDelete = { legacyToDelete = legacy }
                         )
                     }
@@ -532,7 +532,7 @@ fun BackupRestoreScreen(
                     Text("Tem certeza que deseja excluir '${b.title}'?", color = TextSecondary, fontSize = 13.sp)
 
                     if (entry.hasLocal && entry.hasDrive) {
-                        Text("Este backup está presente no dispositivo e no Google Drive. Escolha de onde excluir:", color = TextMuted, fontSize = 12.sp)
+                        Text(stringResource(R.string.delete_both_backup_prompt), color = TextMuted, fontSize = 12.sp)
 
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable(enabled = !isDeleting) { deleteMode = "both" }) {
                             RadioButton(selected = deleteMode == "both", onClick = { deleteMode = "both" }, enabled = !isDeleting)
@@ -547,9 +547,9 @@ fun BackupRestoreScreen(
                             Text("Apenas do Google Drive", fontSize = 12.sp, color = TextPrimary)
                         }
                     } else if (entry.hasDrive) {
-                        Text("O arquivo será removido permanentemente da sua conta do Google Drive.", color = TextMuted, fontSize = 11.sp)
+                        Text(stringResource(R.string.delete_drive_confirm_msg), color = TextMuted, fontSize = 11.sp)
                     } else {
-                        Text("O arquivo será apagado permanentemente do armazenamento interno.", color = TextMuted, fontSize = 11.sp)
+                        Text(stringResource(R.string.delete_internal_confirm_msg), color = TextMuted, fontSize = 11.sp)
                     }
 
                     if (deleteError != null) {
@@ -579,9 +579,9 @@ fun BackupRestoreScreen(
                             isDeleting = false
                             if (success) {
                                 backupToDelete = null
-                                Toast.makeText(context, "Backup excluído com sucesso!", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, context.getString(R.string.backup_deleted_success), Toast.LENGTH_SHORT).show()
                             } else {
-                                deleteError = errMsg ?: "Falha ao excluir o backup."
+                                deleteError = errMsg ?: context.getString(R.string.backup_delete_failed)
                             }
                         }
                     },
@@ -606,7 +606,7 @@ fun BackupRestoreScreen(
                     onClick = { backupToDelete = null },
                     enabled = !isDeleting
                 ) {
-                    Text("Cancelar", color = TextSecondary)
+                    Text(stringResource(R.string.action_cancel), color = TextSecondary)
                 }
             }
         )
@@ -638,7 +638,7 @@ fun BackupRestoreScreen(
             },
             dismissButton = {
                 TextButton(onClick = { legacyToDelete = null }) {
-                    Text("Cancelar", color = TextSecondary)
+                    Text(stringResource(R.string.action_cancel), color = TextSecondary)
                 }
             }
         )

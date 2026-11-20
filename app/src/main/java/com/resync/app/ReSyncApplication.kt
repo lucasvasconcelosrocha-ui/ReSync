@@ -16,6 +16,9 @@ import java.util.concurrent.TimeUnit
 class ReSyncApplication : Application() {
 
     companion object {
+        lateinit var instance: ReSyncApplication
+            private set
+
         init {
             // Configure LibSU shell settings globally before any component accesses the shell
             Shell.enableVerboseLogging = false
@@ -29,6 +32,10 @@ class ReSyncApplication : Application() {
 
     private val applicationScope = CoroutineScope(Dispatchers.Default)
 
+    fun getLocalizedContext(): android.content.Context {
+        return com.resync.app.util.LocaleHelper.wrapContext(this)
+    }
+
     override fun attachBaseContext(newBase: android.content.Context) {
         super.attachBaseContext(com.resync.app.util.LocaleHelper.wrapContext(newBase))
     }
@@ -41,6 +48,7 @@ class ReSyncApplication : Application() {
                 .setTimeout(15)
         )
         super.onCreate()
+        instance = this
 
         // Garante canais unificados resync_ops_v3 e limpa canais legados
         com.resync.app.util.HyperFocusNotificationHelper.ensureNotificationChannels(this)

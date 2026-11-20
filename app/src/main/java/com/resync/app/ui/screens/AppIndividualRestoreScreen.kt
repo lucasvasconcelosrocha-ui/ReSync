@@ -174,7 +174,7 @@ fun AppIndividualRestoreScreen(
 
     BackHandler(enabled = true) {
         if (isRestoring) {
-            Toast.makeText(context, "A restauração está em andamento", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.banner_restore_in_progress), Toast.LENGTH_SHORT).show()
         } else {
             viewModel.resetIndividualRestoreState()
             onBack()
@@ -201,7 +201,7 @@ fun AppIndividualRestoreScreen(
                     IconButton(
                         onClick = {
                             if (isRestoring) {
-                                Toast.makeText(context, "A restauração está em andamento", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, context.getString(R.string.banner_restore_in_progress), Toast.LENGTH_SHORT).show()
                             } else {
                                 onBack()
                             }
@@ -210,14 +210,14 @@ fun AppIndividualRestoreScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.ArrowBack,
-                            contentDescription = "Voltar",
+                            contentDescription = stringResource(R.string.btn_back),
                             tint = TextPrimary
                         )
                     }
                     Spacer(modifier = Modifier.width(6.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Restaurar Aplicativo",
+                            text = stringResource(R.string.restore_app_title),
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             color = TextPrimary,
                             maxLines = 1,
@@ -528,7 +528,7 @@ fun AppIndividualRestoreScreen(
                                         color = primaryAccent.copy(alpha = 0.15f)
                                     ) {
                                         Text(
-                                            text = "${points.size} ponto(s) disponível(is)",
+                                            text = stringResource(R.string.restore_points_available, points.size),
                                             fontSize = 10.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = primaryAccent,
@@ -575,7 +575,7 @@ fun AppIndividualRestoreScreen(
                         points.forEach { pt ->
                             val isSelected = pt.backupId == selectedPoint?.backupId && pt.isDrive == selectedPoint?.isDrive
                             val dateStr = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(pt.timestamp))
-                            val locBadge = if (pt.isDrive) "Nuvem" else "Local"
+                            val locBadge = if (pt.isDrive) stringResource(R.string.cloud_title) else "Local"
                             val locIcon = if (pt.isDrive) Icons.Default.Cloud else Icons.Default.Smartphone
                             val locColor = if (pt.isDrive) AccentElectricCyan else StatusSuccess
 
@@ -631,7 +631,7 @@ fun AppIndividualRestoreScreen(
                 // Lista de Componentes Granulares do Aplicativo
                 item(key = "components_header") {
                     Text(
-                        text = "COMPONENTES PARA RESTAURAR",
+                        text = stringResource(R.string.restore_components_header),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextSecondary,
@@ -655,7 +655,7 @@ fun AppIndividualRestoreScreen(
                             ) {
                                 CircularProgressIndicator(modifier = Modifier.size(20.dp), color = primaryAccent, strokeWidth = 2.dp)
                                 Spacer(modifier = Modifier.width(12.dp))
-                                Text("Lendo componentes do backup...", fontSize = 13.sp, color = TextSecondary)
+                                Text(stringResource(R.string.restore_reading_components), fontSize = 13.sp, color = TextSecondary)
                             }
                         }
                     }
@@ -663,9 +663,9 @@ fun AppIndividualRestoreScreen(
                     // 1. APK Base
                     item(key = "comp_apk_base") {
                         val apkSize = apkBaseItems.sumOf { it.sizeBytes }
-                        val versionDisplay = selectedPoint?.versionName?.let { "v$it" } ?: "Instalador base"
+                        val versionDisplay = selectedPoint?.versionName?.let { "v$it" } ?: stringResource(R.string.restore_base_installer)
                         AppRestoreOptionCard(
-                            title = "APK Base",
+                            title = stringResource(R.string.restore_apk_base_title),
                             subtitle = "$versionDisplay • ${FormatUtils.formatBytes(apkSize)}",
                             checked = checkedApkBase,
                             onCheckedChange = { checkedApkBase = it },
@@ -679,8 +679,8 @@ fun AppIndividualRestoreScreen(
                         item(key = "comp_splits") {
                             val splitsSize = splitItems.sumOf { it.sizeBytes }
                             AppRestoreOptionCard(
-                                title = "Componentes do app",
-                                subtitle = "${splitItems.size} arquivos de arquitetura e idioma • ${FormatUtils.formatBytes(splitsSize)}",
+                                title = stringResource(R.string.restore_app_components_title),
+                                subtitle = stringResource(R.string.restore_splits_desc, splitItems.size, FormatUtils.formatBytes(splitsSize)),
                                 checked = checkedSplits,
                                 onCheckedChange = { checkedSplits = it },
                                 icon = Icons.Default.Extension,
@@ -692,10 +692,10 @@ fun AppIndividualRestoreScreen(
                     // 3. Dados Internos
                     item(key = "comp_internal_data") {
                         val intSize = internalDataItems.sumOf { it.sizeBytes }
-                        val intSizeText = if (intSize > 0L) FormatUtils.formatBytes(intSize) else "Dados salvos no pacote"
+                        val intSizeText = if (intSize > 0L) FormatUtils.formatBytes(intSize) else stringResource(R.string.restore_internal_data_fallback)
                         AppRestoreOptionCard(
-                            title = "Dados Internos",
-                            subtitle = "Dados privados do aplicativo • $intSizeText",
+                            title = stringResource(R.string.restore_internal_data_title),
+                            subtitle = stringResource(R.string.restore_internal_data_desc, intSizeText),
                             checked = checkedInternalData,
                             onCheckedChange = { checkedInternalData = it },
                             icon = Icons.Default.Folder,
@@ -708,8 +708,8 @@ fun AppIndividualRestoreScreen(
                         item(key = "comp_external_data") {
                             val extSize = externalDataItems.sumOf { it.sizeBytes }
                             AppRestoreOptionCard(
-                                title = "Dados Externos",
-                                subtitle = "Arquivos da memória compartilhada • ${FormatUtils.formatBytes(extSize)}",
+                                title = stringResource(R.string.restore_external_data_title),
+                                subtitle = stringResource(R.string.restore_external_data_desc, FormatUtils.formatBytes(extSize)),
                                 checked = checkedExternalData,
                                 onCheckedChange = { checkedExternalData = it },
                                 icon = Icons.Default.FolderShared,
@@ -723,8 +723,8 @@ fun AppIndividualRestoreScreen(
                         item(key = "comp_obb") {
                             val obbSize = obbItems.sumOf { it.sizeBytes }
                             AppRestoreOptionCard(
-                                title = "Arquivos adicionais e mídia",
-                                subtitle = "Recursos de jogos e mídias extras • ${FormatUtils.formatBytes(obbSize)}",
+                                title = stringResource(R.string.restore_obb_media_title),
+                                subtitle = stringResource(R.string.restore_obb_media_desc, FormatUtils.formatBytes(obbSize)),
                                 checked = checkedObb,
                                 onCheckedChange = { checkedObb = it },
                                 icon = Icons.Default.SportsEsports,
@@ -736,8 +736,8 @@ fun AppIndividualRestoreScreen(
                     // 6. Permissões
                     item(key = "comp_permissions") {
                         AppRestoreOptionCard(
-                            title = "Permissões",
-                            subtitle = "Restaurar permissões de sistema e configurações concedidas",
+                            title = stringResource(R.string.restore_permissions_title),
+                            subtitle = stringResource(R.string.restore_permissions_desc),
                             checked = checkedPermissions,
                             onCheckedChange = { checkedPermissions = it },
                             icon = Icons.Default.Security,

@@ -1,5 +1,9 @@
 package com.resync.app.ui.screens
 
+import com.resync.app.R
+import androidx.compose.ui.res.stringResource
+
+
 import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Context
@@ -54,12 +58,12 @@ import kotlinx.coroutines.delay
 
 enum class PermissionStatusType(val label: String, val isGood: Boolean) {
     PERMITTED("Ativado", true),
-    AVAILABLE("Disponível", true),
+    AVAILABLE("Available", true),
     AUTHORIZED("Autorizado", true),
     REQUIRED("Pendente", false),
     DENIED("Negado", false),
     OPTIONAL("Pendente", false),
-    NOT_AVAILABLE("Indisponível", false)
+    NOT_AVAILABLE("Unavailable", false)
 }
 
 data class UnifiedPermissionItem(
@@ -265,8 +269,8 @@ fun PermissionsScreen(
         val storageOk = permissionsState.hasAllFilesAccess
         list.add(
             UnifiedPermissionItem(
-                title = "Acesso ao Armazenamento",
-                description = "Leitura e gravação integral de containers de backup (.resync) no armazenamento compartilhado e raiz.",
+                title = context.getString(R.string.perm_storage_title),
+                description = context.getString(R.string.perm_storage_full_desc),
                 status = if (storageOk) PermissionStatusType.PERMITTED else PermissionStatusType.REQUIRED,
                 icon = Icons.Default.Folder,
                 isPrimary = true,
@@ -281,8 +285,8 @@ fun PermissionsScreen(
         } else true
         list.add(
             UnifiedPermissionItem(
-                title = "Notificações",
-                description = "Progresso em tempo real no painel de notificações e alertas de término de backup/sincronização.",
+                title = context.getString(R.string.perm_notifications_title),
+                description = context.getString(R.string.perm_realtime_progress_notif),
                 status = if (notifOk) PermissionStatusType.PERMITTED else PermissionStatusType.OPTIONAL,
                 icon = Icons.Default.Notifications,
                 isPrimary = true,
@@ -295,8 +299,8 @@ fun PermissionsScreen(
         val autostartOk = permissionsState.hasAutostart
         list.add(
             UnifiedPermissionItem(
-                title = "Início Automático",
-                description = "Permite inicialização em segundo plano no HyperOS, MIUI, Samsung e outros para rotinas agendadas.",
+                title = context.getString(R.string.perm_autostart_title),
+                description = context.getString(R.string.perm_background_autostart_desc),
                 status = if (autostartOk) PermissionStatusType.PERMITTED else PermissionStatusType.OPTIONAL,
                 icon = Icons.Default.PowerSettingsNew,
                 isPrimary = true,
@@ -309,12 +313,12 @@ fun PermissionsScreen(
         val batteryOk = permissionsState.isIgnoringBatteryOptimizations
         list.add(
             UnifiedPermissionItem(
-                title = "Otimização de Bateria",
-                description = "Ajuste para 'Sem restrições', impedindo o sistema de interromper transferências e backups longos.",
+                title = context.getString(R.string.perm_battery_opt_title),
+                description = context.getString(R.string.perm_battery_unrestricted_desc),
                 status = if (batteryOk) PermissionStatusType.PERMITTED else PermissionStatusType.OPTIONAL,
                 icon = Icons.Default.BatteryChargingFull,
                 isPrimary = true,
-                actionLabel = if (batteryOk) "Sem Restrições" else "Configurar",
+                actionLabel = if (batteryOk) context.getString(R.string.perm_unrestricted) else "Configurar",
                 onAction = { openBatteryOptimizationSettings() }
             )
         )
@@ -324,7 +328,7 @@ fun PermissionsScreen(
         list.add(
             UnifiedPermissionItem(
                 title = "Economia de Dados em 2º Plano",
-                description = "Isenção da restrição de dados móveis em segundo plano, evitando que transferências caiam com a tela desligada.",
+                description = context.getString(R.string.perm_data_saver_exemption_desc),
                 status = if (bgDataOk) PermissionStatusType.PERMITTED else PermissionStatusType.OPTIONAL,
                 icon = Icons.Default.SignalCellularAlt,
                 isPrimary = false,
@@ -341,8 +345,8 @@ fun PermissionsScreen(
         if (isXiaomi) {
             list.add(
                 UnifiedPermissionItem(
-                    title = "HyperOS / MIUI: Sem Restrições",
-                    description = "Defina a economia de bateria do app como 'Sem restrições' para prevenir que o sistema mate o Foreground Service.",
+                    title = context.getString(R.string.perm_hyperos_unrestricted),
+                    description = context.getString(R.string.perm_battery_saver_desc),
                     status = if (batteryOk) PermissionStatusType.PERMITTED else PermissionStatusType.OPTIONAL,
                     icon = Icons.Default.SettingsApplications,
                     isPrimary = true,
@@ -363,7 +367,7 @@ fun PermissionsScreen(
         list.add(
             UnifiedPermissionItem(
                 title = "Contatos, SMS e Chamadas",
-                description = "Backup seguro da agenda telefônica, histórico de ligações e mensagens de texto SMS.",
+                description = context.getString(R.string.perm_secure_backup_phone_desc),
                 status = if (commsOk) PermissionStatusType.PERMITTED else PermissionStatusType.OPTIONAL,
                 icon = Icons.Default.Contacts,
                 permissions = commsPerms,
@@ -381,7 +385,7 @@ fun PermissionsScreen(
         list.add(
             UnifiedPermissionItem(
                 title = "Bluetooth",
-                description = "Consulta de dispositivos pareados para preservação de perfis de conexão.",
+                description = context.getString(R.string.perm_paired_devices_desc),
                 status = if (btOk) PermissionStatusType.PERMITTED else PermissionStatusType.OPTIONAL,
                 icon = Icons.Default.Bluetooth,
                 permissions = btPerms,
@@ -399,7 +403,7 @@ fun PermissionsScreen(
         list.add(
             UnifiedPermissionItem(
                 title = "Acesso a Dados de Uso",
-                description = "Necessário para cálculo de cache de aplicativos sem acesso root e diagnóstico de armazenamento.",
+                description = context.getString(R.string.perm_app_cache_calc_desc),
                 status = if (usageOk) PermissionStatusType.PERMITTED else PermissionStatusType.OPTIONAL,
                 icon = Icons.Default.Storage,
                 actionLabel = if (usageOk) "Concedido" else "Conceder",
@@ -426,11 +430,11 @@ fun PermissionsScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     IconButton(onClick = onBack) {
-                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar", tint = TextPrimary)
+                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.btn_back), tint = TextPrimary)
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Permissões e Acessos",
+                        text = stringResource(R.string.perm_perms_and_access),
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                         color = TextPrimary
                     )
@@ -446,13 +450,13 @@ fun PermissionsScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
             Text(
-                text = "Central de Acessos e Privilégios",
+                text = stringResource(R.string.perm_access_privileges_center),
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 color = TextPrimary
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Todas as permissões e ajustes do sistema concentrados em uma única lista interativa em tempo real.",
+                text = stringResource(R.string.perm_all_perms_single_list),
                 style = MaterialTheme.typography.bodySmall,
                 color = TextSecondary
             )
@@ -502,7 +506,7 @@ fun PermissionsScreen(
                             Spacer(modifier = Modifier.width(10.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Acesso Root (Superusuário)",
+                                    text = stringResource(R.string.perm_root_access_title),
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp,
                                     color = TextPrimary,
@@ -510,7 +514,7 @@ fun PermissionsScreen(
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    text = if (isRootGranted) "Privilégios ativos" else "Modo Padrão (Sem Root)",
+                                    text = if (isRootGranted) stringResource(R.string.perm_active_privileges) else stringResource(R.string.perm_standard_non_root),
                                     fontSize = 11.sp,
                                     color = if (isRootGranted) StatusSuccess else StatusWarning,
                                     maxLines = 1,
@@ -547,7 +551,7 @@ fun PermissionsScreen(
 
                     if (isRootGranted) {
                         Text(
-                            text = "✓ Privilégios de superusuário concedidos. O ReSync possui acesso irrestrito para backup de dados internos de aplicativos (/data/data), senhas de Wi-Fi salvas e extração protegida.",
+                            text = stringResource(R.string.perm_root_granted_full_desc),
                             fontSize = 12.sp,
                             color = StatusSuccess,
                             lineHeight = 16.sp
@@ -588,7 +592,7 @@ fun PermissionsScreen(
                                 }
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = "O aplicativo opera em modo seguro padrão. O backup de Mídias, Fotos, Vídeos, Documentos, SMS, Chamadas, Contatos e extração de APKs instalados funcionam com 100% de estabilidade sem root.",
+                                    text = stringResource(R.string.perm_standard_mode_explain),
                                     fontSize = 11.sp,
                                     color = TextSecondary,
                                     lineHeight = 15.sp
@@ -648,11 +652,11 @@ fun PermissionsScreen(
                                 shape = RoundedCornerShape(10.dp)
                             ) {
                                 Column(modifier = Modifier.padding(12.dp)) {
-                                    Text("Passo a passo para autorização:", fontWeight = FontWeight.Bold, fontSize = 11.5.sp, color = TextPrimary)
+                                    Text(stringResource(R.string.perm_step_by_step_auth), fontWeight = FontWeight.Bold, fontSize = 11.5.sp, color = TextPrimary)
                                     Spacer(modifier = Modifier.height(6.dp))
                                     Text("1. Abra seu gerenciador de root (Magisk, KernelSU ou APatch).", fontSize = 11.sp, color = TextSecondary)
-                                    Text("2. Acesse a aba 'Superusuário' ou 'Módulos/Acessos' e autorize o app 'ReSync'.", fontSize = 11.sp, color = TextSecondary)
-                                    Text("3. Retorne aqui e clique no botão 'Atualizar Acesso Root' abaixo.", fontSize = 11.sp, color = TextSecondary)
+                                    Text(stringResource(R.string.perm_step2_desc), fontSize = 11.sp, color = TextSecondary)
+                                    Text(stringResource(R.string.perm_step3_desc), fontSize = 11.sp, color = TextSecondary)
                                 }
                             }
                         }
@@ -663,7 +667,7 @@ fun PermissionsScreen(
                         Text(
                             text = msg,
                             fontSize = 11.sp,
-                            color = if (msg.contains("sucesso", ignoreCase = true) || msg.contains("autorizado", ignoreCase = true) && !msg.contains("não", ignoreCase = true)) StatusSuccess else StatusWarning,
+                            color = if ((msg.contains("success", true) || msg.contains("authorized", true)) && !msg.contains("not", true) && !msg.contains("fail", true)) StatusSuccess else StatusWarning,
                             fontWeight = FontWeight.Medium
                         )
                     }
@@ -703,7 +707,7 @@ fun PermissionsScreen(
                             onClick = {
                                 rootFeedbackMessage = null
                                 viewModel.requestRootPermission { granted ->
-                                    rootFeedbackMessage = if (granted) "Acesso Root autorizado com sucesso!" else "Acesso Root ainda não autorizado. Conceda no gerenciador e tente novamente."
+                                    rootFeedbackMessage = if (granted) context.getString(R.string.perm_root_authorized_success) else context.getString(R.string.perm_root_not_authorized)
                                 }
                             },
                             enabled = !isRequestingRoot,
@@ -731,7 +735,7 @@ fun PermissionsScreen(
             // LISTA INTERATIVA ÚNICA DE PERMISSÕES
             // ==========================================
             Text(
-                text = "PERMISSÕES E SERVIÇOS DO SISTEMA",
+                text = stringResource(R.string.perm_sys_perms_services),
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp,

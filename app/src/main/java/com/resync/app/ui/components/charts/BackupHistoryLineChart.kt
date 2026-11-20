@@ -1,5 +1,8 @@
 package com.resync.app.ui.components.charts
 
+import com.resync.app.R
+import androidx.compose.ui.res.stringResource
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -94,7 +97,7 @@ fun BackupHistoryLineChart(
                     color = TextPrimary
                 )
                 Text(
-                    text = "Evolução do volume de dados protegidos",
+                    text = stringResource(R.string.chart_protected_data_evolution),
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary
                 )
@@ -255,8 +258,8 @@ fun BackupHistoryLineChart(
                     )
                 }
                 Column(horizontalAlignment = Alignment.End) {
-                    Text(text = "Arquivos: ${pt.filesCount}", color = TextSecondary, fontSize = 12.sp)
-                    Text(text = "Aplicativos: ${pt.appsCount}", color = TextSecondary, fontSize = 12.sp)
+                    Text(text = stringResource(R.string.chart_files_count, pt.filesCount), color = TextSecondary, fontSize = 12.sp)
+                    Text(text = stringResource(R.string.chart_apps_count, pt.appsCount), color = TextSecondary, fontSize = 12.sp)
                 }
             }
         }

@@ -1,7 +1,9 @@
 package com.resync.app.util
 
+import android.app.Activity
 import android.app.LocaleManager
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.SharedPreferences
 import android.content.res.Configuration
 import android.os.Build
@@ -10,6 +12,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.util.Locale
+
+tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
 
 object LocaleHelper {
     private const val PREFS_NAME = "resync_language_prefs"
@@ -77,6 +85,8 @@ object LocaleHelper {
 
         return base.createConfigurationContext(config)
     }
+
+    fun getLocalizedContext(context: Context): Context = wrapContext(context)
 
     fun getLanguageDisplayName(context: Context, tag: String = getAppLanguage(context)): String {
         return when (tag) {

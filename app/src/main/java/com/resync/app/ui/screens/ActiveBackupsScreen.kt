@@ -123,7 +123,7 @@ fun ActiveBackupsScreen(
     val systemLogs by viewModel.systemLogs.collectAsStateWithLifecycle()
     val recentLogs = remember(systemLogs) {
         systemLogs
-            .filter { !it.tag.contains("DIAGNÓSTICO", true) && !it.message.contains("[DIAGNÓSTICO]", true) && !it.message.contains("preload", true) }
+            .filter { !it.tag.contains("DIAGN", true) && !it.message.contains("[DIAGN", true) && !it.message.contains("preload", true) }
             .takeLast(6)
     }
 
@@ -167,13 +167,13 @@ fun ActiveBackupsScreen(
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     IconButton(onClick = onNavigateToLogs, modifier = Modifier.size(24.dp)) {
-                        Icon(Icons.Default.CleaningServices, contentDescription = "Limpeza", tint = Color.White, modifier = Modifier.size(19.dp))
+                        Icon(Icons.Default.CleaningServices, contentDescription = stringResource(R.string.active_clean_desc), tint = Color.White, modifier = Modifier.size(19.dp))
                     }
                     IconButton(onClick = onNavigateToLogs, modifier = Modifier.size(24.dp)) {
                         Icon(Icons.Default.Terminal, contentDescription = "Logs", tint = Color.White, modifier = Modifier.size(20.dp))
                     }
                     IconButton(onClick = onNavigateBack, modifier = Modifier.size(24.dp)) {
-                        Icon(Icons.Default.Settings, contentDescription = "Configurações", tint = Color.White, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings_title), tint = Color.White, modifier = Modifier.size(20.dp))
                     }
                     Box(
                         modifier = Modifier
@@ -187,7 +187,7 @@ fun ActiveBackupsScreen(
                         if (!photoUrl.isNullOrBlank()) {
                             AsyncImage(
                                 model = ImageRequest.Builder(context).data(photoUrl).crossfade(true).build(),
-                                contentDescription = "Conta Google",
+                                contentDescription = stringResource(R.string.account_google_account),
                                 modifier = Modifier.fillMaxSize(),
                                 contentScale = ContentScale.Crop
                             )
@@ -544,7 +544,7 @@ fun ActiveBackupsScreen(
                                 modifier = Modifier.padding(end = 5.dp)
                             )
                             Text(
-                                text = "WAKELOCK ATIVO",
+                                text = stringResource(R.string.active_wakelock_active),
                                 color = Color(0xFF10B981),
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
@@ -562,10 +562,10 @@ fun ActiveBackupsScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    StepSelectorPill(text = "Dados", isCompleted = true)
-                    StepSelectorPill(text = "Destino", isCompleted = true)
-                    StepSelectorPill(text = "Opções", isCompleted = true)
-                    StepSelectorPill(text = "Revisão", isCompleted = true)
+                    StepSelectorPill(text = stringResource(R.string.active_step_data), isCompleted = true)
+                    StepSelectorPill(text = stringResource(R.string.active_step_dest), isCompleted = true)
+                    StepSelectorPill(text = stringResource(R.string.active_options), isCompleted = true)
+                    StepSelectorPill(text = stringResource(R.string.active_review), isCompleted = true)
                     StepSelectorPill(
                         text = "${progressPercent.toInt()}%",
                         isCompleted = false,
@@ -676,7 +676,7 @@ fun ActiveBackupsScreen(
                                 Spacer(modifier = Modifier.height(2.dp))
 
                                 val processedStr = if (activeOp.bytesProcessed > 0L) {
-                                    FormatUtils.formatBytes(activeOp.bytesProcessed) + " / " + (if (activeOp.totalBytesEstimated > 0L) FormatUtils.formatBytes(activeOp.totalBytesEstimated) else "dinâmico")
+                                    FormatUtils.formatBytes(activeOp.bytesProcessed) + " / " + (if (activeOp.totalBytesEstimated > 0L) FormatUtils.formatBytes(activeOp.totalBytesEstimated) else stringResource(R.string.status_dynamic))
                                 } else {
                                     "Processando blocos..."
                                 }
@@ -747,7 +747,7 @@ fun ActiveBackupsScreen(
                         ) {
                             LegendBullet(color = Color(0xFFFF3B47), label = "${currentItemIdx} processados")
                             LegendBullet(color = Color(0xFF10B981), label = "KernelSU Root")
-                            LegendBullet(color = Color(0xFF38BDF8), label = if (activeAccount != null) "Drive Ativo" else "Local")
+                            LegendBullet(color = Color(0xFF38BDF8), label = if (activeAccount != null) stringResource(R.string.active_drive_active) else "Local")
                             Text(text = "SHA-256 OK", fontSize = 10.sp, color = TextMuted)
                         }
                     }
@@ -768,18 +768,18 @@ fun ActiveBackupsScreen(
                         tagColor = Color(0xFF38BDF8),
                         mainValue = "$speedMbStr MB/s",
                         mainColor = Color.White,
-                        subtext = "Fluxo em tempo real"
+                        subtext = stringResource(R.string.active_flow_realtime)
                     )
 
                     // Box 2: Compressão
                     PerformanceBentoBox(
                         modifier = Modifier.weight(1f),
-                        label = "Compressão",
+                        label = stringResource(R.string.active_compression),
                         tag = "zstd",
                         tagColor = Color(0xFF10B981),
                         mainValue = "-38.2%",
                         mainColor = Color(0xFF10B981),
-                        subtext = "tar.zst (Nível 3)"
+                        subtext = stringResource(R.string.active_tar_level3)
                     )
                 }
 
@@ -804,8 +804,8 @@ fun ActiveBackupsScreen(
                     val isThermalNormal = displayTemp <= 45f
                     PerformanceBentoBox(
                         modifier = Modifier.weight(1f),
-                        label = "Térmico / Bateria",
-                        tag = if (isThermalNormal) "NORMAL" else "ELEVADO",
+                        label = stringResource(R.string.active_thermal_battery),
+                        tag = if (isThermalNormal) stringResource(R.string.active_thermal_normal) else stringResource(R.string.active_thermal_high),
                         tagColor = if (isThermalNormal) Color(0xFF10B981) else Color(0xFFFF414D),
                         mainValue = "%.1f°C".format(Locale.US, displayTemp),
                         mainColor = Color.White,
@@ -839,13 +839,13 @@ fun ActiveBackupsScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Pipeline Atômico de Execução",
+                                text = stringResource(R.string.active_pipeline_title),
                                 fontSize = 13.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
                             )
                             Text(
-                                text = "4 Etapas",
+                                text = stringResource(R.string.active_steps_count, 4),
                                 fontSize = 11.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF10B981)
@@ -859,10 +859,10 @@ fun ActiveBackupsScreen(
                             icon = if (isStage1Done) Icons.Default.Check else Icons.Default.Sync,
                             iconColor = if (isStage1Done) Color(0xFF10B981) else Color(0xFFFF3B47),
                             iconBg = if (isStage1Done) Color(0xFF0D281E) else Color(0xFF2A1519),
-                            title = "1. Snapshots & Metadados SELinux",
-                            statusText = if (isStage1Done) "Concluído" else "Ativo",
+                            title = stringResource(R.string.active_step1_title),
+                            statusText = if (isStage1Done) stringResource(R.string.active_completed) else stringResource(R.string.active_status_active),
                             statusColor = if (isStage1Done) Color(0xFF10B981) else Color(0xFFFF3B47),
-                            subtitle = "Preservados contextos uid:gid, capabilities e xattr"
+                            subtitle = stringResource(R.string.active_step1_desc)
                         )
 
                         Spacer(modifier = Modifier.height(8.dp))
@@ -872,10 +872,10 @@ fun ActiveBackupsScreen(
                             icon = if (isStage2Done) Icons.Default.Check else if (isStage2Active) Icons.Default.Sync else Icons.Default.Schedule,
                             iconColor = if (isStage2Done) Color(0xFF10B981) else if (isStage2Active) Color(0xFFFF3B47) else TextMuted,
                             iconBg = if (isStage2Done) Color(0xFF0D281E) else if (isStage2Active) Color(0xFF2A1519) else Color(0xFF1A2230),
-                            title = "2. Dump de Bancos & tar.zst",
-                            statusText = if (isStage2Done) "Concluído" else if (isStage2Active) "${progressPercent.toInt()}% ATIVO" else "Aguardando",
+                            title = stringResource(R.string.active_step2_title),
+                            statusText = if (isStage2Done) stringResource(R.string.active_completed) else if (isStage2Active) stringResource(R.string.active_step2_active, progressPercent.toInt()) else stringResource(R.string.active_waiting),
                             statusColor = if (isStage2Done) Color(0xFF10B981) else if (isStage2Active) Color(0xFFFF3B47) else TextMuted,
-                            subtitle = "Executando checkpoint SQLite WAL com flock"
+                            subtitle = stringResource(R.string.active_step2_desc)
                         )
 
                         Spacer(modifier = Modifier.height(8.dp))
@@ -885,10 +885,10 @@ fun ActiveBackupsScreen(
                             icon = if (isStage3Done) Icons.Default.Check else if (isStage3Active) Icons.Default.Sync else Icons.Default.Shield,
                             iconColor = if (isStage3Done) Color(0xFF10B981) else if (isStage3Active) Color(0xFFFF3B47) else TextMuted,
                             iconBg = if (isStage3Done) Color(0xFF0D281E) else if (isStage3Active) Color(0xFF2A1519) else Color(0xFF1A2230),
-                            title = "3. Hash SHA-256 & Criptografia",
-                            statusText = if (isStage3Done) "Concluído" else if (isStage3Active) "Em Criptografia" else "Aguardando",
+                            title = stringResource(R.string.active_step3_title),
+                            statusText = if (isStage3Done) stringResource(R.string.active_completed) else if (isStage3Active) stringResource(R.string.active_step3_encrypting) else stringResource(R.string.active_waiting),
                             statusColor = if (isStage3Done) Color(0xFF10B981) else if (isStage3Active) Color(0xFFFF3B47) else TextMuted,
-                            subtitle = "AES-256-GCM derivado de chave segura de hardware"
+                            subtitle = stringResource(R.string.active_step3_desc)
                         )
 
                         Spacer(modifier = Modifier.height(8.dp))
@@ -898,10 +898,10 @@ fun ActiveBackupsScreen(
                             icon = if (isStage4Done) Icons.Default.Check else if (isStage4Active) Icons.Default.CloudUpload else Icons.Default.Cloud,
                             iconColor = if (isStage4Done) Color(0xFF10B981) else if (isStage4Active) Color(0xFF38BDF8) else TextMuted,
                             iconBg = if (isStage4Done) Color(0xFF0D281E) else if (isStage4Active) Color(0xFF122230) else Color(0xFF1A2230),
-                            title = "4. Espelho Google Drive API",
-                            statusText = if (isStage4Done) "Sincronizado" else if (isStage4Active) "Enviando Nuvem" else if (activeAccount != null) "Na fila" else "Não configurado",
+                            title = stringResource(R.string.active_step4_title),
+                            statusText = if (isStage4Done) stringResource(R.string.active_synced) else if (isStage4Active) stringResource(R.string.active_uploading_cloud) else if (activeAccount != null) stringResource(R.string.active_queued) else stringResource(R.string.active_not_configured),
                             statusColor = if (isStage4Done) Color(0xFF10B981) else if (isStage4Active) Color(0xFF38BDF8) else TextMuted,
-                            subtitle = "Upload incremental em paralelo com buffer seguro"
+                            subtitle = stringResource(R.string.active_step4_desc)
                         )
                     }
                 }
@@ -1011,7 +1011,7 @@ fun ActiveBackupsScreen(
                                         StdoutLogLine(time = timeStr, tag = logEntry.tag.take(10), tagColor = tagColor, msg = logEntry.message)
                                     }
                                 } else {
-                                    StdoutLogLine(time = "--:--:--", tag = "DAEMON", tagColor = Color(0xFF10B981), msg = "Daemon pronto. Registros do sistema disponíveis.")
+                                    StdoutLogLine(time = "--:--:--", tag = "DAEMON", tagColor = Color(0xFF10B981), msg = stringResource(R.string.active_daemon_ready))
                                 }
                             }
                         }
@@ -1042,14 +1042,14 @@ fun ActiveBackupsScreen(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Segundo Plano Protegido",
+                            text = stringResource(R.string.active_protected_background),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "Você pode sair do aplicativo com segurança. O serviço em primeiro plano (Foreground Service) continuará gravando com wakelock e prioridade Root via KernelSU.",
+                            text = stringResource(R.string.active_protected_background_desc),
                             fontSize = 11.sp,
                             color = TextSecondary,
                             lineHeight = 15.sp

@@ -1,5 +1,9 @@
 package com.resync.app.ui.screens
 
+import com.resync.app.R
+import androidx.compose.ui.res.stringResource
+
+
 import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -190,7 +194,7 @@ fun CloudSyncCenterScreen(
             viewModel.uploadMultipleFiles(uris, DriveConstants.ROOT_FOLDER_NAME, selectedDriveAccountEmail)
             coroutineScope.launch {
                 val res = snackbarHostState.showSnackbar(
-                    message = "${uris.size} arquivo(s) adicionados à fila de envio!",
+                    message = context.getString(R.string.cloud_files_added_queue, uris.size),
                     actionLabel = "Ver fila",
                     duration = SnackbarDuration.Short
                 )
@@ -213,7 +217,7 @@ fun CloudSyncCenterScreen(
             viewModel.uploadFolderTree(uri, DriveConstants.ROOT_FOLDER_NAME, selectedDriveAccountEmail)
             coroutineScope.launch {
                 val res = snackbarHostState.showSnackbar(
-                    message = "Pasta adicionada à fila de envio!",
+                    message = context.getString(R.string.cloud_folder_added_queue),
                     actionLabel = "Ver fila",
                     duration = SnackbarDuration.Short
                 )
@@ -274,7 +278,7 @@ fun CloudSyncCenterScreen(
             s.containsCategory(catName)
         }
         if (matching.isEmpty()) {
-            Toast.makeText(context, "Nenhum backup de $catName encontrado nesta etiqueta.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.cloud_no_backup_tag, catName), Toast.LENGTH_SHORT).show()
         } else if (matching.size == 1) {
             val file = matching.first()
             val localFile = resolveLocalMirrorFile(context, viewModel.backupRecords.value, file.name, file.id, file.sizeBytes)
@@ -331,13 +335,13 @@ fun CloudSyncCenterScreen(
                     },
                     onComplete = { addRes ->
                         if (addRes.isSuccess) {
-                            Toast.makeText(context, "Google Drive conectado e validado com sucesso!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.cloud_gdrive_connected_valid), Toast.LENGTH_SHORT).show()
                         }
                     }
                 )
             }
         } else {
-            Toast.makeText(context, "Autorização OAuth cancelada ou não concluída.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.cloud_oauth_cancelled), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -347,7 +351,7 @@ fun CloudSyncCenterScreen(
             try {
                 consentLauncher.launch(intent)
             } catch (t: Throwable) {
-                Toast.makeText(context, "Erro ao abrir autorização: ${t.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, context.getString(R.string.gdrive_auth_err, t.message ?: ""), Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -367,7 +371,7 @@ fun CloudSyncCenterScreen(
                     },
                     onComplete = { addRes ->
                         if (addRes.isSuccess) {
-                            Toast.makeText(context, "Conta Google Drive conectada com sucesso!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.cloud_account_connected_success), Toast.LENGTH_SHORT).show()
                         }
                     }
                 )
@@ -375,7 +379,7 @@ fun CloudSyncCenterScreen(
                 Toast.makeText(context, "Nenhuma conta Google foi selecionada.", Toast.LENGTH_SHORT).show()
             }
         } else if (result.resultCode == Activity.RESULT_CANCELED) {
-            Toast.makeText(context, "Seleção de conta cancelada.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.cloud_account_selection_cancelled), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -388,7 +392,7 @@ fun CloudSyncCenterScreen(
                 val fallbackIntent = viewModel.gdriveProvider.oAuthManager.createChooseAccountIntent()
                 accountChooserLauncher.launch(fallbackIntent)
             } catch (e2: Throwable) {
-                Toast.makeText(context, "Erro ao abrir seletor de contas: ${e2.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, context.getString(R.string.gdrive_account_picker_err, e2.message ?: ""), Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -448,7 +452,7 @@ fun CloudSyncCenterScreen(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = "ReSync Nuvem",
+                                text = stringResource(R.string.cloud_resync_cloud_title),
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                 color = TextPrimary
                             )
@@ -504,9 +508,9 @@ fun CloudSyncCenterScreen(
                 val activeQSize = syncQueue.count { it.accountEmail == null || it.accountEmail == activeAccountEmail }
                 val subTabs = remember(activeQSize) {
                     listOf(
-                        "Visão Geral",
+                        context.getString(R.string.cloud_tab_overview),
                         "Fila ($activeQSize)",
-                        "Diagnóstico"
+                        context.getString(R.string.cloud_tab_diagnostics)
                     )
                 }
 
@@ -598,7 +602,7 @@ fun CloudSyncCenterScreen(
                             contentColor = primaryAccent,
                             elevation = FloatingActionButtonDefaults.elevation(4.dp),
                             icon = { Icon(Icons.Default.InsertDriveFile, contentDescription = null) },
-                            text = { Text("Enviar Arquivos", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                            text = { Text(stringResource(R.string.cloud_send_files), fontSize = 12.sp, fontWeight = FontWeight.Bold) }
                         )
 
                         ExtendedFloatingActionButton(
@@ -635,7 +639,7 @@ fun CloudSyncCenterScreen(
                 ) {
                     Icon(
                         imageVector = if (isFabExpanded) Icons.Default.Close else Icons.Default.CloudUpload,
-                        contentDescription = "Ações do Google Drive"
+                        contentDescription = stringResource(R.string.cloud_gdrive_actions)
                     )
                 }
             }
@@ -692,17 +696,17 @@ fun CloudSyncCenterScreen(
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(Icons.Default.ErrorOutline, contentDescription = null, tint = StatusError, modifier = Modifier.size(20.dp))
                                         Spacer(modifier = Modifier.width(8.dp))
-                                        Text("Erro de Configuração / Autenticação", fontWeight = FontWeight.Bold, color = StatusError, fontSize = 14.sp)
+                                        Text(stringResource(R.string.cloud_auth_error_title), fontWeight = FontWeight.Bold, color = StatusError, fontSize = 14.sp)
                                     }
                                     Spacer(modifier = Modifier.height(6.dp))
                                     Text(
-                                        text = errorInfo?.message ?: "Falha ao autenticar com o Google Drive.",
+                                        text = errorInfo?.message ?: stringResource(R.string.cloud_auth_failed_desc),
                                         fontSize = 12.sp,
                                         color = TextPrimary
                                     )
                                     if (!errorInfo?.technicalCode.isNullOrBlank()) {
                                         Text(
-                                            text = "Código técnico: ${errorInfo?.technicalCode}",
+                                            text = stringResource(R.string.cloud_tech_code, errorInfo?.technicalCode ?: ""),
                                             fontSize = 11.sp,
                                             color = TextMuted
                                         )
@@ -734,16 +738,16 @@ fun CloudSyncCenterScreen(
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(Icons.Default.Warning, contentDescription = null, tint = AccentSunsetOrange, modifier = Modifier.size(20.dp))
                                         Spacer(modifier = Modifier.width(8.dp))
-                                        Text("Sessão Expirada", fontWeight = FontWeight.Bold, color = AccentSunsetOrange, fontSize = 14.sp)
+                                        Text(stringResource(R.string.cloud_session_expired_title), fontWeight = FontWeight.Bold, color = AccentSunsetOrange, fontSize = 14.sp)
                                     }
                                     Spacer(modifier = Modifier.height(6.dp))
                                     Text(
-                                        text = "A sessão do Google Drive expirou. É necessário reconectar sua conta para continuar.",
+                                        text = stringResource(R.string.cloud_session_expired_desc),
                                         fontSize = 12.sp,
                                         color = TextPrimary
                                     )
                                     Text(
-                                        text = "Código técnico: HTTP 401",
+                                        text = stringResource(R.string.cloud_tech_code_http401),
                                         fontSize = 11.sp,
                                         color = TextMuted
                                     )
@@ -791,7 +795,7 @@ fun CloudSyncCenterScreen(
                                 val (driveBadgeText, driveBadgeColor) = when {
                                     isActive && isRefreshingActiveAccount -> Pair("● Atualizando...", AccentElectricCyan)
                                     isActive && (activeAccountReauthIntent != null || googleDriveState == GoogleDriveState.SESSION_EXPIRED) -> Pair("● Reautorizar", AccentSunsetOrange)
-                                    isActive && googleDriveState == GoogleDriveState.CONNECTION_ERROR -> Pair("● Erro", StatusError)
+                                    isActive && googleDriveState == GoogleDriveState.CONNECTION_ERROR -> Pair(stringResource(R.string.cloud_status_error), StatusError)
                                     isActive && googleDriveState == GoogleDriveState.SYNCING -> Pair("● Sincronizando...", AccentNeonBlue)
                                     else -> Pair("● Conectado", StatusSuccess)
                                 }
@@ -819,7 +823,7 @@ fun CloudSyncCenterScreen(
                                 val lastSyncStr = when {
                                     account.lastSyncTimestamp > 0 -> FormatUtils.formatDate(account.lastSyncTimestamp)
                                     isActive && remoteList.isNotEmpty() -> FormatUtils.formatDate(remoteList.maxOf { it.modifiedTime })
-                                    else -> "Nenhum backup"
+                                    else -> stringResource(R.string.cloud_no_backup_simple)
                                 }
 
                                 Card(
@@ -982,9 +986,9 @@ fun CloudSyncCenterScreen(
                                         Spacer(modifier = Modifier.height(8.dp))
 
                                         CompactCloudInfoRow("Status", driveBadgeText, driveBadgeColor)
-                                        CompactCloudInfoRow("Espaço utilizado", FormatUtils.formatBytes(usedBytes))
-                                        CompactCloudInfoRow("Espaço disponível", FormatUtils.formatBytes(availBytes), StatusSuccess)
-                                        CompactCloudInfoRow("Espaço total", FormatUtils.formatBytes(totalBytes))
+                                        CompactCloudInfoRow(stringResource(R.string.cloud_used_space), FormatUtils.formatBytes(usedBytes))
+                                        CompactCloudInfoRow(stringResource(R.string.cloud_available_space), FormatUtils.formatBytes(availBytes), StatusSuccess)
+                                        CompactCloudInfoRow(stringResource(R.string.cloud_total_space), FormatUtils.formatBytes(totalBytes))
 
                                         Row(
                                             modifier = Modifier
@@ -1006,12 +1010,12 @@ fun CloudSyncCenterScreen(
 
                                         CompactCloudInfoRow("Fila pendente", "$activeQueueCount")
                                         CompactCloudInfoRow("Erros", "$activeErrorsCount", if (activeErrorsCount == 0) StatusSuccess else StatusError)
-                                        CompactCloudInfoRow("Última sincronização", lastSyncStr)
+                                        CompactCloudInfoRow(stringResource(R.string.cloud_last_sync), lastSyncStr)
 
                                         if (isActive && (googleDriveState == GoogleDriveState.CONNECTION_ERROR || driveQuotaState is DriveQuotaState.Error)) {
                                             val errText = (driveQuotaState as? DriveQuotaState.Error)?.message
                                                 ?: (remoteBackupsState as? RemoteBackupsState.Error)?.message
-                                                ?: "Falha de conexão com os servidores do Google Drive."
+                                                ?: stringResource(R.string.cloud_conn_fail_servers)
                                             Spacer(modifier = Modifier.height(8.dp))
                                             Surface(
                                                 shape = RoundedCornerShape(8.dp),
@@ -1023,7 +1027,7 @@ fun CloudSyncCenterScreen(
                                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                                         Icon(Icons.Default.Warning, contentDescription = null, tint = StatusError, modifier = Modifier.size(16.dp))
                                                         Spacer(modifier = Modifier.width(6.dp))
-                                                        Text("Erro de Comunicação", fontWeight = FontWeight.Bold, color = StatusError, fontSize = 11.5.sp)
+                                                        Text(stringResource(R.string.cloud_comm_error), fontWeight = FontWeight.Bold, color = StatusError, fontSize = 11.5.sp)
                                                     }
                                                     Spacer(modifier = Modifier.height(2.dp))
                                                     Text(errText, color = TextSecondary, fontSize = 10.5.sp)
@@ -1274,7 +1278,7 @@ fun CloudSyncCenterScreen(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Text(
-                                            text = "Armazenamento na Nuvem",
+                                            text = stringResource(R.string.cloud_storage_title),
                                             fontSize = 11.5.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -1322,7 +1326,7 @@ fun CloudSyncCenterScreen(
                         // Bento Grid "Componentes da Etiqueta" (Partições) - FOTO 7
                         val partitionsList = remember(remoteAppsCount, remoteSmsCount, remoteCallsCount, remoteFoldersCount, remoteBluetoothCount, remoteDnsCount, remoteWifiCount, remoteContactsCount) {
                             listOf(
-                                Triple("Aplicativos", "$remoteAppsCount apps", Icons.Default.Apps to AccentElectricCyan),
+                                Triple(context.getString(R.string.category_apps), "$remoteAppsCount apps", Icons.Default.Apps to AccentElectricCyan),
                                 Triple("Mensagens", "$remoteSmsCount SMS", Icons.Default.Chat to AccentElectricCyan),
                                 Triple("Chamadas", "$remoteCallsCount chamadas", Icons.Default.Call to AccentEmeraldGreen),
                                 Triple("Pastas", "$remoteFoldersCount pastas", Icons.Default.Folder to AccentNeonPurple),
@@ -1350,7 +1354,7 @@ fun CloudSyncCenterScreen(
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
-                                        text = "Toque para inspecionar e restaurar seletivamente",
+                                        text = stringResource(R.string.cloud_tap_inspect_restore),
                                         fontSize = 11.5.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -1361,7 +1365,7 @@ fun CloudSyncCenterScreen(
                                     border = BorderStroke(1.dp, primaryAccent.copy(alpha = 0.3f))
                                 ) {
                                     Text(
-                                        text = "$activePartitionsCount partições ativas",
+                                        text = stringResource(R.string.cloud_active_partitions_count, activePartitionsCount),
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = primaryAccent,
@@ -1478,9 +1482,9 @@ fun CloudSyncCenterScreen(
                                             val bErr = (viewModel.remoteBackupsState.value as? RemoteBackupsState.Error)?.message
                                             val err = qErr ?: bErr
                                             if (err != null) {
-                                                Toast.makeText(context, "Erro na sincronização: $err", Toast.LENGTH_LONG).show()
+                                                Toast.makeText(context, context.getString(R.string.cloud_sync_err, err), Toast.LENGTH_LONG).show()
                                             } else {
-                                                Toast.makeText(context, "Sincronização concluída com sucesso!", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, context.getString(R.string.cloud_sync_success_toast), Toast.LENGTH_SHORT).show()
                                             }
                                         }
                                     }
@@ -1497,7 +1501,7 @@ fun CloudSyncCenterScreen(
                                 } else {
                                     Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("SINCRONIZAR AGORA", fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, softWrap = false)
+                                    Text(stringResource(R.string.cloud_sync_now), fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, softWrap = false)
                                 }
                             }
 
@@ -1513,9 +1517,9 @@ fun CloudSyncCenterScreen(
                                             val bErr = (viewModel.remoteBackupsState.value as? RemoteBackupsState.Error)?.message
                                             val err = qErr ?: bErr
                                             if (err != null) {
-                                                Toast.makeText(context, "Erro na verificação: $err", Toast.LENGTH_LONG).show()
+                                                Toast.makeText(context, context.getString(R.string.cloud_verify_err, err), Toast.LENGTH_LONG).show()
                                             } else {
-                                                Toast.makeText(context, "Integridade verificada com sucesso!", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, context.getString(R.string.cloud_integrity_verified_toast), Toast.LENGTH_SHORT).show()
                                             }
                                         }
                                     }
@@ -1551,9 +1555,9 @@ fun CloudSyncCenterScreen(
                                 shape = RoundedCornerShape(10.dp),
                                 border = BorderStroke(1.dp, DarkCardBorder)
                             ) {
-                                Icon(Icons.Default.BugReport, contentDescription = "Diagnóstico", tint = TextSecondary, modifier = Modifier.size(18.dp))
+                                Icon(Icons.Default.BugReport, contentDescription = context.getString(R.string.cloud_tab_diagnostics), tint = TextSecondary, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("DIAGNÓSTICO DA NUVEM", color = TextSecondary, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1, softWrap = false)
+                                Text(context.getString(R.string.cloud_tab_diagnostics), color = TextSecondary, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, maxLines = 1, softWrap = false)
                             }
 
                             Spacer(modifier = Modifier.height(10.dp))
@@ -1583,21 +1587,21 @@ fun CloudSyncCenterScreen(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Icons.Default.Schedule, contentDescription = null, tint = primaryAccent)
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Sincronização Automática (Gratuita)", fontWeight = FontWeight.Bold, color = TextPrimary)
+                                    Text(stringResource(R.string.cloud_auto_sync_title), fontWeight = FontWeight.Bold, color = TextPrimary)
                                 }
-                                Text("Execução segura via WorkManager em segundo plano", fontSize = 11.sp, color = TextSecondary)
+                                Text(stringResource(R.string.cloud_auto_sync_desc), fontSize = 11.sp, color = TextSecondary)
 
                                 Spacer(modifier = Modifier.height(12.dp))
 
                                 SyncSettingCheckbox(
-                                    label = "Sincronização automática ativa",
+                                    label = stringResource(R.string.cloud_auto_sync_active),
                                     checked = syncSettings.isAutoSyncEnabled,
                                     onCheckedChange = { viewModel.updateAutoSyncSettings(syncSettings.copy(isAutoSyncEnabled = it)) },
                                     accent = primaryAccent
                                 )
 
                                 SyncSettingCheckbox(
-                                    label = "Somente Wi-Fi (Economizar dados móveis)",
+                                    label = stringResource(R.string.cloud_wifi_only),
                                     checked = syncSettings.wifiOnly,
                                     onCheckedChange = { viewModel.updateAutoSyncSettings(syncSettings.copy(wifiOnly = it)) },
                                     accent = primaryAccent
@@ -1618,7 +1622,7 @@ fun CloudSyncCenterScreen(
                                 )
 
                                 SyncSettingCheckbox(
-                                    label = "Sincronizar imediatamente após backup",
+                                    label = stringResource(R.string.cloud_sync_immediate),
                                     checked = syncSettings.syncImmediatelyAfterBackup,
                                     onCheckedChange = { viewModel.updateAutoSyncSettings(syncSettings.copy(syncImmediatelyAfterBackup = it)) },
                                     accent = primaryAccent
@@ -1644,8 +1648,8 @@ fun CloudSyncCenterScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text("Fila de Transferência Ativa", fontWeight = FontWeight.Bold, color = TextPrimary)
-                                    Text("Uploads resumíveis com priorização de itens", fontSize = 12.sp, color = TextSecondary)
+                                    Text(stringResource(R.string.cloud_transfer_queue_title), fontWeight = FontWeight.Bold, color = TextPrimary)
+                                    Text(stringResource(R.string.cloud_transfer_queue_desc), fontSize = 12.sp, color = TextSecondary)
                                 }
                                 if (syncQueue.isNotEmpty()) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1656,7 +1660,7 @@ fun CloudSyncCenterScreen(
                                             ) {
                                                 Icon(Icons.Default.DoneAll, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(15.dp))
                                                 Spacer(modifier = Modifier.width(3.dp))
-                                                Text("Concluídos", color = primaryAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                Text(stringResource(R.string.completed), color = primaryAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                             }
                                             Spacer(modifier = Modifier.width(4.dp))
                                         }
@@ -1715,7 +1719,7 @@ fun CloudSyncCenterScreen(
                                     ) {
                                         Icon(Icons.Default.DoneAll, contentDescription = null, tint = StatusSuccess, modifier = Modifier.size(40.dp))
                                         Spacer(modifier = Modifier.height(8.dp))
-                                        Text("Fila vazia. Todos os backups estão sincronizados!", color = TextSecondary)
+                                        Text(stringResource(R.string.cloud_queue_empty), color = TextSecondary)
                                     }
                                 }
                             }
@@ -1767,12 +1771,12 @@ fun CloudSyncCenterScreen(
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(Icons.Default.Restore, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(20.dp))
                                         Spacer(modifier = Modifier.width(8.dp))
-                                        Text("Log da Última Restauração", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = TextPrimary)
+                                        Text(stringResource(R.string.cloud_last_restore_log), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = TextPrimary)
                                     }
                                     if (!lastRestoreLog.isNullOrBlank()) {
                                         TextButton(onClick = {
                                             clipboardManager.setText(AnnotatedString(lastRestoreLog!!))
-                                            Toast.makeText(context, "Log de restauração copiado!", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, context.getString(R.string.cloud_restore_log_copied), Toast.LENGTH_SHORT).show()
                                         }) {
                                             Text("Copiar", color = primaryAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                         }
@@ -1780,7 +1784,7 @@ fun CloudSyncCenterScreen(
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
                                 if (lastRestoreLog.isNullOrBlank()) {
-                                    Text("Nenhum log de restauração registrado recentemente.", fontSize = 12.sp, color = TextMuted)
+                                    Text(stringResource(R.string.cloud_no_recent_restore_log), fontSize = 12.sp, color = TextMuted)
                                 } else {
                                     Box(
                                         modifier = Modifier
@@ -1818,7 +1822,7 @@ fun CloudSyncCenterScreen(
                             } else {
                                 Icon(Icons.Default.Speed, contentDescription = null)
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Diagnosticar Conexão", fontWeight = FontWeight.Bold)
+                                Text(stringResource(R.string.cloud_diagnose_connection), fontWeight = FontWeight.Bold)
                             }
                         }
 
@@ -1843,14 +1847,14 @@ fun CloudSyncCenterScreen(
                                     )
                                     Spacer(modifier = Modifier.height(10.dp))
                                     Text(
-                                        text = "Nenhum teste de diagnóstico executado",
+                                        text = stringResource(R.string.cloud_no_diag_tests_run),
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 14.sp,
                                         color = TextPrimary
                                     )
                                     Spacer(modifier = Modifier.height(6.dp))
                                     Text(
-                                        text = "Toque no botão 'Diagnosticar Conexão' acima para executar em tempo real a validação da sua conta e do Google Drive.",
+                                        text = stringResource(R.string.cloud_tap_diagnose_button),
                                         fontSize = 12.sp,
                                         color = TextSecondary,
                                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -1878,7 +1882,7 @@ fun CloudSyncCenterScreen(
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(Icons.Default.BugReport, contentDescription = null, tint = StatusError, modifier = Modifier.size(20.dp))
                                         Spacer(modifier = Modifier.width(8.dp))
-                                        Text("Último Erro do Sistema / Crash Log", fontWeight = FontWeight.Bold, color = StatusError, fontSize = 13.sp)
+                                        Text(stringResource(R.string.cloud_last_sys_err_crash), fontWeight = FontWeight.Bold, color = StatusError, fontSize = 13.sp)
                                     }
                                     Spacer(modifier = Modifier.height(6.dp))
                                     Surface(
@@ -1910,7 +1914,7 @@ fun CloudSyncCenterScreen(
                                             onClick = {
                                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                                 clipboard.setPrimaryClip(ClipData.newPlainText("ReSync Crash Log", lastCrashLog))
-                                                Toast.makeText(context, "Log copiado com sucesso!", Toast.LENGTH_SHORT).show()
+                                                Toast.makeText(context, context.getString(R.string.cloud_log_copied_success), Toast.LENGTH_SHORT).show()
                                             },
                                             colors = ButtonDefaults.buttonColors(containerColor = StatusError),
                                             shape = RoundedCornerShape(8.dp),
@@ -1940,13 +1944,13 @@ fun CloudSyncCenterScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.Warning, contentDescription = null, tint = StatusError, modifier = Modifier.size(24.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("O app fechou da última vez", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 16.sp)
+                    Text(stringResource(R.string.cloud_app_closed_last_time), fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 16.sp)
                 }
             },
             text = {
                 Column {
                     Text(
-                        "Ocorreu uma falha inesperada na sessão anterior. O log técnico foi salvo e pode ser copiado para diagnóstico:",
+                        stringResource(R.string.cloud_unexpected_failure_notice),
                         color = TextSecondary,
                         fontSize = 12.sp
                     )
@@ -1974,7 +1978,7 @@ fun CloudSyncCenterScreen(
                     onClick = {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         clipboard.setPrimaryClip(ClipData.newPlainText("ReSync Crash Log", lastCrashLog))
-                        Toast.makeText(context, "Log copiado para a área de transferência!", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.cloud_log_copied_clipboard), Toast.LENGTH_SHORT).show()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = primaryAccent),
                     shape = RoundedCornerShape(8.dp)
@@ -1999,7 +2003,7 @@ fun CloudSyncCenterScreen(
             containerColor = DarkSurface,
             title = { Text("Remover Conta", fontWeight = FontWeight.Bold, color = TextPrimary) },
             text = {
-                Text("Deseja desconectar a conta ${acc.email}? Seus arquivos no Google Drive permanecerão intactos.", color = TextSecondary, fontSize = 13.sp)
+                Text(stringResource(R.string.cloud_disconnect_account_prompt, acc.email), color = TextSecondary, fontSize = 13.sp)
             },
             confirmButton = {
                 Button(
@@ -2016,7 +2020,7 @@ fun CloudSyncCenterScreen(
             },
             dismissButton = {
                 TextButton(onClick = { accountToRemove = null }) {
-                    Text("Cancelar", color = TextSecondary)
+                    Text(stringResource(R.string.action_cancel), color = TextSecondary)
                 }
             }
         )
@@ -2048,7 +2052,7 @@ fun CloudSyncCenterScreen(
             text = {
                 Column {
                     Text(
-                        "Deseja realmente excluir a etiqueta \"$targetLabel\" e todos os ${targetBackups.size} backup(s) associados a ela no Google Drive?",
+                        stringResource(R.string.cloud_delete_tag_prompt, targetLabel, targetBackups.size),
                         color = TextPrimary,
                         fontSize = 13.sp
                     )
@@ -2059,14 +2063,14 @@ fun CloudSyncCenterScreen(
                         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
                     ) {
                         Column(modifier = Modifier.padding(10.dp)) {
-                            Text("Total de arquivos no Google Drive: ${targetBackups.size}", fontSize = 11.sp, color = TextMuted)
+                            Text(stringResource(R.string.cloud_total_files_drive, targetBackups.size), fontSize = 11.sp, color = TextMuted)
                             val totalBytes = targetBackups.sumOf { it.sizeBytes }
-                            Text("Espaço a ser liberado: ${formatStorageSize(totalBytes)}", fontSize = 11.sp, color = TextSecondary, fontWeight = FontWeight.SemiBold)
+                            Text(stringResource(R.string.cloud_space_to_free, formatStorageSize(totalBytes)), fontSize = 11.sp, color = TextSecondary, fontWeight = FontWeight.SemiBold)
                         }
                     }
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        "Essa ação apagará os arquivos correspondentes na nuvem permanentemente. Os backups locais no aparelho não serão afetados.",
+                        stringResource(R.string.cloud_delete_action_warning),
                         fontSize = 11.sp,
                         color = TextMuted
                     )
@@ -2080,7 +2084,7 @@ fun CloudSyncCenterScreen(
                             isDeletingLabelBackups = false
                             showDeleteSpecificLabelDialog = false
                             labelToDelete = ""
-                            Toast.makeText(context, "$deletedCount backup(s) excluídos da nuvem com sucesso.", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.cloud_deleted_backups_toast, deletedCount), Toast.LENGTH_SHORT).show()
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = StatusError),
@@ -2100,7 +2104,7 @@ fun CloudSyncCenterScreen(
                     onClick = { showDeleteSpecificLabelDialog = false },
                     enabled = !isDeletingLabelBackups
                 ) {
-                    Text("Cancelar", color = TextSecondary)
+                    Text(stringResource(R.string.action_cancel), color = TextSecondary)
                 }
             }
         )
@@ -2127,7 +2131,7 @@ fun CloudSyncCenterScreen(
                     OutlinedTextField(
                         value = newLabelInput,
                         onValueChange = { newLabelInput = it },
-                        placeholder = { Text("Ex: POCO X7 Pro - Diário, Backup Format", fontSize = 12.sp, color = TextMuted) },
+                        placeholder = { Text(stringResource(R.string.cloud_tag_example_hint), fontSize = 12.sp, color = TextMuted) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = primaryAccent,
@@ -2152,7 +2156,7 @@ fun CloudSyncCenterScreen(
                         Spacer(modifier = Modifier.width(6.dp))
                         Column {
                             Text("Definir como etiqueta ativa", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
-                            Text("Novos backups usarão esta etiqueta", fontSize = 10.sp, color = TextMuted)
+                            Text(stringResource(R.string.cloud_new_backups_tag_notice), fontSize = 10.sp, color = TextMuted)
                         }
                     }
                 }
@@ -2164,7 +2168,7 @@ fun CloudSyncCenterScreen(
                         if (trimmed.isNotBlank()) {
                             viewModel.createDeviceLabel(trimmed, setAsActive)
                             showCreateLabelDialog = false
-                            Toast.makeText(context, "Etiqueta \"$trimmed\" criada com sucesso!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.cloud_tag_created_success, trimmed), Toast.LENGTH_SHORT).show()
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = primaryAccent),
@@ -2175,7 +2179,7 @@ fun CloudSyncCenterScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showCreateLabelDialog = false }) {
-                    Text("Cancelar", color = TextSecondary)
+                    Text(stringResource(R.string.action_cancel), color = TextSecondary)
                 }
             }
         )
@@ -2212,7 +2216,7 @@ fun CloudSyncCenterScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("Isso atualizará os metadados dos arquivos existentes no Google Drive associados a esta etiqueta.", fontSize = 11.sp, color = TextMuted)
+                    Text(stringResource(R.string.cloud_metadata_update_notice), fontSize = 11.sp, color = TextMuted)
                 }
             },
             confirmButton = {
@@ -2242,7 +2246,7 @@ fun CloudSyncCenterScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showRenameLabelDialog = false }, enabled = !isRenaming) {
-                    Text("Cancelar", color = TextSecondary)
+                    Text(stringResource(R.string.action_cancel), color = TextSecondary)
                 }
             }
         )
@@ -2289,7 +2293,7 @@ fun CloudSyncCenterScreen(
             text = {
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Text(
-                        "Selecione uma etiqueta para ver seus backups ou use o botão '+' para criar uma nova.",
+                        stringResource(R.string.cloud_select_tag_prompt),
                         fontSize = 12.sp,
                         color = TextSecondary
                     )
@@ -2414,7 +2418,7 @@ fun CloudSyncCenterScreen(
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         val icon = when (catName.lowercase()) {
-                            "aplicativos" -> Icons.Default.Apps
+                            "apps" -> Icons.Default.Apps
                             "mensagens" -> Icons.Default.Sms
                             "chamadas" -> Icons.Default.Call
                             "pastas" -> Icons.Default.Folder
@@ -2455,7 +2459,7 @@ fun CloudSyncCenterScreen(
                                 Icon(Icons.Default.FolderOpen, contentDescription = null, tint = TextMuted, modifier = Modifier.size(32.dp))
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
-                                    "Nenhum backup encontrado contendo $catName nesta etiqueta.",
+                                    stringResource(R.string.cloud_no_backup_cat_tag, catName),
                                     fontSize = 12.sp,
                                     color = TextMuted,
                                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -2472,7 +2476,7 @@ fun CloudSyncCenterScreen(
                             items(matchingBackups, key = { it.id }) { file ->
                                 val summary = remember(file) { CloudBackupCategoryHelper.inspectRemoteFile(file, context) }
                                 val count = when (catName.lowercase()) {
-                                    "aplicativos" -> summary.countApps
+                                    "apps" -> summary.countApps
                                     "mensagens" -> summary.countSms
                                     "chamadas" -> summary.countCalls
                                     "pastas" -> summary.countFolders
@@ -2560,7 +2564,7 @@ fun CloudSyncCenterScreen(
                                             ) {
                                                 Icon(Icons.Default.Restore, contentDescription = null, tint = Color.Black, modifier = Modifier.size(14.dp))
                                                 Spacer(modifier = Modifier.width(4.dp))
-                                                Text("Restaurar", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                                                Text(stringResource(R.string.action_restore), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                                             }
                                         }
                                     }
@@ -2597,7 +2601,7 @@ fun CloudSyncCenterScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     if (localBackups.isEmpty()) {
-                        Text("Nenhum backup local encontrado.", color = TextMuted, fontSize = 13.sp)
+                        Text(stringResource(R.string.cloud_no_local_backup_found), color = TextMuted, fontSize = 13.sp)
                     } else {
                         LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             items(localBackups, key = { it.id }) { b ->
@@ -2642,7 +2646,7 @@ fun CloudSyncCenterScreen(
                             viewModel.uploadBackupsToDrive(toUpload, DriveConstants.ROOT_FOLDER_NAME, selectedDriveAccountEmail)
                             coroutineScope.launch {
                                 val res = snackbarHostState.showSnackbar(
-                                    message = "${toUpload.size} backup(s) adicionados à fila de envio!",
+                                    message = context.getString(R.string.cloud_added_backups_toast, toUpload.size),
                                     actionLabel = "Ver fila",
                                     duration = SnackbarDuration.Short
                                 )
@@ -2660,7 +2664,7 @@ fun CloudSyncCenterScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showBackupSelectionDialog = false }) {
-                    Text("Cancelar", color = TextSecondary)
+                    Text(stringResource(R.string.action_cancel), color = TextSecondary)
                 }
             }
         )
@@ -2682,7 +2686,7 @@ fun CloudSyncCenterScreen(
                     CircularProgressIndicator(modifier = Modifier.size(28.dp), color = primaryAccent)
                     Spacer(modifier = Modifier.width(16.dp))
                     Text(
-                        text = "Validando credenciais e consultando cota de armazenamento...",
+                        text = stringResource(R.string.cloud_validating_creds),
                         fontSize = 13.sp,
                         color = TextSecondary
                     )
@@ -2701,19 +2705,19 @@ fun CloudSyncCenterScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.ErrorOutline, contentDescription = null, tint = StatusError)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Falha na Conta Google", fontWeight = FontWeight.Bold, color = StatusError)
+                    Text(stringResource(R.string.cloud_google_account_failure), fontWeight = FontWeight.Bold, color = StatusError)
                 }
             },
             text = {
                 Column {
                     Text(
-                        text = driveAuthErrorMessage ?: "Ocorreu um erro ao conectar ao Google Drive.",
+                        text = driveAuthErrorMessage ?: stringResource(R.string.cloud_conn_error_gdrive),
                         fontSize = 13.sp,
                         color = TextPrimary
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Verifique sua conexão à internet e conceda as permissões necessárias na tela de consentimento.",
+                        text = stringResource(R.string.cloud_check_net_perm),
                         fontSize = 11.sp,
                         color = TextMuted
                     )
@@ -2732,7 +2736,7 @@ fun CloudSyncCenterScreen(
                                 },
                                 onComplete = { addRes ->
                                     if (addRes.isSuccess) {
-                                        Toast.makeText(context, "Google Drive conectado com sucesso!", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, context.getString(R.string.gdrive_connected_success), Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             )
@@ -2757,7 +2761,7 @@ fun CloudSyncCenterScreen(
         val target = remoteBackupToDelete!!
         AlertDialog(
             onDismissRequest = { remoteBackupToDelete = null },
-            title = { Text("Excluir Backup da Nuvem", fontWeight = FontWeight.Bold, color = TextPrimary) },
+            title = { Text(stringResource(R.string.cloud_delete_cloud_backup_title), fontWeight = FontWeight.Bold, color = TextPrimary) },
             text = {
                 Text(
                     text = "Tem certeza que deseja excluir '${target.name}' do Google Drive?",
@@ -2778,7 +2782,7 @@ fun CloudSyncCenterScreen(
             },
             dismissButton = {
                 TextButton(onClick = { remoteBackupToDelete = null }) {
-                    Text("Cancelar", color = TextSecondary)
+                    Text(stringResource(R.string.action_cancel), color = TextSecondary)
                 }
             },
             containerColor = DarkSurface
@@ -2949,7 +2953,7 @@ fun SyncQueueCard(
 
                 if (item.status == QueueStatus.RUNNING || item.status == QueueStatus.PENDING) {
                     TextButton(onClick = { onCancel?.invoke() }) {
-                        Text("Cancelar", fontSize = 11.sp, color = StatusError)
+                        Text(stringResource(R.string.action_cancel), fontSize = 11.sp, color = StatusError)
                     }
                 }
 

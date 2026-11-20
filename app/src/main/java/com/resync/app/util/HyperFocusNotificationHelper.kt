@@ -65,10 +65,10 @@ object HyperFocusNotificationHelper {
             // Canal para operações em andamento (Backup, Restauração, Nuvem)
             val opsChannel = NotificationChannel(
                 CHANNEL_OPERATIONS_ID,
-                "Operações em Andamento",
+                context.getString(R.string.notif_channel_ops_running),
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Progresso em tempo real de backups, restaurações e transferências para a nuvem."
+                description = context.getString(R.string.notif_channel_ops_running_desc)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                 setShowBadge(false)
                 enableVibration(false)
@@ -79,10 +79,10 @@ object HyperFocusNotificationHelper {
             // Canal para avisos de conclusão de operações
             val compChannel = NotificationChannel(
                 CHANNEL_COMPLETION_ID,
-                "Conclusão de Operações",
+                context.getString(R.string.notif_channel_ops_completed),
                 NotificationManager.IMPORTANCE_DEFAULT
             ).apply {
-                description = "Notificações de finalização de backup, restauração e envio para a nuvem."
+                description = context.getString(R.string.notif_channel_ops_completed_desc)
                 lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                 setShowBadge(true)
             }
@@ -290,7 +290,7 @@ object HyperFocusNotificationHelper {
                 .setSmallIcon(R.drawable.ic_notification)
                 .setLargeIcon(fallbackLogo)
                 .setContentTitle(title.ifBlank { "ReSync" })
-                .setContentText(line2SizeDest.ifBlank { "Operação em andamento" })
+                .setContentText(line2SizeDest.ifBlank { context.getString(R.string.banner_restore_in_progress) })
                 .setOngoing(isOngoing)
                 .setOnlyAlertOnce(true)
                 .apply {

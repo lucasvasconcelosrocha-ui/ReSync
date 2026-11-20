@@ -1,5 +1,9 @@
 package com.resync.app.ui.screens
 
+import com.resync.app.R
+import androidx.compose.ui.res.stringResource
+
+
 import android.content.Context
 import android.os.Build
 import android.os.Environment
@@ -168,11 +172,11 @@ fun StorageDetailsScreen(
                 val proj = arrayOf(MediaStore.MediaColumns.DATA, MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.SIZE, MediaStore.MediaColumns.DATE_MODIFIED)
                 queryUri(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, proj)
             }
-            "vídeos" -> {
+            "videos" -> {
                 val proj = arrayOf(MediaStore.MediaColumns.DATA, MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.SIZE, MediaStore.MediaColumns.DATE_MODIFIED)
                 queryUri(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, proj)
             }
-            "áudio" -> {
+            "audio" -> {
                 val proj = arrayOf(MediaStore.MediaColumns.DATA, MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.SIZE, MediaStore.MediaColumns.DATE_MODIFIED)
                 queryUri(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, proj)
             }
@@ -194,8 +198,8 @@ fun StorageDetailsScreen(
             if (extDir != null && extDir.exists()) {
                 val exts = when (catName.lowercase()) {
                     "imagens" -> listOf("jpg", "jpeg", "png", "webp", "gif", "heic")
-                    "vídeos" -> listOf("mp4", "mkv", "mov", "avi", "webm", "3gp")
-                    "áudio" -> listOf("mp3", "m4a", "aac", "flac", "wav", "ogg", "opus")
+                    "videos" -> listOf("mp4", "mkv", "mov", "avi", "webm", "3gp")
+                    "audio" -> listOf("mp3", "m4a", "aac", "flac", "wav", "ogg", "opus")
                     "documentos" -> listOf("pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "epub")
                     else -> emptyList()
                 }
@@ -297,13 +301,13 @@ fun StorageDetailsScreen(
         val othersBytes = (used - accounted).coerceAtLeast(0L)
 
         categories = listOf(
-            StorageCategory("Aplicativos", appsSum, AccentElectricCyan, Icons.Default.Apps),
+            StorageCategory(context.getString(R.string.category_apps), appsSum, AccentElectricCyan, Icons.Default.Apps),
             StorageCategory("Imagens", imagesBytes, AccentEmeraldGreen, Icons.Default.Image),
-            StorageCategory("Vídeos", videosBytes, AccentSunsetOrange, Icons.Default.VideoLibrary),
-            StorageCategory("Áudio", audioBytes, AccentNeonPurple, Icons.Default.MusicNote),
+            StorageCategory(context.getString(R.string.category_videos), videosBytes, AccentSunsetOrange, Icons.Default.VideoLibrary),
+            StorageCategory(context.getString(R.string.category_audio), audioBytes, AccentNeonPurple, Icons.Default.MusicNote),
             StorageCategory("Documentos", docsBytes, AccentBrightAmber, Icons.Default.Description),
             StorageCategory("Cache", cacheSum, StatusWarning, Icons.Default.CleaningServices),
-            StorageCategory("Sistema", systemTotal, TextMuted, Icons.Default.Memory),
+            StorageCategory(context.getString(R.string.device_category_system), systemTotal, TextMuted, Icons.Default.Memory),
             StorageCategory("Outros", othersBytes, DarkCardBorder, Icons.Default.FolderOpen)
         )
     }
@@ -354,7 +358,7 @@ fun StorageDetailsScreen(
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Voltar",
+                                contentDescription = stringResource(R.string.btn_back),
                                 tint = TextPrimary,
                                 modifier = Modifier.size(18.dp)
                             )
@@ -363,13 +367,13 @@ fun StorageDetailsScreen(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
-                            text = "Armazenamento",
+                            text = stringResource(R.string.dash_storage_title),
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             color = TextPrimary,
                             fontSize = 18.sp
                         )
                         Text(
-                            text = "Memória interna do sistema",
+                            text = stringResource(R.string.storage_system_memory),
                             fontSize = 11.5.sp,
                             color = TextSecondary
                         )
@@ -395,7 +399,7 @@ fun StorageDetailsScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (usedPercent < 90f) "Saudável" else "Atenção",
+                                text = if (usedPercent < 90f) stringResource(R.string.storage_healthy) else stringResource(R.string.storage_warning),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = if (usedPercent < 90f) Color(0xFF00E575) else StatusError
@@ -440,10 +444,10 @@ fun StorageDetailsScreen(
 
         val appsSum = remember(installedApps) { installedApps.sumOf { it.sizeBytes } }
         val imagesCat = categories.find { it.name.equals("Imagens", ignoreCase = true) }?.sizeBytes ?: 0L
-        val videosCat = categories.find { it.name.equals("Vídeos", ignoreCase = true) }?.sizeBytes ?: 0L
-        val audioCat = categories.find { it.name.equals("Áudio", ignoreCase = true) }?.sizeBytes ?: 0L
+        val videosCat = categories.find { it.name.equals(stringResource(R.string.category_videos), ignoreCase = true) }?.sizeBytes ?: 0L
+        val audioCat = categories.find { it.name.equals(stringResource(R.string.category_audio), ignoreCase = true) }?.sizeBytes ?: 0L
         val docsCat = categories.find { it.name.equals("Documentos", ignoreCase = true) }?.sizeBytes ?: 0L
-        val systemCat = categories.find { it.name.equals("Sistema", ignoreCase = true) }?.sizeBytes ?: 0L
+        val systemCat = categories.find { it.name.equals(stringResource(R.string.device_category_system), ignoreCase = true) }?.sizeBytes ?: 0L
         val othersCat = categories.find { it.name.equals("Outros", ignoreCase = true) }?.sizeBytes ?: 0L
         val mediaSum = imagesCat + videosCat
 
@@ -511,7 +515,7 @@ fun StorageDetailsScreen(
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "ESPAÇO USADO",
+                                text = stringResource(R.string.storage_used_space_header),
                                 fontSize = 10.5.sp,
                                 color = TextSecondary,
                                 fontWeight = FontWeight.Bold,
@@ -675,7 +679,7 @@ fun StorageDetailsScreen(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "DIVISÃO POR CATEGORIA",
+                    text = stringResource(R.string.storage_breakdown_header),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 0.8.sp,
@@ -711,7 +715,7 @@ fun StorageDetailsScreen(
                             .clip(RoundedCornerShape(16.dp))
                             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
                             .clickable {
-                                expandedCategories = if ("Aplicativos" in expandedCategories) emptySet() else setOf("Aplicativos")
+                                expandedCategories = if (context.getString(R.string.category_apps) in expandedCategories) emptySet() else setOf(context.getString(R.string.category_apps))
                             },
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                     ) {
@@ -739,7 +743,7 @@ fun StorageDetailsScreen(
                                 }
                             }
                             Spacer(modifier = Modifier.height(12.dp))
-                            Text("Aplicativos", fontSize = 12.sp, color = TextSecondary)
+                            Text(stringResource(R.string.category_apps), fontSize = 12.sp, color = TextSecondary)
                             Spacer(modifier = Modifier.height(2.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -826,7 +830,7 @@ fun StorageDetailsScreen(
                             .clip(RoundedCornerShape(16.dp))
                             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
                             .clickable {
-                                val catName = "Vídeos"
+                                val catName = context.getString(R.string.category_videos)
                                 expandedCategories = if (catName in expandedCategories) emptySet() else setOf(catName)
                                 if (catName in expandedCategories && categoryFilesMap[catName] == null) {
                                     coroutineScope.launch {
@@ -859,11 +863,11 @@ fun StorageDetailsScreen(
                                     color = Color(0xFF818CF8).copy(alpha = 0.12f),
                                     border = BorderStroke(0.5.dp, Color(0xFF818CF8).copy(alpha = 0.35f))
                                 ) {
-                                    Text("Vídeos HD", fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF818CF8), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                    Text(stringResource(R.string.storage_hd_videos), fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF818CF8), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
                                 }
                             }
                             Spacer(modifier = Modifier.height(12.dp))
-                            Text("Vídeos", fontSize = 12.sp, color = TextSecondary)
+                            Text(stringResource(R.string.category_videos), fontSize = 12.sp, color = TextSecondary)
                             Spacer(modifier = Modifier.height(2.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -885,7 +889,7 @@ fun StorageDetailsScreen(
                             .clip(RoundedCornerShape(16.dp))
                             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
                             .clickable {
-                                val catName = "Áudio"
+                                val catName = context.getString(R.string.category_audio)
                                 expandedCategories = if (catName in expandedCategories) emptySet() else setOf(catName)
                                 if (catName in expandedCategories && categoryFilesMap[catName] == null) {
                                     coroutineScope.launch {
@@ -918,11 +922,11 @@ fun StorageDetailsScreen(
                                     color = Color(0xFFF59E0B).copy(alpha = 0.12f),
                                     border = BorderStroke(0.5.dp, Color(0xFFF59E0B).copy(alpha = 0.35f))
                                 ) {
-                                    Text("Músicas", fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFFF59E0B), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                    Text(stringResource(R.string.storage_music), fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFFF59E0B), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
                                 }
                             }
                             Spacer(modifier = Modifier.height(12.dp))
-                            Text("Áudio", fontSize = 12.sp, color = TextSecondary)
+                            Text(stringResource(R.string.category_audio), fontSize = 12.sp, color = TextSecondary)
                             Spacer(modifier = Modifier.height(2.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -1031,7 +1035,7 @@ fun StorageDetailsScreen(
                                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
                                     border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
                                 ) {
-                                    Text("Temporário", fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                    Text(stringResource(R.string.storage_temporary), fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
                                 }
                             }
                             Spacer(modifier = Modifier.height(12.dp))
@@ -1089,7 +1093,7 @@ fun StorageDetailsScreen(
                                 }
                             }
                             Spacer(modifier = Modifier.height(12.dp))
-                            Text("Sistema", fontSize = 12.sp, color = TextSecondary)
+                            Text(stringResource(R.string.device_category_system), fontSize = 12.sp, color = TextSecondary)
                             Spacer(modifier = Modifier.height(2.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -1144,7 +1148,7 @@ fun StorageDetailsScreen(
                                     color = Color(0xFF94A3B8).copy(alpha = 0.12f),
                                     border = BorderStroke(0.5.dp, Color(0xFF94A3B8).copy(alpha = 0.35f))
                                 ) {
-                                    Text("Arquivos", fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF94A3B8), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                    Text(stringResource(R.string.storage_files_label), fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF94A3B8), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
                                 }
                             }
                             Spacer(modifier = Modifier.height(12.dp))
@@ -1192,7 +1196,7 @@ fun StorageDetailsScreen(
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = "Arquivos em $selectedCatName",
+                                        text = stringResource(R.string.storage_files_in_cat, selectedCatName),
                                         fontSize = 13.5.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = TextPrimary
@@ -1209,7 +1213,7 @@ fun StorageDetailsScreen(
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                             Spacer(modifier = Modifier.height(8.dp))
                             Column(modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
-                                if (selectedCatName.lowercase() == "aplicativos") {
+                                if (selectedCatName.lowercase() in listOf("apps")) {
                                     val filteredSortedApps = remember(installedApps, appsFilter) {
                                         when (appsFilter) {
                                             "USER" -> installedApps.filter { !it.isSystemApp }
@@ -1237,7 +1241,7 @@ fun StorageDetailsScreen(
                                 } else {
                                     val files = categoryFilesMap[selectedCatName]
                                     if (files.isNullOrEmpty()) {
-                                        Text("Nenhum arquivo encontrado.", fontSize = 11.sp, color = TextMuted, modifier = Modifier.padding(vertical = 8.dp))
+                                        Text(stringResource(R.string.storage_no_files_found), fontSize = 11.sp, color = TextMuted, modifier = Modifier.padding(vertical = 8.dp))
                                     } else {
                                         LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                             items(files.take(15), key = { it.path }) { fItem ->
@@ -1277,7 +1281,7 @@ fun StorageDetailsScreen(
             ) {
                 Column {
                     Text(
-                        text = "TOP 5 MAIORES APLICATIVOS",
+                        text = stringResource(R.string.storage_top_5_apps),
                         fontSize = 12.5.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextPrimary
@@ -1319,7 +1323,7 @@ fun StorageDetailsScreen(
                             modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("Nenhum aplicativo analisado ainda.", fontSize = 12.sp, color = TextMuted)
+                            Text(stringResource(R.string.storage_no_apps_analyzed), fontSize = 12.sp, color = TextMuted)
                         }
                     } else {
                         top5Apps.forEachIndexed { index, app ->
@@ -1441,7 +1445,7 @@ fun StorageDetailsScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Aplicações com Maior Cache",
+                        text = stringResource(R.string.storage_top_cache_apps),
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextPrimary
@@ -1470,7 +1474,7 @@ fun StorageDetailsScreen(
                             modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("Nenhum aplicativo com cache pendente.", fontSize = 12.sp, color = TextMuted)
+                            Text(stringResource(R.string.storage_no_pending_cache), fontSize = 12.sp, color = TextMuted)
                         }
                     } else {
                         appsWithLargestCache.forEachIndexed { index, item ->
@@ -1603,7 +1607,7 @@ fun StorageDetailsScreen(
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = if (totalAppCacheBytes > 0) "Libere até ${FormatUtils.formatBytes(totalAppCacheBytes)}" else "Sistema Otimizado",
+                                text = if (totalAppCacheBytes > 0) stringResource(R.string.storage_free_up_to, FormatUtils.formatBytes(totalAppCacheBytes)) else stringResource(R.string.storage_system_optimized),
                                 fontSize = 13.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = TextPrimary
@@ -1635,7 +1639,7 @@ fun StorageDetailsScreen(
             AlertDialog(
                 onDismissRequest = { fileToDelete = null },
                 title = { Text("Excluir ${target.name}?", fontWeight = FontWeight.Bold) },
-                text = { Text("Esta ação não pode ser desfeita. O arquivo será removido permanentemente da memória do dispositivo.") },
+                text = { Text(stringResource(R.string.storage_delete_permanent_warning)) },
                 confirmButton = {
                     Button(
                         onClick = {
@@ -1665,9 +1669,9 @@ fun StorageDetailsScreen(
                                     }
                                     usedStorageBytes = maxOf(0L, usedStorageBytes - freed)
                                     freeStorageBytes = minOf(totalStorageBytes, freeStorageBytes + freed)
-                                    Toast.makeText(context, "${target.name} excluído!", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, context.getString(R.string.storage_file_deleted_toast, target.name), Toast.LENGTH_SHORT).show()
                                 } else {
-                                    Toast.makeText(context, "Falha ao excluir o arquivo", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, context.getString(R.string.storage_file_delete_err_toast), Toast.LENGTH_SHORT).show()
                                 }
                                 fileToDelete = null
                             }
@@ -1679,7 +1683,7 @@ fun StorageDetailsScreen(
                 },
                 dismissButton = {
                     TextButton(onClick = { fileToDelete = null }) {
-                        Text("Cancelar", color = TextSecondary)
+                        Text(stringResource(R.string.action_cancel), color = TextSecondary)
                     }
                 },
                 containerColor = DarkSurfaceVariant
@@ -1694,7 +1698,7 @@ fun StorageDetailsScreen(
                     fileForBackup = null
                 },
                 title = { Text("Backup de ${bTarget.name}", fontWeight = FontWeight.Bold) },
-                text = { Text("Escolha o destino para armazenar a cópia de segurança deste arquivo:") },
+                text = { Text(stringResource(R.string.storage_choose_dest_file)) },
                 confirmButton = {
                     Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
@@ -1713,14 +1717,14 @@ fun StorageDetailsScreen(
                                     includeWallpaper = false,
                                     targetCloudProvider = null
                                 )
-                                Toast.makeText(context, "Backup na memória interna iniciado!", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, context.getString(R.string.storage_internal_backup_started), Toast.LENGTH_SHORT).show()
                             },
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(containerColor = primaryAccent)
                         ) {
                             Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Backup na memória interna", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text(stringResource(R.string.explorer_internal_storage_backup), fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
                         Button(
                             onClick = {
@@ -1738,14 +1742,14 @@ fun StorageDetailsScreen(
                                     includeWallpaper = false,
                                     targetCloudProvider = CloudProviderType.GOOGLE_DRIVE
                                 )
-                                Toast.makeText(context, "Backup na nuvem iniciado!", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, context.getString(R.string.storage_cloud_backup_started), Toast.LENGTH_SHORT).show()
                             },
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(containerColor = AccentElectricCyan)
                         ) {
                             Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.Black)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Backup na nuvem (Google Drive)", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.Black)
+                            Text(stringResource(R.string.explorer_cloud_backup_gdrive), fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.Black)
                         }
                     }
                 },
@@ -1754,7 +1758,7 @@ fun StorageDetailsScreen(
                         showBackupChoiceDialog = false
                         fileForBackup = null
                     }) {
-                        Text("Cancelar", color = TextSecondary)
+                        Text(stringResource(R.string.action_cancel), color = TextSecondary)
                     }
                 },
                 containerColor = DarkSurfaceVariant

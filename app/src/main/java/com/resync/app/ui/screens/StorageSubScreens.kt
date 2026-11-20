@@ -1,5 +1,9 @@
 package com.resync.app.ui.screens
 
+import com.resync.app.R
+import androidx.compose.ui.res.stringResource
+
+
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -91,19 +95,19 @@ fun StorageAppsScreen(
                 IconButton(onClick = onBack) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Voltar",
+                        contentDescription = stringResource(R.string.btn_back),
                         tint = TextPrimary
                     )
                 }
                 Spacer(modifier = Modifier.width(6.dp))
                 Column {
                     Text(
-                        text = "Aplicativos",
+                        text = stringResource(R.string.category_apps),
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = TextPrimary
                     )
                     Text(
-                        text = "${sortedApps.size} apps ordenados por tamanho",
+                        text = stringResource(R.string.storage_apps_sorted_size, sortedApps.size),
                         fontSize = 11.sp,
                         color = TextSecondary
                     )
@@ -188,11 +192,11 @@ private fun getAppCacheCategoryTag(packageName: String): String {
         p.contains("telegram") || p.contains("whatsapp") || p.contains("signal") || p.contains("discord") || p.contains("viber") || p.contains("message") || p.contains("talk") || p.contains("chat") || p.contains("sms") -> "Mensagens"
         p.contains("instagram") || p.contains("tiktok") || p.contains("facebook") || p.contains("twitter") || p.contains("threads") || p.contains("reddit") -> "Stories & Reels"
         p.contains("chrome") || p.contains("browser") || p.contains("firefox") || p.contains("opera") || p.contains("edge") -> "Web Cache"
-        p.contains("youtube") || p.contains("netflix") || p.contains("video") || p.contains("twitch") || p.contains("vlc") -> "Vídeos"
-        p.contains("spotify") || p.contains("music") || p.contains("audio") || p.contains("deezer") || p.contains("wave") -> "Áudio"
+        p.contains("youtube") || p.contains("netflix") || p.contains("video") || p.contains("twitch") || p.contains("vlc") -> "Videos"
+        p.contains("spotify") || p.contains("music") || p.contains("audio") || p.contains("deezer") || p.contains("wave") -> "Audio"
         p.contains("gallery") || p.contains("photo") || p.contains("camera") -> "Miniaturas"
-        p.contains("manager") || p.contains("file") || p.contains("explorer") -> "Índices"
-        else -> "Arquivos temporários"
+        p.contains("manager") || p.contains("file") || p.contains("explorer") -> "Indexes"
+        else -> "Temp Files"
     }
 }
 
@@ -218,7 +222,7 @@ fun StorageCacheScreen(
     val totalCacheBytes by viewModel.totalAppCacheBytes.collectAsStateWithLifecycle()
 
     var showConfirmClearAll by rememberSaveable { mutableStateOf(false) }
-    var selectedFilter by rememberSaveable { mutableStateOf("Todos") }
+    var selectedFilter by rememberSaveable { mutableStateOf(context.getString(R.string.filter_all)) }
     var isAutoCleanEnabled by rememberSaveable { mutableStateOf(true) }
     var lastCleanedBytes by rememberSaveable { mutableStateOf(0L) }
 
@@ -272,7 +276,7 @@ fun StorageCacheScreen(
                 p.contains("instagram") || p.contains("facebook") || p.contains("twitter") || p.contains("tiktok") ||
                 p.contains("message") || p.contains("chat") || p.contains("talk")
             }
-            "Mídia & Web" -> activeCacheList.filter {
+            context.getString(R.string.storage_media_web) -> activeCacheList.filter {
                 val p = it.app.packageName.lowercase()
                 p.contains("chrome") || p.contains("browser") || p.contains("youtube") || p.contains("netflix") ||
                 p.contains("spotify") || p.contains("music") || p.contains("video") || p.contains("firefox") || p.contains("gallery")
@@ -348,7 +352,7 @@ fun StorageCacheScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
-                    text = "Isso liberará aproximadamente ${FormatUtils.formatBytes(totalCacheBytes)} excluindo resíduos e arquivos temporários de todos os aplicativos.",
+                    text = stringResource(R.string.storage_clean_cache_explain, FormatUtils.formatBytes(totalCacheBytes)),
                     fontSize = 13.sp,
                     color = TextSecondary,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -405,7 +409,7 @@ fun StorageCacheScreen(
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Text(
-                            text = "Fotos, mensagens e mídias intactas",
+                            text = stringResource(R.string.storage_media_photos_intact),
                             fontSize = 13.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = TextPrimary
@@ -440,7 +444,7 @@ fun StorageCacheScreen(
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                 ) {
-                    Text("Cancelar", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextSecondary)
+                    Text(stringResource(R.string.action_cancel), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextSecondary)
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
@@ -448,7 +452,7 @@ fun StorageCacheScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.VerifiedUser, contentDescription = null, tint = TextMuted, modifier = Modifier.size(14.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Operação segura de sistema", fontSize = 11.sp, color = TextMuted)
+                    Text(stringResource(R.string.storage_safe_sys_op), fontSize = 11.sp, color = TextMuted)
                 }
             }
         }
@@ -462,7 +466,7 @@ fun StorageCacheScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
                     CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.height(14.dp))
-                    Text("Removendo arquivos temporários de todos os aplicativos...", fontSize = 12.sp, color = TextSecondary)
+                    Text(stringResource(R.string.storage_removing_temp_files), fontSize = 12.sp, color = TextSecondary)
                 }
             },
             confirmButton = {},
@@ -501,7 +505,7 @@ fun StorageCacheScreen(
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                    contentDescription = "Voltar",
+                                    contentDescription = stringResource(R.string.btn_back),
                                     tint = TextPrimary,
                                     modifier = Modifier.size(18.dp)
                                 )
@@ -510,7 +514,7 @@ fun StorageCacheScreen(
                         Spacer(modifier = Modifier.width(12.dp))
                         Column {
                             Text(
-                                text = if (isCleanState) "Sessão Limpeza Ativa" else "Limpeza de Cache",
+                                text = if (isCleanState) stringResource(R.string.storage_active_clean_session) else "Limpeza de Cache",
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                 color = TextPrimary,
                                 fontSize = 18.sp
@@ -525,9 +529,9 @@ fun StorageCacheScreen(
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = when {
-                                        isScanning -> "Verificação ativa"
+                                        isScanning -> stringResource(R.string.storage_active_verification)
                                         isCleanState -> "Dispositivo otimizado"
-                                        else -> "Verificação ativa"
+                                        else -> stringResource(R.string.storage_active_verification)
                                     },
                                     fontSize = 11.5.sp,
                                     color = if (isScanning) Color(0xFFFF7A00) else Color(0xFF00E575)
@@ -706,7 +710,7 @@ fun StorageCacheScreen(
                         Spacer(modifier = Modifier.height(6.dp))
 
                         Text(
-                            text = "Nenhum aplicativo possui arquivos temporários acumulados. Seu sistema está rodando com eficiência máxima.",
+                            text = stringResource(R.string.storage_no_temp_files),
                             fontSize = 12.5.sp,
                             color = TextSecondary,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -771,7 +775,7 @@ fun StorageCacheScreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text("MEMÓRIA", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = TextMuted)
+                                Text(stringResource(R.string.storage_memory_label), fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = TextMuted)
                                 Box(
                                     modifier = Modifier.size(28.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFF0B2436)),
                                     contentAlignment = Alignment.Center
@@ -783,7 +787,7 @@ fun StorageCacheScreen(
                             val displayFreed = if (lastCleanedBytes > 0) FormatUtils.formatBytes(lastCleanedBytes) else "964,3 MB"
                             Text("+$displayFreed", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
                             Spacer(modifier = Modifier.height(2.dp))
-                            Text("Espaço recuperado", fontSize = 11.sp, color = TextSecondary)
+                            Text(stringResource(R.string.storage_recovered_space), fontSize = 11.sp, color = TextSecondary)
                         }
                     }
 
@@ -812,7 +816,7 @@ fun StorageCacheScreen(
                             Spacer(modifier = Modifier.height(8.dp))
                             Text("100%", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF00E575))
                             Spacer(modifier = Modifier.height(2.dp))
-                            Text("Partição saudável", fontSize = 11.sp, color = TextSecondary)
+                            Text(stringResource(R.string.storage_healthy_partition), fontSize = 11.sp, color = TextSecondary)
                         }
                     }
                 }
@@ -846,7 +850,7 @@ fun StorageCacheScreen(
                             }
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
-                                Text("Limpeza Automática", fontSize = 13.5.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                Text(stringResource(R.string.storage_auto_clean), fontSize = 13.5.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text("Executar a cada 24 horas", fontSize = 11.sp, color = TextMuted)
                             }
@@ -875,7 +879,7 @@ fun StorageCacheScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF))
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Voltar ao Armazenamento", fontSize = 13.5.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                        Text(stringResource(R.string.storage_back_to_storage), fontSize = 13.5.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                         Spacer(modifier = Modifier.width(6.dp))
                         Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
                     }
@@ -948,7 +952,7 @@ fun StorageCacheScreen(
                                     Spacer(modifier = Modifier.width(14.dp))
                                     Column {
                                         Text(
-                                            text = "VOLUME TEMPORÁRIO",
+                                            text = stringResource(R.string.storage_temp_volume),
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.primary,
@@ -1015,7 +1019,7 @@ fun StorageCacheScreen(
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Box(modifier = Modifier.size(6.dp).clip(CircleShape).background(Color(0xFF00D2FF)))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Mídia & Web (${FormatUtils.formatBytes(mediaCacheBytes)})", fontSize = 11.sp, color = TextMuted)
+                                    Text(stringResource(R.string.storage_media_web_count, FormatUtils.formatBytes(mediaCacheBytes)), fontSize = 11.sp, color = TextMuted)
                                 }
                             }
 
@@ -1059,10 +1063,10 @@ fun StorageCacheScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         val filters = listOf(
-                            "Todos" to "● Todos (${activeCacheList.size})",
+                            stringResource(R.string.filter_all) to stringResource(R.string.storage_mark_all_count, activeCacheList.size),
                             "Mais pesados" to "↓ Mais pesados",
                             "Mensagens" to "💬 Mensagens",
-                            "Mídia & Web" to "🌐 Mídia & Web"
+                            context.getString(R.string.storage_media_web) to "🌐 Media & Web"
                         )
                         filters.forEach { (key, label) ->
                             val selected = selectedFilter == key
@@ -1092,14 +1096,14 @@ fun StorageCacheScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color(0xFFFF7A00), strokeWidth = 2.dp)
                                 Spacer(modifier = Modifier.width(10.dp))
-                                Text("Escaneando aplicativos...", fontSize = 12.sp, color = TextMuted)
+                                Text(stringResource(R.string.storage_scanning_apps), fontSize = 12.sp, color = TextMuted)
                             }
                         }
                     }
                 } else if (filteredList.isEmpty()) {
                     item(key = "empty_filter") {
                         Box(modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp), contentAlignment = Alignment.Center) {
-                            Text("Nenhum aplicativo encontrado neste filtro.", fontSize = 12.sp, color = TextMuted)
+                            Text(stringResource(R.string.storage_no_apps_filter), fontSize = 12.sp, color = TextMuted)
                         }
                     }
                 } else {
@@ -1242,7 +1246,7 @@ fun StorageCacheScreen(
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
-                                    text = "Liberar ${FormatUtils.formatBytes(totalCacheBytes)} não afeta suas fotos, conversas nem contas conectadas.",
+                                    text = stringResource(R.string.storage_free_cache_notice, FormatUtils.formatBytes(totalCacheBytes)),
                                     fontSize = 11.sp,
                                     color = TextSecondary,
                                     lineHeight = 15.sp
@@ -1273,6 +1277,7 @@ fun StorageSystemScreen(
     viewModel: MainViewModel,
     onBack: () -> Unit
 ) {
+    val context = LocalContext.current
     val currentAccent by viewModel.themeAccent.collectAsStateWithLifecycle()
     val primaryAccent = getAccentColor(currentAccent)
 
@@ -1294,7 +1299,7 @@ fun StorageSystemScreen(
         addPart("Sistema (/system)", "/system")
         addPart("Fabricante (/vendor)", "/vendor")
         addPart("Produto (/product)", "/product")
-        addPart("Extensão do Sistema (/system_ext)", "/system_ext")
+        addPart(context.getString(R.string.storage_system_ext_path), "/system_ext")
         addPart("ODM (/odm)", "/odm")
         list
     }
@@ -1322,7 +1327,7 @@ fun StorageSystemScreen(
                 IconButton(onClick = onBack) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Voltar",
+                        contentDescription = stringResource(R.string.btn_back),
                         tint = TextPrimary
                     )
                 }
@@ -1334,7 +1339,7 @@ fun StorageSystemScreen(
                         color = TextPrimary
                     )
                     Text(
-                        text = "Versão e partições do dispositivo",
+                        text = stringResource(R.string.storage_version_partitions),
                         fontSize = 11.sp,
                         color = TextSecondary
                     )
@@ -1360,20 +1365,20 @@ fun StorageSystemScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "INFORMAÇÕES DO SO",
+                        text = stringResource(R.string.storage_os_info),
                         fontSize = 11.5.sp,
                         fontWeight = FontWeight.Bold,
                         color = primaryAccent,
                         letterSpacing = 1.sp
                     )
                     Spacer(modifier = Modifier.height(12.dp))
-                    SystemInfoRow("Versão do Android", "Android $androidRelease (API $sdkInt)")
+                    SystemInfoRow(stringResource(R.string.storage_android_version), "Android $androidRelease (API $sdkInt)")
                     HorizontalDivider(color = DarkCardBorder.copy(alpha = 0.5f), modifier = Modifier.padding(vertical = 8.dp))
                     SystemInfoRow("Dispositivo", model)
                     HorizontalDivider(color = DarkCardBorder.copy(alpha = 0.5f), modifier = Modifier.padding(vertical = 8.dp))
-                    SystemInfoRow("Patch de segurança", securityPatch)
+                    SystemInfoRow(stringResource(R.string.storage_security_patch), securityPatch)
                     HorizontalDivider(color = DarkCardBorder.copy(alpha = 0.5f), modifier = Modifier.padding(vertical = 8.dp))
-                    SystemInfoRow("Compilação", buildId)
+                    SystemInfoRow(stringResource(R.string.storage_build_info), buildId)
                 }
             }
 
@@ -1387,7 +1392,7 @@ fun StorageSystemScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "PARTIÇÕES DO SISTEMA (SOMENTE LEITURA)",
+                        text = stringResource(R.string.storage_sys_partitions_ro),
                         fontSize = 11.5.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextSecondary,
@@ -1396,7 +1401,7 @@ fun StorageSystemScreen(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     if (partitions.isEmpty()) {
-                        Text("Nenhuma partição encontrada ou acesso restrito.", fontSize = 12.sp, color = TextMuted)
+                        Text(stringResource(R.string.storage_no_partitions_found), fontSize = 12.sp, color = TextMuted)
                     } else {
                         partitions.forEachIndexed { index, part ->
                             if (index > 0) {

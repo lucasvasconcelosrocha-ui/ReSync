@@ -1,5 +1,8 @@
 package com.resync.app.ui.screens
 
+import com.resync.app.R
+import androidx.compose.ui.res.stringResource
+
 import android.app.TimePickerDialog
 import android.widget.Toast
 import androidx.compose.animation.*
@@ -62,7 +65,7 @@ fun ScheduledBackupsScreen(
                 scheduleManager.saveSchedule(updatedSchedule)
                 isEditingRoutine = false
                 editingSchedule = null
-                Toast.makeText(context, "Rotina '${updatedSchedule.title}' salva com sucesso!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, context.getString(R.string.routine_saved_success, updatedSchedule.title), Toast.LENGTH_SHORT).show()
             },
             onCancel = {
                 isEditingRoutine = false
@@ -101,7 +104,7 @@ fun ScheduledBackupsScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onBack) {
-                    Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar", tint = TextPrimary)
+                    Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.btn_back), tint = TextPrimary)
                 }
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
@@ -172,7 +175,7 @@ fun ScheduledBackupsScreen(
                             .clickable {
                                 openTimePicker(globalConfig.startTime) { newTime ->
                                     scheduleManager.setStartTime(newTime)
-                                    Toast.makeText(context, "Hora de início atualizada para $newTime", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, context.getString(R.string.start_time_updated, newTime), Toast.LENGTH_SHORT).show()
                                 }
                             },
                         verticalAlignment = Alignment.CenterVertically,
@@ -182,8 +185,8 @@ fun ScheduledBackupsScreen(
                             Icon(Icons.Default.AccessTime, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
-                                Text("Hora de início", fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
-                                Text("Horário preferencial de disparo", fontSize = 11.sp, color = TextSecondary)
+                                Text(stringResource(R.string.start_time_label), fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                                Text(stringResource(R.string.preferred_trigger_time), fontSize = 11.sp, color = TextSecondary)
                             }
                         }
                         Box(
@@ -219,7 +222,7 @@ fun ScheduledBackupsScreen(
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
                                 Text("Requisitos de bateria", fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
-                                Text("Condição mínima de carga", fontSize = 11.sp, color = TextSecondary)
+                                Text(stringResource(R.string.min_battery_condition), fontSize = 11.sp, color = TextSecondary)
                             }
                         }
                         Box(
@@ -245,7 +248,7 @@ fun ScheduledBackupsScreen(
                             onClick = {
                                 val enabledRoutines = schedules.filter { it.isEnabled }
                                 if (enabledRoutines.isEmpty()) {
-                                    Toast.makeText(context, "Nenhum agendamento ativo para executar.", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, context.getString(R.string.no_active_schedules), Toast.LENGTH_SHORT).show()
                                 } else {
                                     viewModel.executeAllScheduleRoutines(enabledRoutines)
                                     Toast.makeText(context, "Iniciando ${enabledRoutines.size} agendamento(s) em segundo plano...", Toast.LENGTH_SHORT).show()
@@ -259,7 +262,7 @@ fun ScheduledBackupsScreen(
                         ) {
                             Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Executar todos os agendamentos", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.Black)
+                            Text(stringResource(R.string.run_all_schedules), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                         }
                     }
                 }
@@ -306,7 +309,7 @@ fun ScheduledBackupsScreen(
                         Spacer(modifier = Modifier.height(14.dp))
 
                         Text(
-                            text = "Nenhum agendamento adicionado",
+                            text = stringResource(R.string.no_schedules_added),
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             color = TextPrimary
                         )
@@ -314,7 +317,7 @@ fun ScheduledBackupsScreen(
                         Spacer(modifier = Modifier.height(4.dp))
 
                         Text(
-                            text = "Crie uma rotina automática para salvar seus apps, mensagens e fotos periodicamente.",
+                            text = stringResource(R.string.create_auto_routine_desc),
                             fontSize = 12.sp,
                             color = TextSecondary,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -376,7 +379,7 @@ fun ScheduledBackupsScreen(
                                             color = TextPrimary
                                         )
                                         Text(
-                                            text = "Horário: ${item.time} • Destino: ${item.destination}",
+                                            text = stringResource(R.string.schedule_time_dest, item.time, item.destination),
                                             fontSize = 11.sp,
                                             color = TextSecondary
                                         )
@@ -400,13 +403,13 @@ fun ScheduledBackupsScreen(
                             ) {
                                 item.targetItems.forEach { target ->
                                     val (label, color) = when (target) {
-                                        "APPS" -> Pair("Aplicativos", AccentElectricCyan)
+                                        "APPS" -> Pair(stringResource(R.string.category_apps), AccentElectricCyan)
                                         "MESSAGES" -> Pair("Mensagens", primaryAccent)
                                         "CALLS" -> Pair("Chamadas", AccentEmeraldGreen)
                                         "CONTACTS" -> Pair("Contatos", AccentSunsetOrange)
                                         "FOLDERS" -> Pair("Pastas", Color(0xFF4FC3F7))
                                         "WIFI" -> Pair("Wi-Fi", StatusWarning)
-                                        "WALLPAPER" -> Pair("Papéis de parede", AccentBrightAmber)
+                                        "WALLPAPER" -> Pair(stringResource(R.string.category_wallpapers), AccentBrightAmber)
                                         "BLUETOOTH" -> Pair("Bluetooth", AccentNeonPurple)
                                         "DNS" -> Pair("DNS", AccentCyberPurple)
                                         else -> Pair(target, TextSecondary)
@@ -428,12 +431,12 @@ fun ScheduledBackupsScreen(
 
                             val nextRunTimestamp = remember(item) { scheduleManager.calculateNextRun(item) }
                             val nextRunStr = if (item.isEnabled) SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(nextRunTimestamp)) else "Pausado (desativado)"
-                            val isSuccess = item.lastRunStatus.contains("Sucesso", ignoreCase = true)
-                            val isError = item.lastRunStatus.contains("Falha", ignoreCase = true) || item.lastRunStatus.contains("Erro", ignoreCase = true)
+                            val isSuccess = item.lastRunStatus.contains(stringResource(R.string.status_success), ignoreCase = true)
+                            val isError = item.lastRunStatus.contains(stringResource(R.string.status_failed), ignoreCase = true) || item.lastRunStatus.contains(stringResource(R.string.status_error), ignoreCase = true)
                             val lastRunColor = if (isSuccess) AccentEmeraldGreen else if (isError) StatusError else TextMuted
                             val lastRunText = if (item.lastRunTimestamp > 0L) {
                                 val dateStr = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(item.lastRunTimestamp))
-                                "Último: $dateStr - ${item.lastRunStatus}"
+                                stringResource(R.string.schedule_last_run, dateStr, item.lastRunStatus)
                             } else {
                                 item.lastRunStatus
                             }
@@ -446,7 +449,7 @@ fun ScheduledBackupsScreen(
                                 ) {
                                     Column(modifier = Modifier.weight(1f).padding(end = 6.dp)) {
                                         Text(
-                                            text = "Próxima: $nextRunStr",
+                                            text = stringResource(R.string.schedule_next_run, nextRunStr),
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.SemiBold,
                                             color = primaryAccent
@@ -588,7 +591,7 @@ fun ScheduledBackupsScreen(
             },
             dismissButton = {
                 TextButton(onClick = { scheduleToDelete = null }) {
-                    Text("Cancelar", color = TextSecondary)
+                    Text(stringResource(R.string.action_cancel), color = TextSecondary)
                 }
             },
             containerColor = DarkSurface,

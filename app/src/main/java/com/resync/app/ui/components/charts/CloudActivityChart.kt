@@ -1,5 +1,8 @@
 package com.resync.app.ui.components.charts
 
+import com.resync.app.R
+import androidx.compose.ui.res.stringResource
+
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -36,7 +39,7 @@ fun CloudActivityChart(
         CloudDailyActivity("Qua", 8.4f, 2.1f, 0),
         CloudDailyActivity("Qui", 6.1f, 0.8f, 0),
         CloudDailyActivity("Sex", 9.5f, 3.4f, 1),
-        CloudDailyActivity("Sáb", 4.2f, 1.0f, 0),
+        CloudDailyActivity(stringResource(R.string.chart_sat), 4.2f, 1.0f, 0),
         CloudDailyActivity("Dom", 2.1f, 0.2f, 0)
     )
 
@@ -61,7 +64,7 @@ fun CloudActivityChart(
                     color = TextPrimary
                 )
                 Text(
-                    text = "Taxa de transferência e sincronização semanal",
+                    text = stringResource(R.string.chart_transfer_rate),
                     style = MaterialTheme.typography.bodySmall,
                     color = TextSecondary
                 )

@@ -68,7 +68,7 @@ fun AppsListScreen(
     val backupStatusMap by viewModel.appBackupStatusMap.collectAsState()
 
     var searchQuery by remember { mutableStateOf("") }
-    var selectedFilter by remember { mutableStateOf("Todos") } // "Todos", "Usuário", "Sistema", "Com backup", "Desinstalados", "Sem backup", "Desatualizados"
+    var selectedFilter by remember { mutableStateOf("all") }
     var sortBy by remember { mutableStateOf("Nome A → Z") }
     var showSortMenu by remember { mutableStateOf(false) }
     var isMultiSelectMode by remember { mutableStateOf(false) }
@@ -126,12 +126,12 @@ fun AppsListScreen(
             val status = backupStatusMap[app.packageName]
             val hasBackup = status?.hasBackup ?: app.hasBackup
             val matchesFilter = when (selectedFilter) {
-                "Usuário" -> app.isInstalled && !app.isSystemApp
-                "Sistema" -> app.isInstalled && app.isSystemApp
-                "Com backup" -> hasBackup
-                "Desinstalados" -> !app.isInstalled
-                "Sem backup" -> app.isInstalled && !hasBackup
-                "Desatualizados" -> app.isOutdatedBackup
+                "user" -> app.isInstalled && !app.isSystemApp
+                "system" -> app.isInstalled && app.isSystemApp
+                "backed_up" -> hasBackup
+                "uninstalled" -> !app.isInstalled
+                "no_backup" -> app.isInstalled && !hasBackup
+                "outdated" -> app.isOutdatedBackup
                 else -> true
             }
             matchesSearch && matchesFilter
@@ -141,8 +141,8 @@ fun AppsListScreen(
             "Nome A → Z" -> filtered.sortedBy { it.appName.lowercase() }
             "Nome Z → A" -> filtered.sortedByDescending { it.appName.lowercase() }
             "Tamanho" -> filtered.sortedByDescending { it.sizeBytes }
-            "Data do último backup" -> filtered.sortedByDescending { backupStatusMap[it.packageName]?.latestTimestamp ?: 0L }
-            "Data de instalação" -> filtered.sortedByDescending { it.lastInstallTime }
+            "backup_date" -> filtered.sortedByDescending { backupStatusMap[it.packageName]?.latestTimestamp ?: 0L }
+            "install_date" -> filtered.sortedByDescending { it.lastInstallTime }
             "Com backup" -> filtered.sortedByDescending { backupStatusMap[it.packageName]?.hasBackup ?: it.hasBackup }
             "Sem backup" -> filtered.sortedBy { backupStatusMap[it.packageName]?.hasBackup ?: it.hasBackup }
             else -> filtered
@@ -217,21 +217,21 @@ fun AppsListScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         IconButton(onClick = onBack) {
-                            Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Voltar", tint = TextPrimary)
+                            Icon(imageVector = Icons.Default.ArrowBack, contentDescription = stringResource(R.string.btn_back), tint = TextPrimary)
                         }
                         Spacer(modifier = Modifier.width(4.dp))
                         Column {
                             Text(
-                                text = "Aplicativos",
+                                text = stringResource(R.string.nav_tab_apps),
                                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                                 color = TextPrimary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
                             val modeLabel = when (activeMode) {
-                                CapabilityManager.ExecutionMode.ROOT -> "Root autorizado"
-                                CapabilityManager.ExecutionMode.SHIZUKU -> "Shizuku ativo"
-                                CapabilityManager.ExecutionMode.STANDARD -> "Acesso padrão"
+                                CapabilityManager.ExecutionMode.ROOT -> stringResource(R.string.apps_root_authorized)
+                                CapabilityManager.ExecutionMode.SHIZUKU -> stringResource(R.string.apps_shizuku_active)
+                                CapabilityManager.ExecutionMode.STANDARD -> stringResource(R.string.apps_standard_access)
                             }
                             Text(
                                 text = modeLabel,
@@ -247,7 +247,7 @@ fun AppsListScreen(
                         // Sort Button with dropdown
                         Box {
                             IconButton(onClick = { showSortMenu = true }) {
-                                Icon(Icons.Default.Sort, contentDescription = "Ordenar", tint = TextSecondary)
+                                Icon(Icons.Default.Sort, contentDescription = stringResource(R.string.apps_sort_action), tint = TextSecondary)
                             }
                             DropdownMenu(
                                 expanded = showSortMenu,
@@ -258,7 +258,7 @@ fun AppsListScreen(
                                     "Nome A → Z",
                                     "Nome Z → A",
                                     "Tamanho",
-                                    "Data de instalação",
+                                    "install_date",
                                     "Com backup",
                                     "Sem backup"
                                 )
@@ -266,7 +266,15 @@ fun AppsListScreen(
                                     DropdownMenuItem(
                                         text = {
                                             Text(
-                                                text = option,
+                                                text = when (option) {
+                                                    "Nome A → Z" -> stringResource(R.string.apps_sort_name_az)
+                                                    "Nome Z → A" -> stringResource(R.string.apps_sort_name_za)
+                                                    "Tamanho" -> stringResource(R.string.apps_sort_size)
+                                                    "install_date" -> stringResource(R.string.apps_sort_install_date)
+                                                    "backed_up" -> stringResource(R.string.status_has_backup)
+                                                    "no_backup" -> stringResource(R.string.apps_tab_no_backup)
+                                                    else -> option
+                                                },
                                                 color = if (sortBy == option) primaryAccent else TextPrimary,
                                                 fontWeight = if (sortBy == option) FontWeight.Bold else FontWeight.Normal
                                             )
@@ -286,7 +294,7 @@ fun AppsListScreen(
                         }) {
                             Icon(
                                 imageVector = if (isMultiSelectMode) Icons.Default.ChecklistRtl else Icons.Default.Checklist,
-                                contentDescription = "Seleção Múltipla",
+                                contentDescription = stringResource(R.string.apps_multiselect),
                                 tint = if (isMultiSelectMode) primaryAccent else TextSecondary
                             )
                         }
@@ -300,7 +308,7 @@ fun AppsListScreen(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
                     modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("Pesquisar aplicativo ou pacote...", color = TextMuted, fontSize = 13.sp) },
+                    placeholder = { Text(stringResource(R.string.search_apps_placeholder), color = TextMuted, fontSize = 13.sp) },
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = TextMuted) },
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
@@ -330,7 +338,7 @@ fun AppsListScreen(
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    val filters = listOf("Todos", "Usuário", "Sistema", "Com backup", "Desinstalados", "Sem backup", "Desatualizados")
+                    val filters = listOf("all", "user", "system", "backed_up", "uninstalled", "no_backup", "outdated")
                     for (f in filters) {
                         val isSelected = f == selectedFilter
                         Box(
@@ -341,8 +349,18 @@ fun AppsListScreen(
                                 .clickable { selectedFilter = f }
                                 .padding(horizontal = 12.dp, vertical = 6.dp)
                         ) {
-                            Text(
-                                text = f,
+                            val fLabel = when (f) {
+                                    "all" -> stringResource(R.string.apps_tab_all)
+                                    "user" -> stringResource(R.string.apps_tab_user)
+                                    "system" -> stringResource(R.string.apps_tab_system)
+                                    "backed_up" -> stringResource(R.string.status_has_backup)
+                                    "uninstalled" -> stringResource(R.string.status_uninstalled)
+                                    "no_backup" -> stringResource(R.string.apps_tab_no_backup)
+                                    "outdated" -> stringResource(R.string.status_outdated)
+                                    else -> f
+                                }
+                                Text(
+                                text = fLabel,
                                 fontSize = 12.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                 color = if (isSelected) primaryAccent else TextSecondary,
@@ -370,19 +388,19 @@ fun AppsListScreen(
                                 },
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                             ) {
-                                Text("[Selecionar todos]", fontSize = 12.sp, color = primaryAccent, fontWeight = FontWeight.Bold)
+                                Text(stringResource(R.string.apps_select_all_brackets), fontSize = 12.sp, color = primaryAccent, fontWeight = FontWeight.Bold)
                             }
 
                             TextButton(
                                 onClick = { selectedPackages.clear() },
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                             ) {
-                                Text("[Desmarcar todos]", fontSize = 12.sp, color = TextMuted)
+                                Text(stringResource(R.string.apps_deselect_all_brackets), fontSize = 12.sp, color = TextMuted)
                             }
                         }
 
                         Text(
-                            text = "${selectedPackages.size}/${processedApps.size} selecionados",
+                            text = stringResource(R.string.apps_selected_count, selectedPackages.size, processedApps.size),
                             fontSize = 12.sp,
                             color = TextSecondary
                         )
@@ -447,7 +465,7 @@ fun AppsListScreen(
                                     viewModel.launchQuickBackupForApps(selectedPackages.toList())
                                     isMultiSelectMode = false
                                     selectedPackages.clear()
-                                    Toast.makeText(context, "Iniciando Backup Rápido...", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, context.getString(R.string.starting_quick_backup), Toast.LENGTH_SHORT).show()
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = primaryAccent),
                                 shape = RoundedCornerShape(10.dp),
@@ -455,7 +473,7 @@ fun AppsListScreen(
                             ) {
                                 Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Backup Rápido", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                Text(stringResource(R.string.quick_backup_title), fontWeight = FontWeight.Bold, fontSize = 11.sp)
                             }
                         }
                     }
@@ -483,7 +501,7 @@ fun AppsListScreen(
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             CircularProgressIndicator(color = primaryAccent, modifier = Modifier.size(36.dp))
                             Spacer(modifier = Modifier.height(12.dp))
-                            Text("Carregando aplicativos...", color = TextSecondary, fontSize = 13.sp)
+                            Text(stringResource(R.string.apps_loading_apps), color = TextSecondary, fontSize = 13.sp)
                         }
                     }
                 }
@@ -498,7 +516,7 @@ fun AppsListScreen(
                     ) {
                         CircularProgressIndicator(color = primaryAccent, modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Atualizando lista de aplicativos...", color = TextMuted, fontSize = 11.sp)
+                        Text(stringResource(R.string.apps_updating_list), color = TextMuted, fontSize = 11.sp)
                     }
                 }
             }
@@ -516,7 +534,7 @@ fun AppsListScreen(
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     CircularProgressIndicator(color = primaryAccent, modifier = Modifier.size(36.dp))
                                     Spacer(modifier = Modifier.height(12.dp))
-                                    Text("Verificando atualizações locais na Play Store...", color = TextSecondary, fontSize = 13.sp)
+                                    Text(stringResource(R.string.apps_checking_updates), color = TextSecondary, fontSize = 13.sp)
                                 }
                             }
                         }
@@ -535,7 +553,7 @@ fun AppsListScreen(
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(Icons.Default.Warning, contentDescription = null, tint = StatusWarning, modifier = Modifier.size(20.dp))
                                         Spacer(modifier = Modifier.width(8.dp))
-                                        Text("Verificação de Atualizações", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 14.sp)
+                                        Text(stringResource(R.string.apps_check_updates_title), fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 14.sp)
                                     }
                                     Spacer(modifier = Modifier.height(8.dp))
                                     Text(
@@ -576,7 +594,7 @@ fun AppsListScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "${filteredUpdates.size} atualizações disponíveis",
+                                    text = stringResource(R.string.updates_available_count, filteredUpdates.size),
                                     fontWeight = FontWeight.Bold,
                                     color = TextPrimary,
                                     fontSize = 13.sp
@@ -596,7 +614,7 @@ fun AppsListScreen(
                                 ) {
                                     Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp), tint = primaryAccent)
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Abrir Play Store", fontSize = 11.sp, color = primaryAccent, fontWeight = FontWeight.Bold)
+                                    Text(stringResource(R.string.open_play_store), fontSize = 11.sp, color = primaryAccent, fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -620,14 +638,14 @@ fun AppsListScreen(
                                         Icon(Icons.Default.CheckCircle, contentDescription = null, tint = StatusSuccess, modifier = Modifier.size(36.dp))
                                         Spacer(modifier = Modifier.height(8.dp))
                                         Text(
-                                            text = "Todos os aplicativos estão atualizados",
+                                            text = stringResource(R.string.all_apps_up_to_date),
                                             fontWeight = FontWeight.Bold,
                                             color = TextPrimary,
                                             fontSize = 14.sp
                                         )
                                         Spacer(modifier = Modifier.height(4.dp))
                                         Text(
-                                            text = "Nenhuma atualização pendente detectada na Play Store.",
+                                            text = stringResource(R.string.no_pending_updates_play_store),
                                             color = TextSecondary,
                                             fontSize = 12.sp
                                         )
@@ -663,12 +681,12 @@ fun AppsListScreen(
                     }
                     else -> {}
                 }
-            } else if (selectedFilter == "Todos" && searchQuery.isBlank()) {
+            } else if (selectedFilter == "all" && searchQuery.isBlank()) {
                 // Section 1: User Apps
                 if (userApps.isNotEmpty()) {
                     item {
                         SectionHeader(
-                            title = "APLICATIVOS INSTALADOS",
+                            title = stringResource(R.string.apps_header_installed),
                             count = userApps.size,
                             accentColor = primaryAccent
                         )
@@ -733,7 +751,7 @@ fun AppsListScreen(
                             onDeleteBackup = { backupToDelete = it },
                             onUploadBackupToDrive = {
                                 viewModel.uploadBackupsToDrive(listOf(it), DriveConstants.ROOT_FOLDER_NAME, selectedDriveAccountEmail)
-                                Toast.makeText(context, "Enviando backup para o Drive...", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, context.getString(R.string.uploading_backup_to_drive), Toast.LENGTH_SHORT).show()
                             },
                             onRestoreAppClick = {
                                 val points = viewModel.getBackupPointsForApp(app.packageName)
@@ -758,7 +776,7 @@ fun AppsListScreen(
                                         appForIndividualRestore = app
                                         individualRestorePoint = pt
                                     } else {
-                                        Toast.makeText(context, "Nenhum backup encontrado para este app", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, context.getString(R.string.no_backup_found_for_app), Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             }
@@ -771,7 +789,7 @@ fun AppsListScreen(
                     item {
                         Spacer(modifier = Modifier.height(10.dp))
                         SectionHeader(
-                            title = "APLICATIVOS DESINSTALADOS COM BACKUP",
+                            title = stringResource(R.string.apps_header_uninstalled),
                             count = uninstalledDisplayApps.size,
                             accentColor = AccentSunsetOrange
                         )
@@ -816,7 +834,7 @@ fun AppsListScreen(
                                         appForIndividualRestore = app
                                         individualRestorePoint = pt
                                     } else {
-                                        Toast.makeText(context, "Nenhum backup encontrado para este app", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, context.getString(R.string.no_backup_found_for_app), Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             },
@@ -840,7 +858,7 @@ fun AppsListScreen(
                             onDeleteBackup = { backupToDelete = it },
                             onUploadBackupToDrive = {
                                 viewModel.uploadBackupsToDrive(listOf(it), DriveConstants.ROOT_FOLDER_NAME, selectedDriveAccountEmail)
-                                Toast.makeText(context, "Enviando backup para o Drive...", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, context.getString(R.string.uploading_backup_to_drive), Toast.LENGTH_SHORT).show()
                             },
                             onRestoreAppClick = {
                                 val points = viewModel.getBackupPointsForApp(app.packageName)
@@ -865,7 +883,7 @@ fun AppsListScreen(
                                         appForIndividualRestore = app
                                         individualRestorePoint = pt
                                     } else {
-                                        Toast.makeText(context, "Nenhum backup encontrado para este app", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, context.getString(R.string.no_backup_found_for_app), Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             }
@@ -878,7 +896,7 @@ fun AppsListScreen(
                     item {
                         Spacer(modifier = Modifier.height(10.dp))
                         SectionHeader(
-                            title = "APLICATIVOS DO SISTEMA",
+                            title = stringResource(R.string.apps_header_system),
                             count = systemApps.size,
                             accentColor = TextSecondary
                         )
@@ -943,7 +961,7 @@ fun AppsListScreen(
                             onDeleteBackup = { backupToDelete = it },
                             onUploadBackupToDrive = {
                                 viewModel.uploadBackupsToDrive(listOf(it), DriveConstants.ROOT_FOLDER_NAME, selectedDriveAccountEmail)
-                                Toast.makeText(context, "Enviando backup para o Drive...", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, context.getString(R.string.uploading_backup_to_drive), Toast.LENGTH_SHORT).show()
                             },
                             onRestoreAppClick = {
                                 val points = viewModel.getBackupPointsForApp(app.packageName)
@@ -968,7 +986,7 @@ fun AppsListScreen(
                                         appForIndividualRestore = app
                                         individualRestorePoint = pt
                                     } else {
-                                        Toast.makeText(context, "Nenhum backup encontrado para este app", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, context.getString(R.string.no_backup_found_for_app), Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             }
@@ -979,7 +997,7 @@ fun AppsListScreen(
                 // Filtered or searched view
                 item {
                     Text(
-                        text = "${processedApps.size} aplicativos encontrados",
+                        text = stringResource(R.string.apps_found_count, processedApps.size),
                         style = MaterialTheme.typography.bodySmall,
                         color = TextMuted,
                         modifier = Modifier.padding(vertical = 4.dp)
@@ -1079,7 +1097,7 @@ fun AppsListScreen(
                         onDeleteBackup = { backupToDelete = it },
                         onUploadBackupToDrive = {
                             viewModel.uploadBackupsToDrive(listOf(it), DriveConstants.ROOT_FOLDER_NAME, selectedDriveAccountEmail)
-                            Toast.makeText(context, "Enviando backup para o Drive...", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.uploading_backup_to_drive), Toast.LENGTH_SHORT).show()
                         },
                         onRestoreAppClick = {
                             val points = viewModel.getBackupPointsForApp(app.packageName)
@@ -1104,7 +1122,7 @@ fun AppsListScreen(
                                     appForIndividualRestore = app
                                     individualRestorePoint = pt
                                 } else {
-                                    Toast.makeText(context, "Nenhum backup encontrado para este app", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, context.getString(R.string.no_backup_found_for_app), Toast.LENGTH_SHORT).show()
                                 }
                             }
                         }
@@ -1148,7 +1166,7 @@ fun AppsListScreen(
                     color = TextPrimary
                 )
                 Text(
-                    text = "Configure opções avançadas de arquivamento, dados e nuvem:",
+                    text = stringResource(R.string.custom_options_desc),
                     fontSize = 12.sp,
                     color = TextSecondary
                 )
@@ -1175,7 +1193,7 @@ fun AppsListScreen(
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().clickable { includeObb = !includeObb }) {
                     Checkbox(checked = includeObb, onCheckedChange = { includeObb = it }, colors = CheckboxDefaults.colors(checkedColor = primaryAccent))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Arquivos adicionais e mídia (Recursos extras)", fontSize = 13.sp, color = TextPrimary)
+                    Text(stringResource(R.string.custom_additional_files_media), fontSize = 13.sp, color = TextPrimary)
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
@@ -1228,10 +1246,10 @@ fun AppsListScreen(
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
-                Text("COMPRESSÃO", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = primaryAccent)
+                Text(stringResource(R.string.custom_compression_title), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = primaryAccent)
                 Spacer(modifier = Modifier.height(6.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("GZIP" to "GZIP (Recomendado)", "STORED" to "STORE (Rápido)").forEach { (key, label) ->
+                    listOf("GZIP" to stringResource(R.string.custom_compression_gzip), "STORED" to stringResource(R.string.custom_compression_stored)).forEach { (key, label) ->
                         val isCompSel = selectedCompression == key
                         Box(
                             modifier = Modifier
@@ -1301,10 +1319,10 @@ fun AppsListScreen(
                 pendingCustomBackupLaunch = null
             },
             icon = { Icon(Icons.Default.Warning, contentDescription = null, tint = StatusWarning, modifier = Modifier.size(28.dp)) },
-            title = { Text("Modo Sem Root Detectado", fontWeight = FontWeight.Bold, color = TextPrimary) },
+            title = { Text(stringResource(R.string.non_root_warning_title), fontWeight = FontWeight.Bold, color = TextPrimary) },
             text = {
                 Text(
-                    text = "O backup de dados internos de aplicativos (/data/data) exige privilégios de Root.\n\nComo o dispositivo está em Modo Sem Root, o ReSync fará o backup apenas dos APKs dos aplicativos selecionados, sem registrar erros de dados.\n\nDeseja prosseguir com o backup dos APKs?",
+                    text = stringResource(R.string.non_root_warning_desc),
                     color = TextSecondary,
                     fontSize = 13.sp,
                     lineHeight = 18.sp
@@ -1321,7 +1339,7 @@ fun AppsListScreen(
                     colors = ButtonDefaults.buttonColors(containerColor = primaryAccent),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text("Continuar (Apenas APKs)", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text(stringResource(R.string.continue_apks_only), fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 }
             },
             dismissButton = {
@@ -1329,7 +1347,7 @@ fun AppsListScreen(
                     showNonRootConfirmDialog = false
                     pendingCustomBackupLaunch = null
                 }) {
-                    Text("Cancelar", color = TextMuted, fontSize = 12.sp)
+                    Text(stringResource(R.string.action_cancel), color = TextMuted, fontSize = 12.sp)
                 }
             },
             containerColor = DarkSurface,
@@ -1342,25 +1360,25 @@ fun AppsListScreen(
         AlertDialog(
             onDismissRequest = { backupToRestore = null },
             containerColor = DarkSurface,
-            title = { Text("Restaurar Backup?", fontWeight = FontWeight.Bold, color = TextPrimary) },
+            title = { Text(stringResource(R.string.restore_backup_dialog_title), fontWeight = FontWeight.Bold, color = TextPrimary) },
             text = {
-                Text("Deseja restaurar o backup de '${b.title}'? O aplicativo e seus dados salvos serão reinstalados e recuperados.", color = TextSecondary, fontSize = 13.sp)
+                Text(stringResource(R.string.restore_backup_dialog_msg, b.title), color = TextSecondary, fontSize = 13.sp)
             },
             confirmButton = {
                 Button(
                     onClick = {
                         backupToRestore = null
                         viewModel.launchRestore(b, emptySet())
-                        Toast.makeText(context, "Iniciando restauração...", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.starting_restore), Toast.LENGTH_SHORT).show()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = primaryAccent)
                 ) {
-                    Text("RESTAURAR", fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.action_restore), fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { backupToRestore = null }) {
-                    Text("Cancelar", color = TextSecondary)
+                    Text(stringResource(R.string.action_cancel), color = TextSecondary)
                 }
             }
         )
@@ -1384,7 +1402,7 @@ fun AppsListScreen(
                                 val toDelete = b
                                 backupToDelete = null
                                 viewModel.deleteBackupRecord(toDelete, deleteFromCloud = false) { success, _ ->
-                                    if (success) Toast.makeText(context, "Backup excluído do aparelho.", Toast.LENGTH_SHORT).show()
+                                    if (success) Toast.makeText(context, context.getString(R.string.apps_deleted_local), Toast.LENGTH_SHORT).show()
                                 }
                             },
                             border = BorderStroke(1.dp, StatusError)
@@ -1397,7 +1415,7 @@ fun AppsListScreen(
                                 val toDelete = b
                                 backupToDelete = null
                                 viewModel.deleteBackupRecord(toDelete, deleteFromCloud = true) { success, _ ->
-                                    if (success) Toast.makeText(context, "Backup excluído do aparelho e da nuvem.", Toast.LENGTH_SHORT).show()
+                                    if (success) Toast.makeText(context, context.getString(R.string.apps_deleted_both), Toast.LENGTH_SHORT).show()
                                 }
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = StatusError)
@@ -1410,7 +1428,7 @@ fun AppsListScreen(
                                 val toDelete = b
                                 backupToDelete = null
                                 viewModel.deleteBackupRecord(toDelete, deleteFromCloud = false) { success, _ ->
-                                    if (success) Toast.makeText(context, "Backup excluído.", Toast.LENGTH_SHORT).show()
+                                    if (success) Toast.makeText(context, context.getString(R.string.apps_deleted_generic), Toast.LENGTH_SHORT).show()
                                 }
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = StatusError)
@@ -1598,7 +1616,7 @@ fun AppListItemCard(
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
                                 Text(
-                                    text = "NÃO INSTALADO • APENAS BACKUP",
+                                    text = stringResource(R.string.apps_not_installed_badge),
                                     fontSize = 9.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = AccentSunsetOrange
@@ -1664,7 +1682,7 @@ fun AppListItemCard(
 
                         Spacer(modifier = Modifier.width(8.dp))
 
-                        val statusBadgeText = if (!app.isInstalled) "Restaurar" else if (hasBackup) "Com backup" else "Sem backup"
+                        val statusBadgeText = if (!app.isInstalled) stringResource(R.string.action_restore) else if (hasBackup) stringResource(R.string.status_has_backup) else stringResource(R.string.apps_tab_no_backup)
                         val statusBadgeColor = if (!app.isInstalled) AccentSunsetOrange else if (hasBackup) StatusSuccess else TextMuted
 
                         Box(
@@ -1682,7 +1700,7 @@ fun AppListItemCard(
                                 if (hasBackup || !app.isInstalled) {
                                     Icon(
                                         Icons.Default.Restore,
-                                        contentDescription = "Restaurar",
+                                        contentDescription = stringResource(R.string.action_restore),
                                         tint = statusBadgeColor,
                                         modifier = Modifier.size(12.dp)
                                     )
@@ -1731,7 +1749,7 @@ fun AppListItemCard(
                         )
                     }
                     Text(
-                        text = if (isHistoryExpanded) "Ocultar" else "Ver histórico",
+                        text = if (isHistoryExpanded) "Ocultar" else stringResource(R.string.apps_view_history),
                         fontSize = 10.sp,
                         color = TextMuted
                     )
@@ -1795,7 +1813,7 @@ fun AppListItemCard(
                                         ) {
                                             Icon(Icons.Default.Restore, contentDescription = null, modifier = Modifier.size(12.dp))
                                             Spacer(modifier = Modifier.width(3.dp))
-                                            Text("Restaurar", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                            Text(stringResource(R.string.action_restore), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                         }
                                     }
                                 }

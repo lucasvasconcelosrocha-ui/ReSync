@@ -1,20 +1,18 @@
 {
-  "versionCode": 38,
-  "versionName": "1.0.38",
-  "tag": "v1.0.38",
-  "apkName": "ReSync-v1.0.38.apk",
-  "releaseNotes": "🚀 **O QUE HÁ DE NOVO NESTA VERSÃO (v1.0.38) / WHAT'S NEW IN THIS VERSION:**\n\n🌐 **English as Factory Default & 100% Localization**\n• Padrão em Inglês de fábrica com seletor dinâmico em tempo real para Português (Brasil) e Padrão do Sistema.\n• Factory default set to English with instant runtime switching between English, Portuguese (Brazil), and System default.\n\n🛡️ **Correção Crítica na Restauração Individual de Apps (Restore Flow Bugfix)**\n• Máquina de estados isolada garantindo que a tela de conclusão só apareça após restauração real e verificada.\n• Isolated state machine ensuring the completion screen only opens upon actual, verified restore.\n\n✨ **Animação Futurista de Conclusão & Barra Inferior Inteligente (Futuristic Orb UI)**\n• Nova animação orbital neon com Canvas, pulso de radar e resposta tátil háptica ao toque.\n• New futuristic orbital neon Canvas animation with radar pulse and haptic feedback.\n\n💻 **Overhaul no Console de Backup & Badge Neon no Dashboard**\n• Logs em formato monospace de largura total com quebra de linha limpa e badge neon 'v1.0.38' em tempo real.\n• Full-width monospace log console with clean line breaks and live 'v1.0.38' neon badge.\n\n💬 **Comunidade Oficial no Telegram (Official Community)**\n• Integração nativa com o canal oficial t.me/resync_backup com modal de boas-vindas e acesso permanente nas Configurações.\n• Native integration with t.me/resync_backup via welcome modal and permanent Settings card.",
+  "versionCode": 39,
+  "versionName": "1.0.39",
+  "tag": "v1.0.39",
+  "apkName": "ReSync-v1.0.39.apk",
+  "releaseNotes": "🚀 **O QUE HÁ DE NOVO NESTA VERSÃO (v1.0.39) / WHAT'S NEW IN THIS VERSION:**\n\n🛡️ **Fim Definitivo dos Crashes ao Abrir Abas (Zero Tab Crash Fix)**\n• Eliminação do ClassCastException fatal (ContextImpl cannot be cast to Activity) causado pela substituição indevida do LocalContext.\n• Implementada extensão segura Context.findActivity() em toda a aplicação.\n\n🌐 **Purificação Total em Inglês & Sincronização Perfeita (100% English Localization)**\n• Varredura completa de 100% das strings hardcoded em português nas telas, modais, gráficos, serviços e viewmodels.\n• Inglês nativo como padrão de fábrica com suporte total e idêntico a Português do Brasil e Padrão do Sistema.\n\n🧹 **Limpeza de Chaves de Bibliotecas & Otimização XML**\n• Remoção de conflitos de merge de strings de bibliotecas de terceiros (Google Play Services, AndroidX Startup, Material3).\n• Validação anti-crash de formatação e apóstrofos em 100% dos recursos de idiomas.",
   "functions": [
-    "English as factory default language with instant Compose runtime switching",
-    "Futuristic orbital neon completion animation (FuturisticCompletionOrb) with dynamic canvas rings & haptic feedback",
-    "Smart contextual post-completion bottom bar with direct actions",
-    "Full-width monospace backup console with line breaks and diagnostic filter",
-    "Real-time neon version badge (v1.0.38) on Dashboard",
-    "Official Telegram Community integration (t.me/resync_backup) with welcome modal and settings shortcut"
+    "100% English factory default localization across all screens, dialogs, charts, and background services",
+    "Complete synchronization of 1,307+ translation keys between English (values) and Portuguese (values-pt-rBR)",
+    "Safe Activity resolution via Context.findActivity() extension eliminating crashes across all navigation tabs",
+    "Third-party library XML keys cleanup preventing resource merging conflicts"
   ],
   "fixes": [
-    "Fixed critical individual app restore bug: verified backup selection and strictly isolated UI state machine",
-    "Fixed ActiveBackupsScreen top bar clipping and content padding",
-    "Filtered verbose diagnostics from user-facing backup console"
+    "Fixed fatal ClassCastException (ContextImpl cannot be cast to Activity) when opening tabs or dialogs",
+    "Replaced all remaining hardcoded Portuguese strings with localized stringResource / getString calls",
+    "Standardized positional string format specifiers (%1$s, %1$d) across all localized resource bundles"
   ]
 }

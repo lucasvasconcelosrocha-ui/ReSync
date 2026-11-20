@@ -1,5 +1,8 @@
 package com.resync.app.ui.components
 
+import com.resync.app.R
+import androidx.compose.ui.res.stringResource
+
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.ColorFilter
@@ -122,7 +125,7 @@ fun RealAppIcon(
             ) {
                 Icon(
                     imageVector = Icons.Default.CloudDownload,
-                    contentDescription = "Na nuvem / Não instalado",
+                    contentDescription = stringResource(R.string.icon_in_cloud_not_installed),
                     tint = Color(0xFF38BDF8),
                     modifier = Modifier.size(badgeSize * 0.65f)
                 )

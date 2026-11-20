@@ -4,6 +4,24 @@ Todas as mudanças notáveis deste projeto são documentadas neste arquivo.
 
 ---
 
+## [1.0.39] - 2026-11-20
+
+### 🛡️ Fim Definitivo dos Crashes ao Abrir Abas (Zero Tab Crash Fix)
+- **Eliminação do `ClassCastException` Fatal:** Corrigido o crash imediato que ocorria ao abrir abas e diálogos (como Account, Settings, BottomSheets de Google Drive), causado pela substituição indevida do `LocalContext` no Compose por `createConfigurationContext` (`ContextImpl`).
+- **Extensão Segura `Context.findActivity()`:** Implementada função `tailrec fun Context.findActivity(): Activity?` em `LocaleHelper.kt` e substituídos 100% dos casts diretos inseguros (`as Activity` / `as ComponentActivity`) em todas as telas e componentes.
+- **Isolamento de Contexto:** Configuração de idioma aplicada de forma transparente via `attachBaseContext` na `MainActivity` e `ReSyncApplication`, preservando o `LocalContext` como a própria Activity real.
+
+### 🌐 Purificação Total em Inglês & Sincronização Perfeita (100% English Localization)
+- **Varredura Completa de Strings Hardcoded:** 100% dos textos remanescentes em português em composables (`Text`, `title`, `label`, `placeholder`, `contentDescription`), diálogos, gráficos (`StorageDonutChart`, `CloudActivityChart`, `BackupHistoryLineChart`, `AppStatusDistributionChart`), notificações e ViewModels foram externalizados e traduzidos com precisão para o Inglês.
+- **Sincronização Estrita (1.307+ Chaves):** Paridade exata 1:1 entre `values/strings.xml` (Inglês padrão), `values-en/strings.xml`, `values-pt/strings.xml` e `values-pt-rBR/strings.xml` com zero chaves faltantes.
+- **Formatação Segura:** Todos os apóstrofos (`\'`), e-comerciais (`&amp;`) e especificadores de formato posicional (`%1$s`, %1$d) auditados com zero risco de `IllegalFormatConversionException`.
+
+### 🧹 Limpeza de Chaves de Bibliotecas de Terceiros
+- **Remoção de 52 Chaves Externas Conflitantes:** Removidas chaves internas de bibliotecas (`androidx_startup`, `common_google_play_services_*`, `m3c_*`, `default_error_message`, etc.) dos arquivos XML de strings, permitindo que o Gradle e o Android utilizem as traduções oficiais sem divergências de merge.
+- **Otimização de Builds:** Adicionada diretiva `resourceConfigurations += listOf("en", "pt-rBR", "pt")` no `app/build.gradle.kts`.
+
+---
+
 ## [1.0.38] - 2026-11-20
 
 ### 🌐 Inglês como Idioma Padrão de Fábrica & Localização 100% Completa

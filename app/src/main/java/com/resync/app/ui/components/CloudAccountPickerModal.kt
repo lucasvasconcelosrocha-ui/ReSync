@@ -1,5 +1,8 @@
 package com.resync.app.ui.components
 
+import com.resync.app.R
+import androidx.compose.ui.res.stringResource
+
 import android.app.Activity
 import android.content.Intent
 import android.widget.Toast
@@ -73,13 +76,13 @@ fun CloudAccountPickerModal(
                     onAuthNeeded = { pendingConsentIntent = it },
                     onComplete = { addRes ->
                         if (addRes.isSuccess) {
-                            Toast.makeText(context, "Google Drive conectado com sucesso!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.gdrive_connected_success), Toast.LENGTH_SHORT).show()
                         }
                     }
                 )
             }
         } else {
-            Toast.makeText(context, "Autorização não concluída.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, context.getString(R.string.gdrive_auth_not_completed), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -89,7 +92,7 @@ fun CloudAccountPickerModal(
             try {
                 consentLauncher.launch(intent)
             } catch (t: Throwable) {
-                Toast.makeText(context, "Erro ao abrir autorização: ${t.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, context.getString(R.string.gdrive_auth_err, t.message ?: ""), Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -108,7 +111,7 @@ fun CloudAccountPickerModal(
                     onComplete = { addRes ->
                         if (addRes.isSuccess) {
                             selectedEmail = accountName
-                            Toast.makeText(context, "Conta $accountName conectada com sucesso!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, context.getString(R.string.gdrive_account_connected, accountName), Toast.LENGTH_SHORT).show()
                         }
                     }
                 )
@@ -125,7 +128,7 @@ fun CloudAccountPickerModal(
                 val fallbackIntent = viewModel.gdriveProvider.oAuthManager.createChooseAccountIntent()
                 accountChooserLauncher.launch(fallbackIntent)
             } catch (e2: Throwable) {
-                Toast.makeText(context, "Erro ao abrir seletor de contas: ${e2.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, context.getString(R.string.gdrive_account_picker_err, e2.message ?: ""), Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -181,7 +184,7 @@ fun CloudAccountPickerModal(
                     )
                     Text(
                         text = if (multiAccounts.isEmpty()) {
-                            "Nenhuma conta conectada para backup na nuvem"
+                            stringResource(R.string.cloud_modal_no_connected_account)
                         } else if (showSimpleConfirmOnly || multiAccounts.size == 1) {
                             "Confirme o envio do backup para o Google Drive"
                         } else {
@@ -215,7 +218,7 @@ fun CloudAccountPickerModal(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Text(
-                                text = "Você ainda não possui nenhuma conta do Google Drive vinculada ao ReSync.",
+                                text = stringResource(R.string.gdrive_no_accounts_linked),
                                 color = TextSecondary,
                                 fontSize = 13.sp,
                                 lineHeight = 18.sp
@@ -242,7 +245,7 @@ fun CloudAccountPickerModal(
                         border = BorderStroke(1.dp, DarkCardBorder),
                         modifier = Modifier.fillMaxWidth().height(44.dp)
                     ) {
-                        Text("CANCELAR", color = TextSecondary, fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.cancel_action), color = TextSecondary, fontWeight = FontWeight.SemiBold)
                     }
                 }
 
@@ -338,7 +341,7 @@ fun CloudAccountPickerModal(
                             border = BorderStroke(1.dp, DarkCardBorder),
                             modifier = Modifier.weight(1f).height(44.dp)
                         ) {
-                            Text("CANCELAR", color = TextSecondary, fontWeight = FontWeight.SemiBold)
+                            Text(stringResource(R.string.cancel_action), color = TextSecondary, fontWeight = FontWeight.SemiBold)
                         }
 
                         Button(
@@ -487,7 +490,7 @@ fun CloudAccountPickerModal(
                             border = BorderStroke(1.dp, DarkCardBorder),
                             modifier = Modifier.weight(1f).height(44.dp)
                         ) {
-                            Text("CANCELAR", color = TextSecondary, fontWeight = FontWeight.SemiBold)
+                            Text(stringResource(R.string.cancel_action), color = TextSecondary, fontWeight = FontWeight.SemiBold)
                         }
 
                         Button(

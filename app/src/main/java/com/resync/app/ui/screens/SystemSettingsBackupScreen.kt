@@ -1,5 +1,9 @@
 package com.resync.app.ui.screens
 
+import com.resync.app.R
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.LocalContext
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -37,6 +41,7 @@ fun SystemSettingsBackupScreen(
     viewModel: MainViewModel,
     onBack: () -> Unit
 ) {
+    val context = LocalContext.current
     val currentAccent by viewModel.themeAccent.collectAsState()
     val primaryAccent = getAccentColor(currentAccent)
 
@@ -46,7 +51,7 @@ fun SystemSettingsBackupScreen(
             name = "Papel de Parede",
             description = "Extrai e preserva o bitmap de fundo de tela atual do sistema.",
             icon = Icons.Default.Wallpaper,
-            status = "Disponível",
+            status = stringResource(R.string.sys_settings_available),
             permissionRequired = "READ_WALLPAPER_INTERNAL",
             lastBackup = "Hoje, 03:42"
         ),
@@ -56,21 +61,21 @@ fun SystemSettingsBackupScreen(
             description = "Modo de DNS criptografado DoT/DoH e servidores configurados.",
             icon = Icons.Default.Dns,
             status = "Ativo",
-            permissionRequired = "Padrão (Sem privilégios especiais)",
+            permissionRequired = stringResource(R.string.sys_settings_standard_no_root),
             lastBackup = "Hoje, 03:42"
         ),
         SettingBackupItem(
             id = "network_pref",
-            name = "Configurações de Rede Legítimas",
-            description = "Preferências exportáveis de roaming, dados móveis e limites.",
+            name = stringResource(R.string.sys_settings_legit_net),
+            description = stringResource(R.string.sys_settings_legit_net_desc),
             icon = Icons.Default.Wifi,
-            status = "Exportável",
+            status = stringResource(R.string.sys_settings_exportable),
             permissionRequired = "ACCESS_NETWORK_STATE",
             lastBackup = "Ontem, 18:20"
         ),
         SettingBackupItem(
             id = "app_prefs",
-            name = "Preferências do Aplicativo",
+            name = stringResource(R.string.sys_settings_app_prefs),
             description = "Temas visuais, agendamentos e regras de backup do ReSync.",
             icon = Icons.Default.Tune,
             status = "Pronto",
@@ -80,9 +85,9 @@ fun SystemSettingsBackupScreen(
         SettingBackupItem(
             id = "sound_display",
             name = "Ajustes de Tela e Som",
-            description = "Tempo limite de suspensão de tela, rotação automática e escala de fonte.",
+            description = stringResource(R.string.sys_settings_screen_timeout_desc),
             icon = Icons.Default.BrightnessMedium,
-            status = "Disponível",
+            status = stringResource(R.string.sys_settings_available),
             permissionRequired = "Settings.System",
             lastBackup = "Pendente"
         )
@@ -109,11 +114,11 @@ fun SystemSettingsBackupScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = onBack) {
-                    Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Voltar", tint = TextPrimary)
+                    Icon(imageVector = Icons.Default.ArrowBack, contentDescription = stringResource(R.string.btn_back), tint = TextPrimary)
                 }
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Backup de Configurações",
+                    text = stringResource(R.string.sys_settings_backup_title),
                     style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                     color = TextPrimary
                 )
@@ -150,7 +155,7 @@ fun SystemSettingsBackupScreen(
                         Button(
                             onClick = {
                                 viewModel.launchBackup(
-                                    title = "Backup de Configurações do Sistema",
+                                    title = context.getString(R.string.sys_settings_backup_title),
                                     selectedApps = emptyList(),
                                     selectedFiles = emptyList(),
                                     includeSms = false,
@@ -180,7 +185,7 @@ fun SystemSettingsBackupScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = "Escolha granularmente quais definições do sistema deseja proteger:",
+                text = stringResource(R.string.sys_settings_choose_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = TextSecondary
             )
@@ -248,12 +253,12 @@ fun SystemSettingsBackupScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
                                 Text(
-                                    text = "Permissão: ${item.permissionRequired}",
+                                    text = stringResource(R.string.sys_settings_perm_label, item.permissionRequired),
                                     fontSize = 11.sp,
                                     color = TextMuted
                                 )
                                 Text(
-                                    text = "Último: ${item.lastBackup}",
+                                    text = stringResource(R.string.sys_settings_last_label, item.lastBackup),
                                     fontSize = 11.sp,
                                     color = primaryAccent
                                 )

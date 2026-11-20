@@ -1,5 +1,9 @@
 package com.resync.app.ui.screens
 
+import com.resync.app.R
+import androidx.compose.ui.res.stringResource
+
+
 import android.app.TimePickerDialog
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
@@ -70,7 +74,7 @@ fun ScheduleRoutineWizardScreen(
             Calendar.WEDNESDAY to "Qua",
             Calendar.THURSDAY to "Qui",
             Calendar.FRIDAY to "Sex",
-            Calendar.SATURDAY to "Sáb"
+            Calendar.SATURDAY to context.getString(R.string.chart_sat)
         )
     }
 
@@ -117,12 +121,12 @@ fun ScheduleRoutineWizardScreen(
         listOf(
             "/storage/emulated/0/Download" to "Downloads",
             "/storage/emulated/0/Documents" to "Documentos",
-            "/storage/emulated/0/DCIM" to "Câmera (DCIM)",
+            "/storage/emulated/0/DCIM" to context.getString(R.string.sched_camera_dcim),
             "/storage/emulated/0/Pictures" to "Imagens e Fotos",
-            "/storage/emulated/0/Music" to "Músicas",
-            "/storage/emulated/0/Movies" to "Filmes e Vídeos",
-            "/storage/emulated/0/Recordings" to "Gravações",
-            "/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media" to "Mídia WhatsApp"
+            "/storage/emulated/0/Music" to context.getString(R.string.sched_music),
+            "/storage/emulated/0/Movies" to context.getString(R.string.sched_movies_videos),
+            "/storage/emulated/0/Recordings" to context.getString(R.string.sched_recordings),
+            "/storage/emulated/0/Android/media/com.whatsapp/WhatsApp/Media" to "WhatsApp Media"
         )
     }
     val selectedFolders = remember {
@@ -251,7 +255,7 @@ fun ScheduleRoutineWizardScreen(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onCancel) {
-                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar", tint = TextPrimary)
+                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.btn_back), tint = TextPrimary)
                     }
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
@@ -379,13 +383,13 @@ fun ScheduleRoutineWizardScreen(
             // Header Description
             Column {
                 Text(
-                    text = "Configuração detalhada da rotina",
+                    text = stringResource(R.string.sched_routine_config_detailed),
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = TextPrimary
                 )
                 Spacer(modifier = Modifier.height(3.dp))
                 Text(
-                    text = "Personalize o conteúdo, alvos e o agendamento exato para disparo em segundo plano.",
+                    text = stringResource(R.string.sched_routine_customize_desc),
                     color = TextSecondary,
                     fontSize = 12.5.sp
                 )
@@ -502,7 +506,7 @@ fun ScheduleRoutineWizardScreen(
                 ) {
                     Icon(Icons.Default.Deselect, contentDescription = null, modifier = Modifier.size(16.dp), tint = StatusError)
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("LIMPAR SELEÇÃO", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = StatusError)
+                    Text(stringResource(R.string.wizard_clear_selection), fontSize = 11.sp, fontWeight = FontWeight.Bold, color = StatusError)
                 }
             }
 
@@ -512,7 +516,7 @@ fun ScheduleRoutineWizardScreen(
             RoutineCategoryCard(
                 icon = Icons.Default.Apps,
                 iconTint = primaryAccent,
-                title = "Aplicativos selecionados",
+                title = stringResource(R.string.wizard_selected_apps),
                 subtitle = "${selectedAppPackages.size} de ${installedApps.size} selecionados • Escolha os apps do backup",
                 parentState = appsParentState,
                 onParentToggle = {
@@ -556,8 +560,8 @@ fun ScheduleRoutineWizardScreen(
             RoutineCategoryCard(
                 icon = Icons.Default.FolderShared,
                 iconTint = AccentElectricCyan,
-                title = "Dados dos aplicativos",
-                subtitle = "Aplicativo, componentes, dados e permissões",
+                title = stringResource(R.string.wizard_apps_data),
+                subtitle = stringResource(R.string.wizard_app_components_data),
                 parentState = appDataParentState,
                 onParentToggle = {
                     val newState = appDataParentState != ToggleableState.On
@@ -575,7 +579,7 @@ fun ScheduleRoutineWizardScreen(
                     RoutineSubOptionItem(
                         icon = Icons.Default.Android,
                         label = "Aplicativo principal",
-                        description = "Arquivo do aplicativo instalável",
+                        description = stringResource(R.string.sched_app_installable_file),
                         checked = includeBaseApk,
                         onCheckedChange = { includeBaseApk = it },
                         accent = AccentElectricCyan
@@ -583,7 +587,7 @@ fun ScheduleRoutineWizardScreen(
                     RoutineSubOptionItem(
                         icon = Icons.Default.PieChart,
                         label = "Componentes do app",
-                        description = "Módulos de idioma e arquitetura",
+                        description = stringResource(R.string.sched_language_arch_modules),
                         checked = includeAppSplits,
                         onCheckedChange = { includeAppSplits = it },
                         accent = AccentElectricCyan
@@ -591,7 +595,7 @@ fun ScheduleRoutineWizardScreen(
                     RoutineSubOptionItem(
                         icon = Icons.Default.Storage,
                         label = "Dados internos",
-                        description = "Bancos de dados e preferências do usuário",
+                        description = stringResource(R.string.sched_user_db_prefs),
                         checked = includeAppData,
                         onCheckedChange = { includeAppData = it },
                         accent = AccentElectricCyan
@@ -599,23 +603,23 @@ fun ScheduleRoutineWizardScreen(
                     RoutineSubOptionItem(
                         icon = Icons.Default.FolderOpen,
                         label = "Dados externos",
-                        description = "Arquivos armazenados na memória compartilhada",
+                        description = stringResource(R.string.sched_shared_mem_files),
                         checked = includeExternalData,
                         onCheckedChange = { includeExternalData = it },
                         accent = AccentElectricCyan
                     )
                     RoutineSubOptionItem(
                         icon = Icons.Default.SportsEsports,
-                        label = "Recursos e mídia",
-                        description = "Recursos adicionais e mídias pesadas",
+                        label = stringResource(R.string.wizard_resources_media),
+                        description = stringResource(R.string.sched_heavy_media_resources),
                         checked = includeObb,
                         onCheckedChange = { includeObb = it },
                         accent = AccentElectricCyan
                     )
                     RoutineSubOptionItem(
                         icon = Icons.Default.Security,
-                        label = "Permissões",
-                        description = "Privilégios e permissões concedidas pelo usuário",
+                        label = stringResource(R.string.wizard_permissions_title),
+                        description = stringResource(R.string.sched_user_perms_privs),
                         checked = includeAppPermissions,
                         onCheckedChange = { includeAppPermissions = it },
                         accent = AccentElectricCyan
@@ -629,7 +633,7 @@ fun ScheduleRoutineWizardScreen(
             RoutineCategoryCard(
                 icon = Icons.Default.SettingsCell,
                 iconTint = AccentNeonPurple,
-                title = "Sistema e Comunicação",
+                title = stringResource(R.string.wizard_sys_comm),
                 subtitle = "Wi-Fi, DNS, SMS, Chamadas, Contatos, Bluetooth e Papel de parede",
                 parentState = systemParentState,
                 onParentToggle = {
@@ -657,7 +661,7 @@ fun ScheduleRoutineWizardScreen(
                     RoutineSubOptionItem(
                         icon = Icons.Default.Dns,
                         label = "DNS",
-                        description = "Configurações e servidores de DNS Privado",
+                        description = stringResource(R.string.sched_private_dns_servers),
                         checked = includeDns,
                         onCheckedChange = { includeDns = it },
                         accent = AccentNeonPurple
@@ -665,15 +669,15 @@ fun ScheduleRoutineWizardScreen(
                     RoutineSubOptionItem(
                         icon = Icons.Default.Sms,
                         label = "SMS / Mensagens",
-                        description = "Histórico de mensagens e conversas",
+                        description = stringResource(R.string.sched_messages_conversations),
                         checked = includeSms,
                         onCheckedChange = { includeSms = it },
                         accent = AccentNeonPurple
                     )
                     RoutineSubOptionItem(
                         icon = Icons.Default.Call,
-                        label = "Histórico de Chamadas",
-                        description = "Registro de ligações efetuadas, recebidas e perdidas",
+                        label = stringResource(R.string.wizard_call_log_title),
+                        description = stringResource(R.string.sched_calls_records_desc),
                         checked = includeCalls,
                         onCheckedChange = { includeCalls = it },
                         accent = AccentNeonPurple
@@ -681,7 +685,7 @@ fun ScheduleRoutineWizardScreen(
                     RoutineSubOptionItem(
                         icon = Icons.Default.Contacts,
                         label = "Contatos",
-                        description = "Lista e agenda telefônica de contatos",
+                        description = stringResource(R.string.sched_contacts_agenda_desc),
                         checked = includeContacts,
                         onCheckedChange = { includeContacts = it },
                         accent = AccentNeonPurple
@@ -689,7 +693,7 @@ fun ScheduleRoutineWizardScreen(
                     RoutineSubOptionItem(
                         icon = Icons.Default.Bluetooth,
                         label = "Bluetooth",
-                        description = "Dispositivos emparelhados e configurações",
+                        description = stringResource(R.string.sched_paired_devices_desc),
                         checked = includeBluetooth,
                         onCheckedChange = { includeBluetooth = it },
                         accent = AccentNeonPurple
@@ -711,8 +715,8 @@ fun ScheduleRoutineWizardScreen(
             RoutineCategoryCard(
                 icon = Icons.Default.FolderCopy,
                 iconTint = AccentSunsetOrange,
-                title = "Arquivos e Mídia",
-                subtitle = "${selectedFolders.size} ${if (selectedFolders.size == 1) "pasta selecionada" else "pastas selecionadas"} da memória",
+                title = stringResource(R.string.wizard_files_media),
+                subtitle = stringResource(R.string.sched_selected_folders_count, selectedFolders.size),
                 parentState = foldersParentState,
                 onParentToggle = {
                     val selectAll = foldersParentState != ToggleableState.On
@@ -727,7 +731,7 @@ fun ScheduleRoutineWizardScreen(
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        text = "Pastas do Armazenamento Interno:",
+                        text = stringResource(R.string.sched_internal_storage_folders),
                         fontSize = 11.5.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = TextSecondary
@@ -788,12 +792,12 @@ fun ScheduleRoutineWizardScreen(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = "Configurações do Agendamento",
+                                text = stringResource(R.string.sched_routine_config_title),
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                 color = TextPrimary
                             )
                             Text(
-                                text = "Defina nome, horário, frequência e destino",
+                                text = stringResource(R.string.sched_routine_config_desc),
                                 fontSize = 11.sp,
                                 color = TextSecondary
                             )
@@ -832,7 +836,7 @@ fun ScheduleRoutineWizardScreen(
                             Icon(Icons.Default.AccessTime, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(20.dp))
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
-                                Text("Horário exato", fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                                Text(stringResource(R.string.sched_exact_time), fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
                                 Text("Hora preferencial de disparo", fontSize = 11.sp, color = TextSecondary)
                             }
                         }
@@ -865,7 +869,7 @@ fun ScheduleRoutineWizardScreen(
                         Text("Dias da semana:", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(
-                                text = "Todos",
+                                text = stringResource(R.string.filter_all),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = primaryAccent,
@@ -964,7 +968,7 @@ fun ScheduleRoutineWizardScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        listOf("Dispositivo", "Nuvem", "Ambos").forEach { dest ->
+                        listOf(stringResource(R.string.dest_device), stringResource(R.string.cloud_title), stringResource(R.string.dest_both)).forEach { dest ->
                             FilterChip(
                                 selected = routineDestination == dest,
                                 onClick = { routineDestination = dest },

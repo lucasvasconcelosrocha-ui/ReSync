@@ -1,5 +1,8 @@
 package com.resync.app.ui.components
 
+import com.resync.app.R
+import androidx.compose.ui.res.stringResource
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -102,7 +105,7 @@ fun ActiveOperationsBottomBanner(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "${runningOperations.size} operações em andamento",
+                                text = stringResource(R.string.banner_ops_running, runningOperations.size),
                                 fontWeight = FontWeight.Bold,
                                 color = TextPrimary,
                                 fontSize = 13.sp,
@@ -110,7 +113,7 @@ fun ActiveOperationsBottomBanner(
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = "Toque para ver todas em andamento",
+                                text = stringResource(R.string.banner_tap_see_all),
                                 fontSize = 11.sp,
                                 color = TextSecondary,
                                 maxLines = 1,
@@ -142,11 +145,11 @@ fun ActiveOperationsBottomBanner(
                     when {
                         displayOp.error != null || failedCount > 0 -> "Finalizado com falhas"
                         ignoredCount > 0 -> "Finalizado com avisos"
-                        else -> "Restauração finalizada"
+                        else -> stringResource(R.string.banner_restore_finished)
                     }
                 }
             } else {
-                displayOp.stage.ifBlank { if (isBackup) "Backup em andamento" else "Restauração em andamento" }
+                displayOp.stage.ifBlank { if (isBackup) stringResource(R.string.banner_backup_in_progress) else stringResource(R.string.banner_restore_in_progress) }
             }
 
             OperationProgressBanner(
@@ -415,7 +418,7 @@ fun OperationProgressBanner(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
-                                    contentDescription = "Cancelar",
+                                    contentDescription = stringResource(R.string.action_cancel),
                                     tint = StatusError,
                                     modifier = Modifier.size(17.dp)
                                 )
@@ -471,7 +474,7 @@ fun OperationProgressBanner(
                 } else if (localStage.isNotBlank()) {
                     append(localStage)
                 } else {
-                    append("Em andamento...")
+                    append(stringResource(R.string.banner_in_progress_ellipsis))
                 }
             }
 
@@ -577,7 +580,7 @@ fun OperationProgressBanner(
                             if (failCount > 0) append(", $failCount falhas")
                         }
                         Text(
-                            text = "Itens Concluídos ($countsText):",
+                            text = stringResource(R.string.banner_completed_items, countsText),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = TextPrimary

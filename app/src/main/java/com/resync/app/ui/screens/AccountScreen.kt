@@ -10,6 +10,7 @@ import android.widget.Toast
 import androidx.compose.ui.res.stringResource
 import com.resync.app.R
 import com.resync.app.util.LocaleHelper
+import com.resync.app.util.findActivity
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -142,12 +143,12 @@ fun AccountScreen(
 
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = activeAccount?.name?.takeIf { it.isNotBlank() } ?: "Conta Google",
+                                text = activeAccount?.name?.takeIf { it.isNotBlank() } ?: stringResource(R.string.account_google),
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                 color = TextPrimary
                             )
                             Text(
-                                text = activeAccount?.email ?: "Nenhuma conta vinculada",
+                                text = activeAccount?.email ?: stringResource(R.string.account_no_linked),
                                 fontSize = 12.sp,
                                 color = TextSecondary,
                                 maxLines = 1,
@@ -164,7 +165,7 @@ fun AccountScreen(
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(Icons.Default.CheckCircle, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(11.dp))
                                         Spacer(modifier = Modifier.width(3.dp))
-                                        Text("Conta ativa", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = primaryAccent)
+                                        Text(stringResource(R.string.account_active), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = primaryAccent)
                                     }
                                 }
                             }
@@ -177,7 +178,7 @@ fun AccountScreen(
 
                     // Dispositivo & Ação (sem colisão)
                     Column(modifier = Modifier.fillMaxWidth()) {
-                        Text("Dispositivo", fontSize = 11.sp, color = TextMuted)
+                        Text(stringResource(R.string.account_device), fontSize = 11.sp, color = TextMuted)
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(deviceModel, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
                         
@@ -193,7 +194,7 @@ fun AccountScreen(
                             ) {
                                 Icon(Icons.Default.Logout, contentDescription = null, tint = StatusError, modifier = Modifier.size(14.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Sair da conta", fontSize = 12.sp, color = StatusError, fontWeight = FontWeight.Bold)
+                                Text(stringResource(R.string.account_sign_out), fontSize = 12.sp, color = StatusError, fontWeight = FontWeight.Bold)
                             }
                         } else {
                             Button(
@@ -205,7 +206,7 @@ fun AccountScreen(
                             ) {
                                 Icon(Icons.Default.Add, contentDescription = null, tint = Color.Black, modifier = Modifier.size(14.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Vincular conta", fontSize = 12.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                                Text(stringResource(R.string.account_link_account), fontSize = 12.sp, color = Color.Black, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -262,10 +263,10 @@ fun AccountScreen(
                                 driveTotal > 0L -> {
                                     "${com.resync.app.util.FormatUtils.formatBytes(driveFree)} livres de ${com.resync.app.util.FormatUtils.formatBytes(driveTotal)}"
                                 }
-                                activeAccount != null && isRefreshingActiveAccount -> "Consultando..."
-                                activeAccount != null && isQuotaError -> "Toque para tentar de novo"
-                                activeAccount != null -> "Toque para tentar de novo"
-                                else -> "Não conectado"
+                                activeAccount != null && isRefreshingActiveAccount -> stringResource(R.string.account_querying)
+                                activeAccount != null && isQuotaError -> stringResource(R.string.account_tap_retry)
+                                activeAccount != null -> stringResource(R.string.account_tap_retry)
+                                else -> stringResource(R.string.account_not_connected)
                             }
                             Text(
                                 text = driveText,
@@ -297,10 +298,10 @@ fun AccountScreen(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.Storage, contentDescription = null, tint = AccentElectricCyan, modifier = Modifier.size(12.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Interno", fontSize = 11.5.sp, fontWeight = FontWeight.Medium, color = TextSecondary)
+                                Text(stringResource(R.string.account_internal_storage), fontSize = 11.5.sp, fontWeight = FontWeight.Medium, color = TextSecondary)
                             }
                             val internalText = if (internalTotal > 0L) {
-                                "${com.resync.app.util.FormatUtils.formatBytes(internalFree)} livres de ${com.resync.app.util.FormatUtils.formatBytes(internalTotal)}"
+                                stringResource(R.string.account_internal_free_total, com.resync.app.util.FormatUtils.formatBytes(internalFree), com.resync.app.util.FormatUtils.formatBytes(internalTotal))
                             } else {
                                 "Consultando..."
                             }
@@ -326,7 +327,7 @@ fun AccountScreen(
             // 2) SEÇÃO DE CONFIGURAÇÕES EM LISTA DE CARDS
             // ==========================================
             Text(
-                text = "CONFIGURAÇÕES & APLICATIVO",
+                text = stringResource(R.string.account_section_settings_app),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp,
@@ -343,8 +344,8 @@ fun AccountScreen(
             ) {
                 Column {
                     AccountOptionRow(
-                        title = "Configurações",
-                        subtitle = "Tema visual, permissões, DNS, assistente e atualizações",
+                        title = stringResource(R.string.dashboard_settings),
+                        subtitle = stringResource(R.string.account_settings_desc),
                         icon = Icons.Default.Settings,
                         iconColor = primaryAccent,
                         onClick = onNavigateToSettings
@@ -352,8 +353,8 @@ fun AccountScreen(
                     HorizontalDivider(color = DarkCardBorder.copy(alpha = 0.5f))
 
                     AccountOptionRow(
-                        title = "Logger",
-                        subtitle = "Registro de eventos, diagnósticos e histórico de operações",
+                        title = stringResource(R.string.account_logger_title),
+                        subtitle = stringResource(R.string.account_logger_desc),
                         icon = Icons.Default.Terminal,
                         iconColor = AccentElectricCyan,
                         onClick = onNavigateToLogs
@@ -370,8 +371,8 @@ fun AccountScreen(
                     HorizontalDivider(color = DarkCardBorder.copy(alpha = 0.5f))
 
                     AccountOptionRow(
-                        title = "Central de ajuda",
-                        subtitle = "Dúvidas frequentes, guias de backup e restauração",
+                        title = stringResource(R.string.account_help_title),
+                        subtitle = stringResource(R.string.account_help_desc),
                         icon = Icons.Default.HelpOutline,
                         iconColor = AccentBrightAmber,
                         onClick = { showHelpCenterDialog = true }
@@ -379,8 +380,8 @@ fun AccountScreen(
                     HorizontalDivider(color = DarkCardBorder.copy(alpha = 0.5f))
 
                     AccountOptionRow(
-                        title = "Contato",
-                        subtitle = "Envie sugestões, dúvidas ou relate um problema",
+                        title = stringResource(R.string.account_contact_title),
+                        subtitle = stringResource(R.string.account_contact_desc),
                         icon = Icons.Default.Email,
                         iconColor = AccentSunsetOrange,
                         onClick = {
@@ -389,15 +390,15 @@ fun AccountScreen(
                                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                             }
                             runCatching { context.startActivity(intent) }.onFailure {
-                                Toast.makeText(context, "Nenhum aplicativo de e-mail encontrado.", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, context.getString(R.string.account_no_email_app), Toast.LENGTH_SHORT).show()
                             }
                         }
                     )
                     HorizontalDivider(color = DarkCardBorder.copy(alpha = 0.5f))
 
                     AccountOptionRow(
-                        title = "Nos avalie",
-                        subtitle = "Deixe sua opinião na Google Play Store",
+                        title = stringResource(R.string.account_rate_title),
+                        subtitle = stringResource(R.string.account_rate_desc),
                         icon = Icons.Default.StarRate,
                         iconColor = StatusWarning,
                         onClick = {
@@ -435,7 +436,7 @@ fun AccountScreen(
 
                     AccountOptionRow(
                         title = "Sobre",
-                        subtitle = "Versão ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                        subtitle = stringResource(R.string.account_version_format, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE),
                         icon = Icons.Default.Info,
                         iconColor = TextSecondary,
                         onClick = { showAboutDialog = true }
@@ -460,7 +461,7 @@ fun AccountScreen(
         AlertDialog(
             onDismissRequest = { showSignOutDialog = false },
             title = { Text("Sair da conta?", fontWeight = FontWeight.Bold) },
-            text = { Text("Deseja desconectar a conta ${activeAccount?.email ?: ""} do ReSync? Os backups já enviados permanecerão no seu Google Drive.") },
+            text = { Text(stringResource(R.string.account_disconnect_confirm, activeAccount?.email ?: "")) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -469,15 +470,15 @@ fun AccountScreen(
                             viewModel.removeDriveAccount(email)
                         }
                         showSignOutDialog = false
-                        Toast.makeText(context, "Conta desconectada com sucesso.", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, context.getString(R.string.account_disconnected_success), Toast.LENGTH_SHORT).show()
                     }
                 ) {
-                    Text("Sair", color = StatusError, fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.account_sign_out), color = StatusError, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showSignOutDialog = false }) {
-                    Text("Cancelar", color = TextSecondary)
+                    Text(stringResource(R.string.action_cancel), color = TextSecondary)
                 }
             },
             containerColor = DarkSurface,
@@ -489,8 +490,8 @@ fun AccountScreen(
     if (showLanguageDialog) {
         val currentTag = LocaleHelper.getAppLanguage(context)
         val langOptions = listOf(
-            Triple(LocaleHelper.LANG_SYSTEM, stringResource(R.string.lang_system_default), "Padrão do sistema"),
-            Triple(LocaleHelper.LANG_PT_BR, stringResource(R.string.lang_portuguese), "Português"),
+            Triple(LocaleHelper.LANG_SYSTEM, stringResource(R.string.lang_system_default), "System default"),
+            Triple(LocaleHelper.LANG_PT_BR, stringResource(R.string.lang_portuguese), "Portuguese"),
             Triple(LocaleHelper.LANG_EN, stringResource(R.string.lang_english), "English")
         )
         AlertDialog(
@@ -506,7 +507,7 @@ fun AccountScreen(
                                 .clickable {
                                     showLanguageDialog = false
                                     LocaleHelper.setAppLanguage(context, tag)
-                                    (context as? Activity)?.recreate()
+                                    context.findActivity()?.recreate()
                                 }
                                 .padding(vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -516,7 +517,7 @@ fun AccountScreen(
                                 onClick = {
                                     showLanguageDialog = false
                                     LocaleHelper.setAppLanguage(context, tag)
-                                    (context as? Activity)?.recreate()
+                                    context.findActivity()?.recreate()
                                 }
                             )
                             Spacer(modifier = Modifier.width(10.dp))
@@ -544,13 +545,13 @@ fun AccountScreen(
             text = {
                 Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                     Text("Como funciona o ReSync?", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = primaryAccent)
-                    Text("O ReSync permite fazer backup de aplicativos (base e splits), dados internos e externos com privilégios de Root ou StorageStatsManager, além de mensagens SMS, chamadas, Wi-Fi e papéis de parede.", fontSize = 12.sp, color = TextSecondary)
+                    Text(stringResource(R.string.account_resync_description), fontSize = 12.sp, color = TextSecondary)
                     Spacer(modifier = Modifier.height(10.dp))
-                    Text("Sincronização com o Google Drive", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = primaryAccent)
-                    Text("Seus backups são criptografados e salvos de forma segura no Google Drive com isolamento por etiqueta do dispositivo.", fontSize = 12.sp, color = TextSecondary)
+                    Text(stringResource(R.string.account_gdrive_sync_title), fontWeight = FontWeight.Bold, fontSize = 13.sp, color = primaryAccent)
+                    Text(stringResource(R.string.account_gdrive_sync_desc), fontSize = 12.sp, color = TextSecondary)
                     Spacer(modifier = Modifier.height(10.dp))
                     Text("Requisitos de Root", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = primaryAccent)
-                    Text("O acesso Root (via Magisk, KernelSU ou APatch) permite salvar e restaurar dados completos de aplicativos em /data/data sem restrições do sistema.", fontSize = 12.sp, color = TextSecondary)
+                    Text(stringResource(R.string.account_root_access_desc), fontSize = 12.sp, color = TextSecondary)
                 }
             },
             confirmButton = {
@@ -571,9 +572,9 @@ fun AccountScreen(
             text = {
                 Column {
                     Text("ReSync", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = primaryAccent)
-                    Text("Solução completa de backup e restauração para Android", fontSize = 12.sp, color = TextSecondary)
+                    Text(stringResource(R.string.account_complete_solution), fontSize = 12.sp, color = TextSecondary)
                     Spacer(modifier = Modifier.height(12.dp))
-                    Text("Versão: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", fontSize = 12.5.sp, color = TextPrimary)
+                    Text(stringResource(R.string.account_version_format, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE), fontSize = 12.5.sp, color = TextPrimary)
                     Text("API do Android: ${Build.VERSION.SDK_INT} (Android ${Build.VERSION.RELEASE})", fontSize = 12.5.sp, color = TextPrimary)
                     Text("Arquitetura: ARM64-v8a", fontSize = 12.5.sp, color = TextPrimary)
                     Spacer(modifier = Modifier.height(8.dp))
