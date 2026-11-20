@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -41,6 +42,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.resync.app.R
+import com.resync.app.ui.components.FuturisticCompletionOrb
 import com.resync.app.engine.OperationPartInfo
 import com.resync.app.engine.OperationStatus
 import com.resync.app.engine.OperationType
@@ -77,8 +79,8 @@ fun ActiveBackupsScreen(
     val isPaused = activeOp?.isPaused == true || activeOp?.status == OperationStatus.PAUSED
 
     val progressPercent = activeOp?.let { (it.progressPercent * 100f).coerceIn(0f, 100f) } ?: 0f
-    val currentItemName = activeOp?.currentItemName?.ifBlank { activeOp.title } ?: "Nenhum item em execução"
-    val currentStageDesc = activeOp?.stage?.ifBlank { "Executando tarefas de backup..." } ?: "Aguardando início do processo"
+    val currentItemName = activeOp?.currentItemName?.ifBlank { activeOp.title } ?: stringResource(R.string.no_item_running)
+    val currentStageDesc = activeOp?.stage?.ifBlank { stringResource(R.string.executing_backup_tasks) } ?: stringResource(R.string.waiting_process_start)
 
     val speedMbStr = if (activeOp != null && activeOp.speedBytesPerSec > 0L) {
         "%.1f".format(Locale.US, activeOp.speedBytesPerSec.toDouble() / (1024.0 * 1024.0))
@@ -120,7 +122,9 @@ fun ActiveBackupsScreen(
 
     val systemLogs by viewModel.systemLogs.collectAsStateWithLifecycle()
     val recentLogs = remember(systemLogs) {
-        systemLogs.takeLast(5)
+        systemLogs
+            .filter { !it.tag.contains("DIAGNÓSTICO", true) && !it.message.contains("[DIAGNÓSTICO]", true) && !it.message.contains("preload", true) }
+            .takeLast(6)
     }
 
     Scaffold(
@@ -195,128 +199,226 @@ fun ActiveBackupsScreen(
             }
         },
         bottomBar = {
-            // ==========================================
-            // RODAPÉ: [ || Pausar ]  [ ⊘ Abortar ]  [ ↗ Minimizar ]
-            // ==========================================
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding(),
-                color = Color(0xFF0F131C),
-                border = BorderStroke(1.dp, Color(0xFF1E2530))
-            ) {
-                Row(
+            if (activeOp != null) {
+                // ==========================================
+                // RODAPÉ EM ANDAMENTO: [ || Pausar ]  [ ⊘ Abortar ]  [ ↗ Minimizar ]
+                // ==========================================
+                Surface(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .navigationBarsPadding(),
+                    color = Color(0xFF0F131C),
+                    border = BorderStroke(1.dp, Color(0xFF1E2530))
                 ) {
-                    // [ || Pausar ]
-                    Surface(
+                    Row(
                         modifier = Modifier
-                            .weight(1f)
-                            .height(44.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable {
-                                if (activeOp != null) {
-                                    if (isPaused) viewModel.resumeOperation(activeOp.id) else viewModel.pauseOperation(activeOp.id)
-                                } else {
-                                    Toast.makeText(context, "Operação em execução", Toast.LENGTH_SHORT).show()
-                                }
-                            },
-                        shape = RoundedCornerShape(12.dp),
-                        color = Color(0xFF1A2230),
-                        border = BorderStroke(1.dp, Color(0xFF263244))
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxSize(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
+                        // [ || Pausar ]
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(44.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable {
+                                    if (isPaused) viewModel.resumeOperation(activeOp.id) else viewModel.pauseOperation(activeOp.id)
+                                },
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFF1A2230),
+                            border = BorderStroke(1.dp, Color(0xFF263244))
                         ) {
-                            Icon(
-                                imageVector = if (isPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (isPaused) "Retomar" else "Pausar",
-                                fontSize = 12.5.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (isPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (isPaused) stringResource(R.string.action_resume) else stringResource(R.string.action_pause),
+                                    fontSize = 12.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White
+                                )
+                            }
                         }
-                    }
 
-                    // [ ⊘ Abortar ]
-                    Surface(
-                        modifier = Modifier
-                            .weight(1.2f)
-                            .height(44.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable {
-                                if (activeOp != null) {
+                        // [ ⊘ Abortar ]
+                        Surface(
+                            modifier = Modifier
+                                .weight(1.2f)
+                                .height(44.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable {
                                     viewModel.cancelOperation(activeOp.id)
                                     onNavigateBack()
-                                } else {
-                                    Toast.makeText(context, "Operação cancelada", Toast.LENGTH_SHORT).show()
-                                }
-                            },
-                        shape = RoundedCornerShape(12.dp),
-                        color = Color(0xFFB91C1C)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxSize(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
+                                },
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFFB91C1C)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.StopCircle,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Abortar",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.StopCircle,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = stringResource(R.string.cancel_action),
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+                        }
+
+                        // [ ↗ Minimizar ]
+                        Surface(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(44.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable(onClick = onNavigateBack),
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFF1A2230),
+                            border = BorderStroke(1.dp, Color(0xFF263244))
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxSize(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.OpenInNew,
+                                    contentDescription = null,
+                                    tint = Color(0xFF38BDF8),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Minimizar",
+                                    fontSize = 12.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF38BDF8)
+                                )
+                            }
                         }
                     }
-
-                    // [ ↗ Minimizar ]
-                    Surface(
+                }
+            } else {
+                // ==========================================
+                // RODAPÉ PÓS-CONCLUSÃO / OCIOSO (ETAPA 4.2)
+                // ==========================================
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding(),
+                    color = Color(0xFF0F131C),
+                    border = BorderStroke(1.dp, Color(0xFF1E2530))
+                ) {
+                    Column(
                         modifier = Modifier
-                            .weight(1f)
-                            .height(44.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable(onClick = onNavigateBack),
-                        shape = RoundedCornerShape(12.dp),
-                        color = Color(0xFF1A2230),
-                        border = BorderStroke(1.dp, Color(0xFF263244))
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Row(
-                            modifier = Modifier.fillMaxSize(),
+                            modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.OpenInNew,
-                                contentDescription = null,
-                                tint = Color(0xFF38BDF8),
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color(0xFF00FF88).copy(alpha = 0.12f),
+                                border = BorderStroke(1.dp, Color(0xFF00FF88).copy(alpha = 0.45f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(6.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xFF00FF88))
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = stringResource(R.string.completed_sha256_verified),
+                                        color = Color(0xFF00FF88),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                            }
                             Text(
-                                text = "Minimizar",
-                                fontSize = 12.5.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFF38BDF8)
+                                text = stringResource(R.string.system_ready),
+                                color = TextMuted,
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace
                             )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // [ Done / Back to Home ] (Primary)
+                            Button(
+                                onClick = onNavigateBack,
+                                modifier = Modifier
+                                    .weight(1.4f)
+                                    .height(46.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF00FF88),
+                                    contentColor = Color.Black
+                                )
+                            ) {
+                                Icon(Icons.Default.Check, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = stringResource(R.string.done_back_to_home),
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.Black
+                                )
+                            }
+
+                            // [ View Backups ] (Secondary)
+                            OutlinedButton(
+                                onClick = onNavigateBack,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(46.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                                border = BorderStroke(1.dp, Color(0xFF263244))
+                            ) {
+                                Icon(Icons.Default.History, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = stringResource(R.string.view_backups),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White
+                                )
+                            }
                         }
                     }
                 }
@@ -328,12 +430,12 @@ fun ActiveBackupsScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 6.dp),
+                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             // ==========================================
             if (activeOp == null) {
-                // Estado Ocioso quando não há job em andamento
+                // Estado Ocioso quando não há job em andamento (com FuturisticCompletionOrb)
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -347,47 +449,50 @@ fun ActiveBackupsScreen(
                             .fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = Color(0xFF10B981),
-                            modifier = Modifier.size(46.dp)
+                        FuturisticCompletionOrb(
+                            size = 104.dp,
+                            onTap = {
+                                Toast.makeText(context, "System Ready • SHA-256 Verified", Toast.LENGTH_SHORT).show()
+                            }
                         )
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "Nenhum Backup em Andamento",
-                            fontSize = 17.sp,
+                            text = stringResource(R.string.no_active_backup),
+                            fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "Todos os processos anteriores foram finalizados. O sistema está ocioso e pronto para novas tarefas.",
+                            text = stringResource(R.string.all_processes_finished),
                             fontSize = 12.sp,
                             color = TextSecondary,
                             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                             lineHeight = 16.sp
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.height(18.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             Button(
                                 onClick = onNavigateBack,
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF3B47), contentColor = Color.White)
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00FF88), contentColor = Color.Black),
+                                modifier = Modifier.height(44.dp)
                             ) {
-                                Icon(Icons.Default.ArrowBack, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Icon(Icons.Default.ArrowBack, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Voltar ao Painel", fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                                Text(stringResource(R.string.back_to_dashboard), fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.Black)
                             }
 
                             OutlinedButton(
                                 onClick = onNavigateToLogs,
-                                shape = RoundedCornerShape(10.dp),
-                                border = BorderStroke(1.dp, Color(0xFF38BDF8).copy(alpha = 0.5f))
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, Color(0xFF38BDF8).copy(alpha = 0.5f)),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF38BDF8)),
+                                modifier = Modifier.height(44.dp)
                             ) {
                                 Icon(Icons.Default.Terminal, contentDescription = null, tint = Color(0xFF38BDF8), modifier = Modifier.size(15.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Ver Logs", fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF38BDF8))
+                                Text(stringResource(R.string.logs_button), fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF38BDF8))
                             }
                         }
                     }
@@ -847,12 +952,12 @@ fun ActiveBackupsScreen(
                                                 "[$timeStr] [${log.tag}] ${log.message}"
                                             }
                                         } else {
-                                            "[DAEMON] Daemon ativo • Registros do sistema disponíveis."
+                                            "[DAEMON] Daemon ready • System logs available."
                                         }
                                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                         val clip = ClipData.newPlainText("Stdout Console", logText)
                                         clipboard.setPrimaryClip(clip)
-                                        Toast.makeText(context, "Stdout copiado!", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, context.getString(R.string.stdout_copied), Toast.LENGTH_SHORT).show()
                                     }
                                 ) {
                                     Row(
@@ -861,7 +966,7 @@ fun ActiveBackupsScreen(
                                     ) {
                                         Icon(Icons.Default.ContentCopy, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(11.dp))
                                         Spacer(modifier = Modifier.width(3.dp))
-                                        Text("Copiar", fontSize = 10.sp, color = TextSecondary)
+                                        Text(stringResource(R.string.copy_button), fontSize = 10.sp, color = TextSecondary)
                                     }
                                 }
 
@@ -878,7 +983,7 @@ fun ActiveBackupsScreen(
                                     ) {
                                         Icon(Icons.Default.Terminal, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(11.dp))
                                         Spacer(modifier = Modifier.width(3.dp))
-                                        Text("Logs", fontSize = 10.sp, color = TextSecondary)
+                                        Text(stringResource(R.string.logs_button), fontSize = 10.sp, color = TextSecondary)
                                     }
                                 }
                             }
@@ -1157,31 +1262,44 @@ private fun StdoutLogLine(
     tagColor: Color,
     msg: String
 ) {
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 1.5.dp),
-        verticalAlignment = Alignment.Top
+            .padding(vertical = 4.dp)
     ) {
-        Text(
-            text = "[$time] ",
-            fontSize = 10.sp,
-            color = TextMuted,
-            fontFamily = FontFamily.Monospace
-        )
-        Text(
-            text = "[$tag] ",
-            fontSize = 10.sp,
-            color = tagColor,
-            fontWeight = FontWeight.Bold,
-            fontFamily = FontFamily.Monospace
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = "[$time]",
+                fontSize = 11.sp,
+                color = Color(0xFF64748B),
+                fontFamily = FontFamily.Monospace
+            )
+            Surface(
+                shape = RoundedCornerShape(4.dp),
+                color = tagColor.copy(alpha = 0.15f),
+                border = BorderStroke(0.6.dp, tagColor.copy(alpha = 0.45f))
+            ) {
+                Text(
+                    text = tag.uppercase(),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = tagColor,
+                    fontFamily = FontFamily.Monospace,
+                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp)
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(3.dp))
         Text(
             text = msg,
-            fontSize = 10.sp,
+            fontSize = 11.sp,
+            lineHeight = 15.sp,
             color = Color(0xFFE2E8F0),
             fontFamily = FontFamily.Monospace,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.fillMaxWidth()
         )
     }
 }

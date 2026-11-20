@@ -6,6 +6,9 @@ import android.content.SharedPreferences
 import android.content.res.Configuration
 import android.os.Build
 import android.os.LocaleList
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.util.Locale
 
 object LocaleHelper {
@@ -16,19 +19,26 @@ object LocaleHelper {
     const val LANG_PT_BR = "pt-BR"
     const val LANG_EN = "en"
 
+    // Default factory language is English ("en")
+    private val _currentLanguageFlow = MutableStateFlow(LANG_EN)
+    val currentLanguageFlow: StateFlow<String> = _currentLanguageFlow.asStateFlow()
+
     fun getPreferences(context: Context): SharedPreferences {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
 
     fun getAppLanguage(context: Context): String {
-        return getPreferences(context).getString(KEY_LANGUAGE, LANG_SYSTEM) ?: LANG_SYSTEM
+        val lang = getPreferences(context).getString(KEY_LANGUAGE, LANG_EN) ?: LANG_EN
+        _currentLanguageFlow.value = lang
+        return lang
     }
 
     fun getLocale(context: Context): Locale {
         return when (getAppLanguage(context)) {
             LANG_EN -> Locale.ENGLISH
             LANG_PT_BR -> Locale("pt", "BR")
-            else -> Locale.getDefault()
+            LANG_SYSTEM -> Locale.getDefault()
+            else -> Locale.ENGLISH
         }
     }
 
@@ -36,10 +46,12 @@ object LocaleHelper {
         val validTag = when (languageTag) {
             LANG_EN -> LANG_EN
             LANG_PT_BR -> LANG_PT_BR
-            else -> LANG_SYSTEM
+            LANG_SYSTEM -> LANG_SYSTEM
+            else -> LANG_EN
         }
 
         getPreferences(context).edit().putString(KEY_LANGUAGE, validTag).commit()
+        _currentLanguageFlow.value = validTag
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             try {

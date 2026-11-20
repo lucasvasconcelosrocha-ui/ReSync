@@ -76,7 +76,7 @@ fun SettingsScreen(
     val installedVersionCode = remember { viewModel.appUpdateManager.getInstalledVersionCode() }
 
     var showLanguageBottomSheet by remember { mutableStateOf(false) }
-    val currentLangTag = remember { LocaleHelper.getAppLanguage(context) }
+    val currentLangTag by LocaleHelper.currentLanguageFlow.collectAsState()
     val currentLangSubtitle = remember(currentLangTag) {
         when (currentLangTag) {
             LocaleHelper.LANG_EN -> "English"
@@ -301,7 +301,72 @@ fun SettingsScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // 5. INFORMAÇÕES DO APLICATIVO
+            // 5. COMUNIDADE OFICIAL NO TELEGRAM / OFFICIAL TELEGRAM COMMUNITY (ETAPA 7.2)
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .border(1.dp, Color(0xFF229ED9).copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+                    .clickable {
+                        try {
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://t.me/resync_backup")).apply {
+                                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            context.startActivity(intent)
+                        } catch (_: Throwable) {
+                            android.widget.Toast.makeText(context, "https://t.me/resync_backup", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                colors = CardDefaults.cardColors(containerColor = DarkSurfaceVariant)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF229ED9).copy(alpha = 0.15f))
+                            .border(1.dp, Color(0xFF229ED9).copy(alpha = 0.45f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Send,
+                            contentDescription = "Telegram",
+                            tint = Color(0xFF229ED9),
+                            modifier = Modifier.size(19.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.telegram_community_title),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "https://t.me/resync_backup",
+                            fontSize = 12.sp,
+                            color = Color(0xFF229ED9)
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.Default.OpenInNew,
+                        contentDescription = null,
+                        tint = TextSecondary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // 6. INFORMAÇÕES DO APLICATIVO
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -369,9 +434,9 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 val languageOptions = listOf(
-                    Triple(LocaleHelper.LANG_SYSTEM, stringResource(R.string.lang_system_default), "Padrão do sistema / System default"),
+                    Triple(LocaleHelper.LANG_EN, stringResource(R.string.lang_english), "English (Default)"),
                     Triple(LocaleHelper.LANG_PT_BR, stringResource(R.string.lang_portuguese), "Português (Brasil)"),
-                    Triple(LocaleHelper.LANG_EN, stringResource(R.string.lang_english), "English")
+                    Triple(LocaleHelper.LANG_SYSTEM, stringResource(R.string.lang_system_default), "System default")
                 )
 
                 languageOptions.forEach { (tag, label, desc) ->

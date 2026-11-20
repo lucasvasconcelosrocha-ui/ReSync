@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Environment
 import android.os.StatFs
 import android.provider.Settings
@@ -172,7 +173,11 @@ fun DashboardScreen(
     var showSecurityModal by remember { mutableStateOf(false) }
     val changelogPrefs = remember { context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE) }
     var showChangelogModal by remember {
-        mutableStateOf(changelogPrefs.getString("last_seen_changelog_version", "") != "1.0.36")
+        mutableStateOf(changelogPrefs.getString("last_seen_changelog_version", "") != "1.0.38")
+    }
+    val telegramPrefs = remember { context.getSharedPreferences("resync_prefs", Context.MODE_PRIVATE) }
+    var showTelegramModal by remember {
+        mutableStateOf(!telegramPrefs.getBoolean("has_seen_telegram_welcome_modal_v1", false))
     }
     val scrollState = rememberScrollState()
     var isPullRefreshing by remember { mutableStateOf(false) }
@@ -229,6 +234,23 @@ fun DashboardScreen(
                         ),
                         color = Color.White
                     )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFF00FF88).copy(alpha = 0.12f),
+                        border = BorderStroke(1.dp, Color(0xFF00FF88).copy(alpha = 0.45f))
+                    ) {
+                        Text(
+                            text = "v${com.resync.app.BuildConfig.VERSION_NAME}",
+                            color = Color(0xFF00FF88),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                        )
+                    }
                 }
 
                 // Canto superior direito: Lock, Terminal, Settings, Foto de Perfil
@@ -1474,16 +1496,36 @@ fun DashboardScreen(
         )
     }
 
-    // Modal Automático de Novidades (Changelog v1.0.36)
-    if (showChangelogModal) {
+    // Modal de Boas-Vindas da Comunidade Oficial do Telegram (ETAPA 7)
+    if (showTelegramModal) {
+        TelegramWelcomeModal(
+            primaryAccent = primaryAccent,
+            onDismiss = {
+                telegramPrefs.edit().putBoolean("has_seen_telegram_welcome_modal_v1", true).apply()
+                showTelegramModal = false
+            },
+            onJoin = {
+                telegramPrefs.edit().putBoolean("has_seen_telegram_welcome_modal_v1", true).apply()
+                showTelegramModal = false
+                try {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/resync_backup"))
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(intent)
+                } catch (_: Exception) {
+                    Toast.makeText(context, "Could not open Telegram", Toast.LENGTH_SHORT).show()
+                }
+            }
+        )
+    } else if (showChangelogModal) {
+        // Modal Automático de Novidades (Changelog v1.0.38)
         ChangelogModal(
-            versionName = "1.0.36",
+            versionName = "1.0.38",
             primaryAccent = primaryAccent,
             onDismiss = {
                 showChangelogModal = false
             },
             onConfirm = {
-                changelogPrefs.edit().putString("last_seen_changelog_version", "1.0.36").apply()
+                changelogPrefs.edit().putString("last_seen_changelog_version", "1.0.38").apply()
                 showChangelogModal = false
             }
         )
@@ -2401,14 +2443,14 @@ private fun ChangelogModal(
                 color = TextPrimary
             )
             Text(
-                text = stringResource(R.string.changelog_subtitle_v37),
+                text = stringResource(R.string.changelog_subtitle_v38),
                 fontSize = 12.5.sp,
                 color = TextSecondary
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Scrollable Bento Pillars
+            // Scrollable Bento Pillars (v1.0.38 - 5 Pillars)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -2416,38 +2458,52 @@ private fun ChangelogModal(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                // Pilar 1: English as Default & 100% Localization
                 ChangelogPillarCard(
                     icon = Icons.Default.Language,
                     accentColor = Color(0xFF38BDF8),
-                    title = stringResource(R.string.changelog_i18n_title),
-                    description = stringResource(R.string.changelog_i18n_desc),
+                    title = stringResource(R.string.changelog_i18n_v38_title),
+                    description = stringResource(R.string.changelog_i18n_v38_desc),
                     cardBg = bentoCard,
                     borderColor = bentoBorder
                 )
 
+                // Pilar 2: App Individual Restore Bugfix & State Machine
                 ChangelogPillarCard(
-                    icon = Icons.Default.CloudSync,
-                    accentColor = AccentElectricCyan,
-                    title = stringResource(R.string.changelog_gdrive_title),
-                    description = stringResource(R.string.changelog_gdrive_desc),
+                    icon = Icons.Default.Refresh,
+                    accentColor = Color(0xFF00FF88),
+                    title = stringResource(R.string.changelog_restore_v38_title),
+                    description = stringResource(R.string.changelog_restore_v38_desc),
                     cardBg = bentoCard,
                     borderColor = bentoBorder
                 )
 
+                // Pilar 3: Futuristic Completion Orb & Smart Bottom Bar
                 ChangelogPillarCard(
-                    icon = Icons.Default.Speed,
-                    accentColor = Color(0xFF00E676),
-                    title = "Inicialização Instantânea (Zero Timeout)",
-                    description = "Chamada imediata de startForeground() na primeira linha de onStartCommand() dos serviços de backup e restauração, eliminando congelamentos e timeouts ANR.",
+                    icon = Icons.Default.PlayArrow,
+                    accentColor = Color(0xFF00E5FF),
+                    title = stringResource(R.string.changelog_futuristic_v38_title),
+                    description = stringResource(R.string.changelog_futuristic_v38_desc),
                     cardBg = bentoCard,
                     borderColor = bentoBorder
                 )
 
+                // Pilar 4: Backup Console Overhaul & Real-Time Neon Badge
                 ChangelogPillarCard(
-                    icon = Icons.Default.CleaningServices,
-                    accentColor = Color(0xFFFFA726),
-                    title = "Binário Ultra-Leve & WebP",
-                    description = "Remoção de bibliotecas legadas (google-api-client, kotlin-reflect), expurgo de metadados do AGP e conversão de todos os ícones para WebP q=85 sem duplicações.",
+                    icon = Icons.Default.Code,
+                    accentColor = Color(0xFFA855F7),
+                    title = stringResource(R.string.changelog_console_v38_title),
+                    description = stringResource(R.string.changelog_console_v38_desc),
+                    cardBg = bentoCard,
+                    borderColor = bentoBorder
+                )
+
+                // Pilar 5: Official Telegram Community Integration
+                ChangelogPillarCard(
+                    icon = Icons.Default.Send,
+                    accentColor = Color(0xFF229ED9),
+                    title = stringResource(R.string.changelog_telegram_v38_title),
+                    description = stringResource(R.string.changelog_telegram_v38_desc),
                     cardBg = bentoCard,
                     borderColor = bentoBorder
                 )
@@ -2525,6 +2581,146 @@ private fun ChangelogPillarCard(
                     fontSize = 11.5.sp,
                     color = TextSecondary,
                     lineHeight = 16.sp
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TelegramWelcomeModal(
+    primaryAccent: Color,
+    onDismiss: () -> Unit,
+    onJoin: () -> Unit
+) {
+    val bentoBg = DarkSurface
+    val bentoBorder = DarkCardBorder
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = bentoBg,
+        scrimColor = Color.Black.copy(alpha = 0.75f),
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        dragHandle = {
+            Surface(
+                modifier = Modifier
+                    .padding(vertical = 12.dp)
+                    .width(44.dp)
+                    .height(4.dp),
+                shape = CircleShape,
+                color = bentoBorder.copy(alpha = 0.8f)
+            ) {}
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Header: Botão fechar
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = stringResource(R.string.btn_close),
+                        tint = TextSecondary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+
+            // Telegram Icon Circle com efeito neon suave
+            Box(
+                modifier = Modifier
+                    .size(68.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFF229ED9).copy(alpha = 0.15f))
+                    .border(1.dp, Color(0xFF229ED9).copy(alpha = 0.4f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Send,
+                    contentDescription = "Telegram",
+                    tint = Color(0xFF229ED9),
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Título
+            Text(
+                text = stringResource(R.string.telegram_community_title),
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimary,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // Descrição
+            Text(
+                text = stringResource(R.string.telegram_community_desc),
+                fontSize = 13.sp,
+                color = TextSecondary,
+                lineHeight = 19.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 8.dp)
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Botão Principal: Entrar no Telegram
+            Button(
+                onClick = onJoin,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF229ED9))
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Send,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = stringResource(R.string.telegram_join_group),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Botão Secundário: Agora não
+            TextButton(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.telegram_not_now),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = TextSecondary
                 )
             }
         }

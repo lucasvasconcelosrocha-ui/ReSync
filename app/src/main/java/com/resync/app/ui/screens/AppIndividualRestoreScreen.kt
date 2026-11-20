@@ -27,14 +27,18 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.res.stringResource
+import com.resync.app.R
 import com.resync.app.data.model.*
 import com.resync.app.engine.RestoreExecutionState
 import com.resync.app.engine.RestoreRepository
 import com.resync.app.ui.components.CompletionAnimation
 import com.resync.app.ui.components.CompletionAnimationSize
+import com.resync.app.ui.components.FuturisticCompletionOrb
 import com.resync.app.ui.components.RealAppIcon
 import com.resync.app.ui.components.SmoothLinearProgressBar
 import com.resync.app.ui.theme.*
+import com.resync.app.ui.viewmodel.IndividualRestoreUiState
 import com.resync.app.ui.viewmodel.MainViewModel
 import com.resync.app.ui.viewmodel.ManifestInspectState
 import com.resync.app.util.FormatUtils
@@ -164,17 +168,15 @@ fun AppIndividualRestoreScreen(
         bytes
     }
 
-    val isRestoring = executionState == RestoreExecutionState.STARTING ||
-                      executionState == RestoreExecutionState.DOWNLOADING ||
-                      executionState == RestoreExecutionState.VERIFYING ||
-                      executionState == RestoreExecutionState.DECRYPTING ||
-                      executionState == RestoreExecutionState.RESTORING
-    val isFinished = executionState == RestoreExecutionState.COMPLETED
+    val individualRestoreState by viewModel.individualRestoreUiState.collectAsStateWithLifecycle()
+    val isRestoring = individualRestoreState is IndividualRestoreUiState.Running
+    val isFinished = individualRestoreState is IndividualRestoreUiState.Completed
 
     BackHandler(enabled = true) {
         if (isRestoring) {
             Toast.makeText(context, "A restauração está em andamento", Toast.LENGTH_SHORT).show()
         } else {
+            viewModel.resetIndividualRestoreState()
             onBack()
         }
     }
@@ -234,7 +236,7 @@ fun AppIndividualRestoreScreen(
             }
         },
         bottomBar = {
-            if (!isRestoring && !isFinished) {
+            if (individualRestoreState !is IndividualRestoreUiState.Running && individualRestoreState !is IndividualRestoreUiState.Completed) {
                 Surface(
                     color = DarkSurface,
                     border = BorderStroke(1.dp, DarkCardBorder),
@@ -249,7 +251,10 @@ fun AppIndividualRestoreScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         OutlinedButton(
-                            onClick = onBack,
+                            onClick = {
+                                viewModel.resetIndividualRestoreState()
+                                onBack()
+                            },
                             modifier = Modifier
                                 .weight(1f)
                                 .height(48.dp),
@@ -257,13 +262,12 @@ fun AppIndividualRestoreScreen(
                             border = BorderStroke(1.dp, DarkCardBorder),
                             shape = RoundedCornerShape(12.dp)
                         ) {
-                            Text("CANCELAR", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text(stringResource(R.string.action_cancel), fontWeight = FontWeight.Bold, fontSize = 13.sp)
                         }
 
                         Button(
                             onClick = {
                                 val pt = selectedPoint ?: return@Button
-                                val rec = viewModel.createBackupRecordFromPoint(pt)
                                 val chosenIds = mutableListOf<String>()
                                 if (checkedApkBase) chosenIds.addAll(apkBaseItems.map { it.id })
                                 if (checkedSplits) chosenIds.addAll(splitItems.map { it.id })
@@ -279,10 +283,11 @@ fun AppIndividualRestoreScreen(
                                 }
 
                                 val cacheFile = (manifestInspectState as? ManifestInspectState.Ready)?.fileToRestore
-                                viewModel.launchRestore(
-                                    record = rec,
+                                viewModel.executeIndividualRestore(
+                                    app = app,
+                                    point = pt,
                                     selectedItemIds = chosenIds.toSet(),
-                                    downloadedCacheFile = cacheFile
+                                    cacheFile = cacheFile
                                 )
                             },
                             modifier = Modifier
@@ -294,50 +299,69 @@ fun AppIndividualRestoreScreen(
                         ) {
                             Icon(Icons.Default.Restore, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("RESTAURAR", fontWeight = FontWeight.Bold, color = Color.Black, fontSize = 13.sp)
+                            Text(stringResource(R.string.start_restore), fontWeight = FontWeight.Bold, color = Color.Black, fontSize = 13.sp)
                         }
                     }
                 }
             }
         }
     ) { innerPadding ->
-        if (isRestoring || isFinished) {
-            // Tela de progresso de restauração exclusiva do aplicativo
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                if (isFinished) {
-                    CompletionAnimation(size = CompletionAnimationSize.STANDARD)
-                    Spacer(modifier = Modifier.height(16.dp))
+        when (val state = individualRestoreState) {
+            is IndividualRestoreUiState.Completed -> {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    FuturisticCompletionOrb(
+                        size = 110.dp,
+                        onTap = {
+                            Toast.makeText(context, "${app.appName} Restored", Toast.LENGTH_SHORT).show()
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(20.dp))
                     Text(
-                        text = "Restauração Concluída!",
+                        text = stringResource(R.string.restore_completed_title),
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
-                        color = TextPrimary
+                        color = TextPrimary,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "${app.appName} foi restaurado com sucesso.",
+                        text = stringResource(R.string.restore_completed_single, app.appName),
                         fontSize = 13.sp,
-                        color = TextSecondary
+                        color = TextSecondary,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
                     )
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(26.dp))
                     Button(
-                        onClick = onFinished,
+                        onClick = {
+                            viewModel.resetIndividualRestoreState()
+                            onFinished()
+                        },
                         colors = ButtonDefaults.buttonColors(containerColor = primaryAccent),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
                             .fillMaxWidth(0.7f)
-                            .height(46.dp)
+                            .height(48.dp)
                     ) {
-                        Text("CONCLUIR", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 13.5.sp)
+                        Text(stringResource(R.string.backup_finish_action), color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 13.5.sp)
                     }
-                } else {
+                }
+            }
+            is IndividualRestoreUiState.Running -> {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
                     RealAppIcon(
                         packageName = app.packageName,
                         size = 64.dp,
@@ -346,20 +370,20 @@ fun AppIndividualRestoreScreen(
                     )
                     Spacer(modifier = Modifier.height(18.dp))
                     Text(
-                        text = "Restaurando ${app.appName}",
+                        text = stringResource(R.string.restore_in_progress),
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextPrimary
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = restoreProgress?.stage ?: "Processando arquivos...",
+                        text = state.stage,
                         fontSize = 13.sp,
                         color = primaryAccent
                     )
                     Spacer(modifier = Modifier.height(20.dp))
                     SmoothLinearProgressBar(
-                        progress = restoreProgress?.progressPercent ?: 0.1f,
+                        progress = state.progressPercent,
                         modifier = Modifier
                             .fillMaxWidth(0.85f)
                             .height(6.dp),
@@ -367,7 +391,7 @@ fun AppIndividualRestoreScreen(
                     )
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = restoreProgress?.currentItemName ?: "Extraindo componentes...",
+                        text = state.currentStep,
                         fontSize = 12.sp,
                         color = TextMuted,
                         maxLines = 1,
@@ -375,8 +399,79 @@ fun AppIndividualRestoreScreen(
                     )
                 }
             }
-        } else {
-            LazyColumn(
+            is IndividualRestoreUiState.Error -> {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ErrorOutline,
+                        contentDescription = null,
+                        tint = Color(0xFFFF414D),
+                        modifier = Modifier.size(54.dp)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = stringResource(R.string.restore_failed_title),
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = state.message,
+                        fontSize = 13.sp,
+                        color = TextSecondary,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(20.dp))
+                    Button(
+                        onClick = {
+                            viewModel.resetIndividualRestoreState()
+                            onBack()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = primaryAccent),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(stringResource(R.string.btn_back), color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+            else -> {
+                if (points.isEmpty()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding)
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CloudQueue,
+                            contentDescription = null,
+                            tint = TextMuted,
+                            modifier = Modifier.size(54.dp)
+                        )
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text(
+                            text = stringResource(R.string.no_backups_available),
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = TextSecondary,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(18.dp))
+                        OutlinedButton(onClick = onBack) {
+                            Text(stringResource(R.string.btn_back))
+                        }
+                    }
+                } else {
+                    LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
@@ -653,6 +748,8 @@ fun AppIndividualRestoreScreen(
             }
         }
     }
+}
+}
 }
 
 @Composable

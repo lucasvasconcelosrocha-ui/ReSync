@@ -85,6 +85,27 @@ sealed class ManifestInspectState {
     data class Error(val message: String, val canRetry: Boolean = true) : ManifestInspectState()
 }
 
+sealed interface IndividualRestoreUiState {
+    object Idle : IndividualRestoreUiState
+    data class SelectingBackup(
+        val availablePoints: List<AppBackupPoint>,
+        val selectedPoint: AppBackupPoint?
+    ) : IndividualRestoreUiState
+    data class Running(
+        val progressPercent: Float,
+        val stage: String,
+        val currentStep: String,
+        val appName: String
+    ) : IndividualRestoreUiState
+    data class Completed(
+        val appName: String,
+        val pointTitle: String
+    ) : IndividualRestoreUiState
+    data class Error(
+        val message: String
+    ) : IndividualRestoreUiState
+}
+
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val context = application.applicationContext
@@ -530,6 +551,79 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val restoreProgress: StateFlow<RestoreProgress?> = RestoreRepository.restoreProgress
     val restoreExecutionState: StateFlow<RestoreExecutionState> = RestoreRepository.executionState
     val restoreSummary: StateFlow<RestoreSummaryData?> = RestoreRepository.restoreSummary
+
+    // Máquina de Estados Estrita para Restauração Individual de Aplicativo (Etapa 6)
+    private val _individualRestoreUiState = MutableStateFlow<IndividualRestoreUiState>(IndividualRestoreUiState.Idle)
+    val individualRestoreUiState: StateFlow<IndividualRestoreUiState> = _individualRestoreUiState.asStateFlow()
+
+    fun resetIndividualRestoreState() {
+        _individualRestoreUiState.value = IndividualRestoreUiState.Idle
+        RestoreRepository.resetRestoreState()
+    }
+
+    fun prepareIndividualRestore(points: List<AppBackupPoint>, initialPoint: AppBackupPoint? = null) {
+        resetIndividualRestoreState()
+        _individualRestoreUiState.value = IndividualRestoreUiState.SelectingBackup(
+            availablePoints = points,
+            selectedPoint = initialPoint ?: points.firstOrNull()
+        )
+    }
+
+    fun selectPointForIndividualRestore(point: AppBackupPoint) {
+        val curr = _individualRestoreUiState.value
+        if (curr is IndividualRestoreUiState.SelectingBackup) {
+            _individualRestoreUiState.value = curr.copy(selectedPoint = point)
+        }
+    }
+
+    fun executeIndividualRestore(
+        app: AppInfo,
+        point: AppBackupPoint,
+        selectedItemIds: Set<String>,
+        cacheFile: File? = null
+    ) {
+        _individualRestoreUiState.value = IndividualRestoreUiState.Running(
+            progressPercent = 0.05f,
+            stage = "Iniciando restauração de ${app.appName}...",
+            currentStep = "Preparando container",
+            appName = app.appName
+        )
+
+        val record = createBackupRecordFromPoint(point)
+        launchRestore(
+            record = record,
+            selectedItemIds = selectedItemIds,
+            downloadedCacheFile = cacheFile
+        )
+
+        viewModelScope.launch {
+            RestoreRepository.executionState.collect { execState ->
+                val curr = _individualRestoreUiState.value
+                if (curr is IndividualRestoreUiState.Running) {
+                    when (execState) {
+                        RestoreExecutionState.COMPLETED -> {
+                            _individualRestoreUiState.value = IndividualRestoreUiState.Completed(
+                                appName = app.appName,
+                                pointTitle = point.backupTitle
+                            )
+                        }
+                        RestoreExecutionState.ERROR -> {
+                            val errMsg = RestoreRepository.restoreSummary.value?.errorMessage ?: "Falha na restauração"
+                            _individualRestoreUiState.value = IndividualRestoreUiState.Error(errMsg)
+                        }
+                        else -> {
+                            val prog = RestoreRepository.restoreProgress.value
+                            _individualRestoreUiState.value = curr.copy(
+                                progressPercent = prog?.progressPercent ?: curr.progressPercent,
+                                stage = prog?.stage ?: curr.stage,
+                                currentStep = prog?.currentItemName ?: curr.currentStep
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     // Unified Background Operations (Single Source of Truth via OperationRepository)
     val activeOperations: StateFlow<List<com.resync.app.engine.Operacao>> = com.resync.app.engine.OperationRepository.operations

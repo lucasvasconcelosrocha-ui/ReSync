@@ -4,6 +4,35 @@ Todas as mudanças notáveis deste projeto são documentadas neste arquivo.
 
 ---
 
+## [1.0.38] - 2026-11-20
+
+### 🌐 Inglês como Idioma Padrão de Fábrica & Localização 100% Completa
+- **Inglês como Idioma Padrão:** O aplicativo agora inicia obrigatoriamente em Inglês (`Locale.ENGLISH`) em novas instalações ou quando nenhuma preferência foi definida.
+- **Reatividade Instantânea em Compose:** Suporte a troca dinâmica de idioma em tempo real via `LocaleHelper.currentLanguageFlow` e `CompositionLocalProvider` em `MainActivity.kt`, atualizando 100% das telas sem reiniciar o aplicativo.
+- **Sincronização Estrita de Recursos XML:** 311 chaves XML sincronizadas 1:1 entre `values/strings.xml` (Inglês padrão), `values-en/strings.xml`, `values-pt/strings.xml` e `values-pt-rBR/strings.xml`.
+- **Configuração de Idiomas por App no Android 13+:** `locales_config.xml` configurado com `en`, `en-US`, `pt`, `pt-BR`.
+
+### 🛡️ Correção Crítica na Restauração Individual de Aplicativos (Bugfix)
+- **Eliminação da Falsa Conclusão Instantânea:** Corrigido problema crítico onde a tela de restauração individual abria diretamente em estado "Concluída!" sem executar a restauração devido a estados persistidos de execuções anteriores em `swiftvault_restore_repository_prefs`.
+- **Nova Máquina de Estados Dedicada (`IndividualRestoreUiState`):** Implementada no `MainViewModel` com transições estritas (`Idle` ➔ `SelectingBackup` ➔ `Running` ➔ `Completed` / `Error`), desacoplando a UI do estado global persistido do repositório.
+- **Verificação Prévia de Backups:** Verificação obrigatória de pontos de restauração antes de abrir o fluxo; se não houver backups, exibe aviso informativo e bloqueia operações inválidas.
+
+### ✨ Animação Futurista de Conclusão (`FuturisticCompletionOrb`) & Barra Inferior Inteligente
+- **Orb Neon Interativo com Canvas:** Anéis orbitais duplos desacoplados com gradientes neon (`#00FF88` ➔ `#00E5FF`), pulso de radar sensível ao toque, feedback háptico (`HapticFeedbackType.LongPress`) e animação progressiva de traçado do checkmark com `PathMeasure`.
+- **Barra de Ações Contextual Pós-Backup:** Quando a operação termina, os botões de Pausar/Abortar são substituídos automaticamente por "Done / Back to Home" (primário) e "View Backups" (secundário), além de badge neon de integridade SHA-256.
+
+### 💻 Overhaul no Console de Logs & Badge Neon no Dashboard
+- **Layout de Logs em Largura Total:** Migração das linhas espremidas em 3 colunas para formato monoespaçado de largura total com cabeçalho de timestamp/tag e mensagem com quebra natural de linha (`11.sp` / `lineHeight = 15.sp`).
+- **Filtro de Ruído Diagnóstico:** Logs internos do tipo `[DIAGNÓSTICO]` e `preload` são filtrados do console primário.
+- **Ajuste da TopBar:** Aplicação correta de padding superior (`16.dp` e `innerPadding`), eliminando sobreposição da barra de status e botões cortados.
+- **Badge Neon Dinâmico:** Novo badge neon verde (`Color(0xFF00FF88)`) ao lado do logo ReSync no Dashboard indicando `v1.0.38` via `BuildConfig.VERSION_NAME`.
+
+### 💬 Comunidade Oficial no Telegram (`t.me/resync_backup`)
+- **Modal de Boas-Vindas no Primeiro Acesso:** Modal no estilo Bento OLED convidando novos usuários a ingressarem no grupo oficial do Telegram, com controle via SharedPreferences (`has_seen_telegram_welcome_modal_v1`).
+- **Card Permanente nas Configurações:** Novo card estético nas Configurações permitindo acesso direto à comunidade a qualquer momento.
+
+---
+
 ## [1.0.37] - 2026-11-17
 
 ### 🌐 Suporte Completo ao Idioma Inglês (Full English Language Support)

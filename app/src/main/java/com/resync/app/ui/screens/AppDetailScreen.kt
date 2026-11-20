@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
 import android.widget.Toast
+import com.resync.app.R
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
@@ -309,6 +310,7 @@ fun AppDetailScreen(
         BackHandler {
             showIndividualRestoreScreen = false
             selectedIndividualPoint = null
+            viewModel.resetIndividualRestoreState()
         }
         AppIndividualRestoreScreen(
             app = app,
@@ -318,10 +320,12 @@ fun AppDetailScreen(
             onBack = {
                 showIndividualRestoreScreen = false
                 selectedIndividualPoint = null
+                viewModel.resetIndividualRestoreState()
             },
             onFinished = {
                 showIndividualRestoreScreen = false
                 selectedIndividualPoint = null
+                viewModel.resetIndividualRestoreState()
                 viewModel.triggerAppBackupDetection(forceRefreshDrive = true)
             }
         )
@@ -658,14 +662,16 @@ fun AppDetailScreen(
                     }
 
                     // Botão destacado "RESTAURAR"
-                    val latestPoint = (deviceBackupsForApp + cloudBackupsForApp).maxByOrNull { it.timestamp }
+                    val allValidPoints = (deviceBackupsForApp + cloudBackupsForApp).sortedByDescending { it.timestamp }
+                    val latestPoint = allValidPoints.firstOrNull()
                     Button(
                         onClick = {
-                            if (latestPoint != null) {
+                            if (!hasAnyBackup || latestPoint == null || allValidPoints.isEmpty()) {
+                                Toast.makeText(context, context.getString(R.string.no_backup_found_for_app), Toast.LENGTH_SHORT).show()
+                            } else {
+                                viewModel.prepareIndividualRestore(allValidPoints, latestPoint)
                                 selectedIndividualPoint = latestPoint
                                 showIndividualRestoreScreen = true
-                            } else {
-                                Toast.makeText(context, "Nenhum ponto de backup disponível para restaurar.", Toast.LENGTH_SHORT).show()
                             }
                         },
                         modifier = Modifier
@@ -852,6 +858,8 @@ fun AppDetailScreen(
                                 // Botão direto Restaurar no item
                                 FilledTonalButton(
                                     onClick = {
+                                        val allValid = (deviceBackupsForApp + cloudBackupsForApp).sortedByDescending { it.timestamp }
+                                        viewModel.prepareIndividualRestore(allValid, record)
                                         selectedIndividualPoint = record
                                         showIndividualRestoreScreen = true
                                     },
@@ -886,6 +894,8 @@ fun AppDetailScreen(
                                             leadingIcon = { Icon(Icons.Default.Restore, contentDescription = null, tint = StatusSuccess) },
                                             onClick = {
                                                 showItemMenu = false
+                                                val allValid = (deviceBackupsForApp + cloudBackupsForApp).sortedByDescending { it.timestamp }
+                                                viewModel.prepareIndividualRestore(allValid, record)
                                                 selectedIndividualPoint = record
                                                 showIndividualRestoreScreen = true
                                             }
@@ -1067,6 +1077,8 @@ fun AppDetailScreen(
                                 // Botão direto Restaurar no item da nuvem
                                 FilledTonalButton(
                                     onClick = {
+                                        val allValid = (deviceBackupsForApp + cloudBackupsForApp).sortedByDescending { it.timestamp }
+                                        viewModel.prepareIndividualRestore(allValid, record)
                                         selectedIndividualPoint = record
                                         showIndividualRestoreScreen = true
                                     },
@@ -1101,6 +1113,8 @@ fun AppDetailScreen(
                                             leadingIcon = { Icon(Icons.Default.Restore, contentDescription = null, tint = StatusSuccess) },
                                             onClick = {
                                                 showCloudItemMenu = false
+                                                val allValid = (deviceBackupsForApp + cloudBackupsForApp).sortedByDescending { it.timestamp }
+                                                viewModel.prepareIndividualRestore(allValid, record)
                                                 selectedIndividualPoint = record
                                                 showIndividualRestoreScreen = true
                                             }

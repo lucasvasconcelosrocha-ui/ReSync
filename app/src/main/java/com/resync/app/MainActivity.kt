@@ -135,18 +135,15 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val context = LocalContext.current
-            val currentLocale = remember { LocaleHelper.getLocale(context) }
-            val wrappedContext = remember(currentLocale) { LocaleHelper.wrapContext(context) }
-            val configuration = remember(currentLocale) {
-                android.content.res.Configuration(context.resources.configuration).apply {
-                    setLocale(currentLocale)
-                    setLayoutDirection(currentLocale)
-                }
+            val currentLanguage by LocaleHelper.currentLanguageFlow.collectAsState()
+            LaunchedEffect(Unit) {
+                LocaleHelper.getAppLanguage(context)
             }
+            val localizedContext = remember(currentLanguage) { LocaleHelper.wrapContext(context) }
 
             CompositionLocalProvider(
-                LocalConfiguration provides configuration,
-                LocalContext provides wrappedContext
+                LocalContext provides localizedContext,
+                LocalConfiguration provides localizedContext.resources.configuration
             ) {
                 val currentAccent by viewModel.themeAccent.collectAsState()
                 val activeOperations by viewModel.activeOperations.collectAsStateWithLifecycle()
