@@ -4,6 +4,27 @@ Todas as mudanças notáveis deste projeto são documentadas neste arquivo.
 
 ---
 
+## [1.0.44] - 2026-11-22
+
+### 🛡️ Garantia de Shell Root Real e Limpeza de Cache libsu
+- **Descarte de Shell Não-Root Preso em Cache:** Implementação de descarte automático (`cached.close()`) caso o libsu retenha um shell criado anteriormente sem permissões root (`isRoot == false`), forçando nova negociação real com o Magisk/KernelSU/APatch.
+- **Função Dedicada `RootUtils.executeRootScript`:** Validação mandatória de identidade root (`id` contendo `uid=0`) antes de executar qualquer comando de privilégio.
+- **Fallback com ProcessBuilder:** Caso o libsu falhe, execução direta via `su -c` e `su -mm -c` confirmando `uid=0` e logging transparente e estruturado em `AppLogger` (`INFO`/`WARN`).
+
+### ⚡ Comandos Exatos de Permissão para Android 14–17 e Xiaomi HyperOS
+- **Desbloqueio de Restricted Settings:** Aplicação de `cmd appops set --uid $pkg ACCESS_RESTRICTED_SETTINGS allow` para APKs instalados via sideload.
+- **Correção da Flag `--uid` para Acesso Total ao Armazenamento:** Aplicação com `--uid` em `MANAGE_EXTERNAL_STORAGE` e `LEGACY_STORAGE`, garantindo que `Environment.isExternalStorageManager()` retorne `true` de imediato.
+- **Otimização de Bateria Irrestrita:** Adição à whitelist do Doze (`dumpsys deviceidle whitelist`) e liberação de background (`RUN_IN_BACKGROUND`, `RUN_ANY_IN_BACKGROUND`).
+- **Autostart no HyperOS/MIUI:** Configuração com AppOps `10008`, `AUTO_START` e `BOOT_COMPLETED`.
+- **Permissões de Runtime:** Execução de `pm grant --user $userId $pkg $perm` com fallback padrão cobrindo notificações, contatos, SMS, chamadas, localização, bluetooth e mídias.
+
+### 📲 Fluxo 100% Automático no Setup e Permissões (Zero Telas Manuais com Root)
+- **Execução Imediata e Reavaliação em Tempo Real:** Ao autorizar Root ou entrar na etapa de permissões, os comandos são executados silenciosamente em background com indicador sutil de progresso e reavaliação imediata de estado.
+- **Prioridade Root nos Cliques Interativos:** Ao clicar em itens individuais ou no botão `REQUEST ALL PERMISSIONS`, o app tenta primeiro a concessão via Root antes de qualquer fallback manual para telas de configurações do Android.
+- **Interface Limpa:** Botão secundário de permissão de arquivos ocultado quando o acesso total já se encontra concedido.
+
+---
+
 ## [1.0.43] - 2026-11-22
 
 ### 🎬 Listagem Real de Arquivos em Vídeos, Áudio e Imagens (Armazenamento)

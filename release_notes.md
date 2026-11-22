@@ -1,3 +1,49 @@
+# 🚀 ReSync v1.0.44 Release Notes
+
+---
+
+## 🇧🇷 Português
+
+### 🚀 O Que Há de Novo na Versão 1.0.44:
+
+#### 1. 🛡️ Garantia de Shell Root Real e Limpeza de Cache libsu
+- **Descarte de Cache Não-Root:** Força encerramento do cache do libsu se estiver preso em `isRoot == false`.
+- **Validação de `uid=0`:** Nova função `RootUtils.executeRootScript` com validação prévia de identidade root e fallback direto para `ProcessBuilder` (`su -c` e `su -mm -c`).
+- **Diagnóstico Transparente:** Registro de saída e eventuais mensagens em `AppLogger`.
+
+#### 2. ⚡ Comandos Exatos de Permissão para Android 14–17 e Xiaomi HyperOS
+- **Desbloqueio de Restricted Settings:** Suporte para sideload via AppOps `ACCESS_RESTRICTED_SETTINGS`.
+- **Acesso Total aos Arquivos (`--uid`):** Aplicação de `cmd appops set --uid $pkg MANAGE_EXTERNAL_STORAGE allow`, tornando `Environment.isExternalStorageManager()` verdadeiro de imediato.
+- **Whitelist do Doze & Background:** Liberação total de restrições de bateria em segundo plano.
+- **Autostart HyperOS/MIUI & Runtime Multi-usuário:** Configuração honesta de autostart e concessão de runtime com `--user $userId`.
+
+#### 3. 📲 Fluxo 100% Automático no Setup e Permissões
+- **Zero Telas Manuais com Root:** Auto-concessão silenciosa no momento de aprovação do Root e nas ações de clique.
+- **UI Limpa:** Ocultação de botões de permissão redundantes após concessão.
+
+---
+
+## 🇺🇸 English
+
+### 🚀 What's New in Version 1.0.44:
+
+#### 1. 🛡️ Guaranteed Real Root Shell & libsu Cache Clearance
+- **Purge Non-Root Cache:** Discards stale non-root cached libsu shells.
+- **Strict `uid=0` Validation:** `RootUtils.executeRootScript` ensures commands run only when `uid=0` is confirmed, with ProcessBuilder fallback.
+- **Transparent Logging:** Diagnostic logs recorded via `AppLogger`.
+
+#### 2. ⚡ Exact Commands for Android 14–17 & Xiaomi HyperOS
+- **Unlock Restricted Settings:** Handles sideloaded APK restrictions via `ACCESS_RESTRICTED_SETTINGS`.
+- **Full Storage Access with `--uid`:** Correct `--uid` flag allows `Environment.isExternalStorageManager()` to return `true` immediately.
+- **Doze Whitelist & Background:** Fully unthrottled background execution.
+- **HyperOS/MIUI Autostart & Multi-User Grants:** Explicit `--user $userId` runtime permission grants.
+
+#### 3. 📲 100% Automated Setup & Permissions Flow
+- **No Manual Settings with Root:** Grants silently without throwing users into Android settings menus.
+- **Cleaner Interface:** Hides secondary file access buttons once granted.
+
+---
+
 # 🚀 ReSync v1.0.43 Release Notes
 
 ---

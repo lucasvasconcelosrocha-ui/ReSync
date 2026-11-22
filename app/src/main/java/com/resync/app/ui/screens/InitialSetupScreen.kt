@@ -72,6 +72,7 @@ fun InitialSetupScreen(
     var currentStep by remember { mutableIntStateOf(1) } // 1: Apresentação, 2: Root, 3: Permissões, 4: Armazenamento & Rede, 5: Pronto
     val permissionsState by viewModel.permissionsState.collectAsStateWithLifecycle()
     val isRequestingRoot by viewModel.isRequestingRoot.collectAsState()
+    var isAutoGrantingPermissions by remember { mutableStateOf(false) }
 
     var rootManagers by remember { mutableStateOf<List<com.resync.app.engine.RootManagerApp>>(emptyList()) }
     var showRootManagerChooser by remember { mutableStateOf(false) }
@@ -89,8 +90,19 @@ fun InitialSetupScreen(
 
     // Auto-grant all permissions via Root the moment root is granted or entering Step 3
     LaunchedEffect(currentStep, permissionsState.isRootGranted) {
-        if (permissionsState.isRootGranted) {
-            viewModel.grantAllPermissionsViaRoot()
+        if (permissionsState.isRootGranted && (currentStep == 2 || currentStep == 3)) {
+            val needsGrant = !permissionsState.hasAllFilesAccess ||
+                    !permissionsState.isIgnoringBatteryOptimizations ||
+                    !permissionsState.hasContacts ||
+                    !permissionsState.hasSms ||
+                    !permissionsState.hasCalls
+            if (needsGrant) {
+                isAutoGrantingPermissions = true
+                viewModel.grantAllPermissionsViaRoot {
+                    viewModel.refreshAllPermissions()
+                    isAutoGrantingPermissions = false
+                }
+            }
         }
     }
 
@@ -606,6 +618,13 @@ fun InitialSetupScreen(
                                             rootFeedbackMessage = null
                                             viewModel.requestRootPermission { granted ->
                                                 rootFeedbackMessage = if (granted) context.getString(R.string.setup_root_authorized_toast) else context.getString(R.string.setup_root_pending_toast)
+                                                if (granted) {
+                                                    isAutoGrantingPermissions = true
+                                                    viewModel.grantAllPermissionsViaRoot {
+                                                        viewModel.refreshAllPermissions()
+                                                        isAutoGrantingPermissions = false
+                                                    }
+                                                }
                                             }
                                         },
                                         enabled = !isRequestingRoot,
@@ -640,7 +659,16 @@ fun InitialSetupScreen(
                     )
 
                     Button(
-                        onClick = { currentStep = 3 },
+                        onClick = {
+                            currentStep = 3
+                            if (isRootOk) {
+                                isAutoGrantingPermissions = true
+                                viewModel.grantAllPermissionsViaRoot {
+                                    viewModel.refreshAllPermissions()
+                                    isAutoGrantingPermissions = false
+                                }
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth().height(52.dp),
                         shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = continueStep2Color)
@@ -701,6 +729,31 @@ fun InitialSetupScreen(
 
                             Spacer(modifier = Modifier.height(14.dp))
 
+                            if (isAutoGrantingPermissions) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(primaryAccent.copy(alpha = 0.15f))
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp,
+                                        color = primaryAccent
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = stringResource(R.string.setup_auto_granting_root),
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = primaryAccent
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(10.dp))
+                            }
+
                             // Lista de Permissões com Rolagem Independente
                             Box(
                                 modifier = Modifier
@@ -721,7 +774,22 @@ fun InitialSetupScreen(
                                         isGranted = hasStorage,
                                         grantedLabel = stringResource(R.string.perm_status_granted),
                                         pendingLabel = stringResource(R.string.perm_status_allow),
-                                        onClick = { openStorageSettings() }
+                                        onClick = {
+                                            if (!hasStorage) {
+                                                val isRoot = permissionsState.isRootGranted || com.topjohnwu.superuser.Shell.isAppGrantedRoot() == true
+                                                if (isRoot) {
+                                                    isAutoGrantingPermissions = true
+                                                    viewModel.grantAllPermissionsViaRoot {
+                                                        isAutoGrantingPermissions = false
+                                                        if (!viewModel.permissionsState.value.hasAllFilesAccess) {
+                                                            openStorageSettings()
+                                                        }
+                                                    }
+                                                } else {
+                                                    openStorageSettings()
+                                                }
+                                            }
+                                        }
                                     )
 
                                     // 2. Notificações
@@ -732,7 +800,22 @@ fun InitialSetupScreen(
                                         isGranted = hasNotifs,
                                         grantedLabel = stringResource(R.string.perm_status_enabled),
                                         pendingLabel = stringResource(R.string.perm_status_enable),
-                                        onClick = { openNotificationSettings() }
+                                        onClick = {
+                                            if (!hasNotifs) {
+                                                val isRoot = permissionsState.isRootGranted || com.topjohnwu.superuser.Shell.isAppGrantedRoot() == true
+                                                if (isRoot) {
+                                                    isAutoGrantingPermissions = true
+                                                    viewModel.grantAllPermissionsViaRoot {
+                                                        isAutoGrantingPermissions = false
+                                                        if (!viewModel.permissionsState.value.hasPostNotifications) {
+                                                            openNotificationSettings()
+                                                        }
+                                                    }
+                                                } else {
+                                                    openNotificationSettings()
+                                                }
+                                            }
+                                        }
                                     )
 
                                     // 3. Início Automático
@@ -743,7 +826,22 @@ fun InitialSetupScreen(
                                         isGranted = hasAutostart,
                                         grantedLabel = stringResource(R.string.perm_status_configured),
                                         pendingLabel = stringResource(R.string.perm_status_configure),
-                                        onClick = { openAutostartSettings() }
+                                        onClick = {
+                                            if (!hasAutostart) {
+                                                val isRoot = permissionsState.isRootGranted || com.topjohnwu.superuser.Shell.isAppGrantedRoot() == true
+                                                if (isRoot) {
+                                                    isAutoGrantingPermissions = true
+                                                    viewModel.grantAllPermissionsViaRoot {
+                                                        isAutoGrantingPermissions = false
+                                                        if (!viewModel.permissionsState.value.hasAutostart) {
+                                                            openAutostartSettings()
+                                                        }
+                                                    }
+                                                } else {
+                                                    openAutostartSettings()
+                                                }
+                                            }
+                                        }
                                     )
 
                                     // 4. Otimização de Bateria
@@ -754,7 +852,22 @@ fun InitialSetupScreen(
                                         isGranted = hasBattery,
                                         grantedLabel = stringResource(R.string.perm_unrestricted),
                                         pendingLabel = stringResource(R.string.perm_status_configure),
-                                        onClick = { openBatteryOptimizationSettings() }
+                                        onClick = {
+                                            if (!hasBattery) {
+                                                val isRoot = permissionsState.isRootGranted || com.topjohnwu.superuser.Shell.isAppGrantedRoot() == true
+                                                if (isRoot) {
+                                                    isAutoGrantingPermissions = true
+                                                    viewModel.grantAllPermissionsViaRoot {
+                                                        isAutoGrantingPermissions = false
+                                                        if (!viewModel.permissionsState.value.isIgnoringBatteryOptimizations) {
+                                                            openBatteryOptimizationSettings()
+                                                        }
+                                                    }
+                                                } else {
+                                                    openBatteryOptimizationSettings()
+                                                }
+                                            }
+                                        }
                                     )
 
                                     // 5. Contatos, SMS e Chamadas
@@ -765,7 +878,23 @@ fun InitialSetupScreen(
                                         isGranted = hasComms,
                                         grantedLabel = stringResource(R.string.perm_status_granted),
                                         pendingLabel = stringResource(R.string.perm_status_allow),
-                                        onClick = { openCommsPermissions() }
+                                        onClick = {
+                                            if (!hasComms) {
+                                                val isRoot = permissionsState.isRootGranted || com.topjohnwu.superuser.Shell.isAppGrantedRoot() == true
+                                                if (isRoot) {
+                                                    isAutoGrantingPermissions = true
+                                                    viewModel.grantAllPermissionsViaRoot {
+                                                        isAutoGrantingPermissions = false
+                                                        val st = viewModel.permissionsState.value
+                                                        if (!(st.hasContacts && st.hasSms && st.hasCalls)) {
+                                                            openCommsPermissions()
+                                                        }
+                                                    }
+                                                } else {
+                                                    openCommsPermissions()
+                                                }
+                                            }
+                                        }
                                     )
 
 
@@ -777,7 +906,23 @@ fun InitialSetupScreen(
                                         isGranted = hasLocation,
                                         grantedLabel = stringResource(R.string.perm_status_granted),
                                         pendingLabel = stringResource(R.string.perm_status_allow),
-                                        onClick = { openLocationPermissions() }
+                                        onClick = {
+                                            if (!hasLocation) {
+                                                val isRoot = permissionsState.isRootGranted || com.topjohnwu.superuser.Shell.isAppGrantedRoot() == true
+                                                if (isRoot) {
+                                                    isAutoGrantingPermissions = true
+                                                    viewModel.grantAllPermissionsViaRoot {
+                                                        isAutoGrantingPermissions = false
+                                                        val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                                                        if (!fine) {
+                                                            openLocationPermissions()
+                                                        }
+                                                    }
+                                                } else {
+                                                    openLocationPermissions()
+                                                }
+                                            }
+                                        }
                                     )
 
                                     // 8. Dispositivos Próximos (Bluetooth)
@@ -788,7 +933,25 @@ fun InitialSetupScreen(
                                         isGranted = hasBluetooth,
                                         grantedLabel = stringResource(R.string.perm_status_granted),
                                         pendingLabel = stringResource(R.string.perm_status_allow),
-                                        onClick = { openBluetoothPermissions() }
+                                        onClick = {
+                                            if (!hasBluetooth) {
+                                                val isRoot = permissionsState.isRootGranted || com.topjohnwu.superuser.Shell.isAppGrantedRoot() == true
+                                                if (isRoot) {
+                                                    isAutoGrantingPermissions = true
+                                                    viewModel.grantAllPermissionsViaRoot {
+                                                        isAutoGrantingPermissions = false
+                                                        val bt = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                                            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+                                                        } else true
+                                                        if (!bt) {
+                                                            openBluetoothPermissions()
+                                                        }
+                                                    }
+                                                } else {
+                                                    openBluetoothPermissions()
+                                                }
+                                            }
+                                        }
                                     )
                                 }
                             }
@@ -800,7 +963,35 @@ fun InitialSetupScreen(
                                 onClick = {
                                     val isRoot = permissionsState.isRootGranted || com.topjohnwu.superuser.Shell.isAppGrantedRoot() == true
                                     if (isRoot) {
-                                        viewModel.grantAllPermissionsViaRoot()
+                                        isAutoGrantingPermissions = true
+                                        viewModel.grantAllPermissionsViaRoot {
+                                            isAutoGrantingPermissions = false
+                                            viewModel.refreshAllPermissions()
+                                            val updated = viewModel.permissionsState.value
+                                            if (!updated.areAllRuntimeGranted || !updated.hasAllFilesAccess) {
+                                                val perms = mutableListOf(
+                                                    Manifest.permission.READ_CONTACTS,
+                                                    Manifest.permission.WRITE_CONTACTS,
+                                                    Manifest.permission.READ_SMS,
+                                                    Manifest.permission.READ_CALL_LOG,
+                                                    Manifest.permission.READ_PHONE_STATE,
+                                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                                    Manifest.permission.ACCESS_COARSE_LOCATION
+                                                )
+                                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                                    perms.add(Manifest.permission.READ_MEDIA_IMAGES)
+                                                    perms.add(Manifest.permission.READ_MEDIA_VIDEO)
+                                                    perms.add(Manifest.permission.POST_NOTIFICATIONS)
+                                                } else {
+                                                    perms.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+                                                    perms.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                                                }
+                                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                                    perms.add(Manifest.permission.BLUETOOTH_CONNECT)
+                                                }
+                                                permissionLauncher.launch(perms.toTypedArray())
+                                            }
+                                        }
                                     } else {
                                         val perms = mutableListOf(
                                             Manifest.permission.READ_CONTACTS,
@@ -838,7 +1029,20 @@ fun InitialSetupScreen(
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !permissionsState.hasAllFilesAccess) {
                                 Spacer(modifier = Modifier.height(8.dp))
                                 OutlinedButton(
-                                    onClick = { openStorageSettings() },
+                                    onClick = {
+                                        val isRoot = permissionsState.isRootGranted || com.topjohnwu.superuser.Shell.isAppGrantedRoot() == true
+                                        if (isRoot) {
+                                            isAutoGrantingPermissions = true
+                                            viewModel.grantAllPermissionsViaRoot {
+                                                isAutoGrantingPermissions = false
+                                                if (!viewModel.permissionsState.value.hasAllFilesAccess) {
+                                                    openStorageSettings()
+                                                }
+                                            }
+                                        } else {
+                                            openStorageSettings()
+                                        }
+                                    },
                                     modifier = Modifier.fillMaxWidth().height(44.dp),
                                     shape = RoundedCornerShape(10.dp)
                                 ) {

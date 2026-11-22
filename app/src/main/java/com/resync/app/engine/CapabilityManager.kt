@@ -101,10 +101,18 @@ class CapabilityManager(private val context: Context) {
     suspend fun verifyRootAccess(timeoutMs: Long = 4000L): Boolean = withContext(Dispatchers.IO) {
         kotlinx.coroutines.withTimeoutOrNull(timeoutMs) {
             try {
-                // 1. Verifica flag do libsu
+                // 1. Limpa cache não-root do libsu caso tenha ficado preso em non-root
+                try {
+                    val cached = Shell.getCachedShell()
+                    if (cached != null && (!cached.isRoot || !cached.isAlive)) {
+                        cached.close()
+                    }
+                } catch (_: Throwable) {}
+
+                // 2. Verifica flag do libsu
                 if (Shell.isAppGrantedRoot() == true) return@withTimeoutOrNull true
 
-                // 2. Verifica se a shell em cache ou ativa é root e está viva
+                // 3. Verifica se a shell em cache ou ativa é root e está viva
                 try {
                     val cached = Shell.getCachedShell()
                     if (cached != null && cached.isAlive && cached.isRoot) {
@@ -112,7 +120,7 @@ class CapabilityManager(private val context: Context) {
                     }
                 } catch (_: Throwable) {}
 
-                // 3. Testa Shell libsu executando id na sessão persistente
+                // 4. Testa Shell libsu executando id na sessão persistente
                 try {
                     val res = Shell.cmd("id").exec()
                     if (res.isSuccess && res.out.any { it.contains("uid=0") }) {
@@ -120,9 +128,19 @@ class CapabilityManager(private val context: Context) {
                     }
                 } catch (_: Throwable) {}
 
-                // 4. Fallback com ProcessBuilder direto
+                // 5. Fallback com ProcessBuilder direto
                 try {
                     val process = ProcessBuilder("su", "-c", "id").start()
+                    val output = process.inputStream.bufferedReader().use { it.readText() }
+                    process.waitFor()
+                    if (output.contains("uid=0")) {
+                        return@withTimeoutOrNull true
+                    }
+                } catch (_: Throwable) {}
+
+                // 6. Fallback com su -mm
+                try {
+                    val process = ProcessBuilder("su", "-mm", "-c", "id").start()
                     val output = process.inputStream.bufferedReader().use { it.readText() }
                     process.waitFor()
                     if (output.contains("uid=0")) {

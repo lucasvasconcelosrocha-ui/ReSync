@@ -275,7 +275,17 @@ fun PermissionsScreen(
                 icon = Icons.Default.Folder,
                 isPrimary = true,
                 actionLabel = if (storageOk) "Concedido" else "Conceder",
-                onAction = { openStorageSettings() }
+                onAction = {
+                    if (!storageOk && permissionsState.isRootGranted) {
+                        viewModel.grantAllPermissionsViaRoot {
+                            if (!viewModel.permissionsState.value.hasAllFilesAccess) {
+                                openStorageSettings()
+                            }
+                        }
+                    } else {
+                        openStorageSettings()
+                    }
+                }
             )
         )
 
@@ -291,7 +301,17 @@ fun PermissionsScreen(
                 icon = Icons.Default.Notifications,
                 isPrimary = true,
                 actionLabel = if (notifOk) "Ativado" else "Ativar",
-                onAction = { openNotificationSettings() }
+                onAction = {
+                    if (!notifOk && permissionsState.isRootGranted) {
+                        viewModel.grantAllPermissionsViaRoot {
+                            if (!viewModel.permissionsState.value.hasPostNotifications) {
+                                openNotificationSettings()
+                            }
+                        }
+                    } else {
+                        openNotificationSettings()
+                    }
+                }
             )
         )
 
@@ -305,7 +325,17 @@ fun PermissionsScreen(
                 icon = Icons.Default.PowerSettingsNew,
                 isPrimary = true,
                 actionLabel = if (autostartOk) "Configurado" else "Configurar",
-                onAction = { openAutostartSettings() }
+                onAction = {
+                    if (!autostartOk && permissionsState.isRootGranted) {
+                        viewModel.grantAllPermissionsViaRoot {
+                            if (!viewModel.permissionsState.value.hasAutostart) {
+                                openAutostartSettings()
+                            }
+                        }
+                    } else {
+                        openAutostartSettings()
+                    }
+                }
             )
         )
 
@@ -319,7 +349,17 @@ fun PermissionsScreen(
                 icon = Icons.Default.BatteryChargingFull,
                 isPrimary = true,
                 actionLabel = if (batteryOk) context.getString(R.string.perm_unrestricted) else "Configurar",
-                onAction = { openBatteryOptimizationSettings() }
+                onAction = {
+                    if (!batteryOk && permissionsState.isRootGranted) {
+                        viewModel.grantAllPermissionsViaRoot {
+                            if (!viewModel.permissionsState.value.isIgnoringBatteryOptimizations) {
+                                openBatteryOptimizationSettings()
+                            }
+                        }
+                    } else {
+                        openBatteryOptimizationSettings()
+                    }
+                }
             )
         )
 
@@ -373,7 +413,16 @@ fun PermissionsScreen(
                 permissions = commsPerms,
                 actionLabel = if (commsOk) "Concedido" else "Permitir",
                 onAction = {
-                    permissionLauncher.launch(commsPerms.toTypedArray())
+                    if (!commsOk && permissionsState.isRootGranted) {
+                        viewModel.grantAllPermissionsViaRoot {
+                            val st = viewModel.permissionsState.value
+                            if (!(st.hasContacts && st.hasSms && st.hasCalls)) {
+                                permissionLauncher.launch(commsPerms.toTypedArray())
+                            }
+                        }
+                    } else {
+                        permissionLauncher.launch(commsPerms.toTypedArray())
+                    }
                 }
             )
         )
@@ -391,8 +440,17 @@ fun PermissionsScreen(
                 permissions = btPerms,
                 actionLabel = if (btOk) "Permitido" else "Permitir",
                 onAction = {
-                    if (btPerms.isNotEmpty()) {
-                        permissionLauncher.launch(btPerms.toTypedArray())
+                    if (!btOk && permissionsState.isRootGranted) {
+                        viewModel.grantAllPermissionsViaRoot {
+                            val st = viewModel.permissionsState.value
+                            if (!st.hasBluetoothConnect && btPerms.isNotEmpty()) {
+                                permissionLauncher.launch(btPerms.toTypedArray())
+                            }
+                        }
+                    } else {
+                        if (btPerms.isNotEmpty()) {
+                            permissionLauncher.launch(btPerms.toTypedArray())
+                        }
                     }
                 }
             )
@@ -708,6 +766,9 @@ fun PermissionsScreen(
                                 rootFeedbackMessage = null
                                 viewModel.requestRootPermission { granted ->
                                     rootFeedbackMessage = if (granted) context.getString(R.string.perm_root_authorized_success) else context.getString(R.string.perm_root_not_authorized)
+                                    if (granted) {
+                                        viewModel.grantAllPermissionsViaRoot()
+                                    }
                                 }
                             },
                             enabled = !isRequestingRoot,

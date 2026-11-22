@@ -180,7 +180,11 @@ class PermissionsRepository(private val context: Context) {
                 false
             }
 
-            val hasAutostart = miuiAutostart || (isIgnoringBattery && autostartPrefConfigured) || autostartPrefConfigured
+            val hasAutostart = if (isXiaomi) {
+                miuiAutostart || (autostartPrefConfigured && (currentRoot || isIgnoringBattery))
+            } else {
+                isIgnoringBattery || (autostartPrefConfigured && currentRoot)
+            }
 
             val connMgr = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
             val hasBgDataExemption = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && connMgr != null) {
@@ -267,12 +271,55 @@ class PermissionsRepository(private val context: Context) {
     }
 
     /**
-     * Concede automaticamente todas as permissões declaradas no manifesto via Root Shell,
-     * incluindo permissões de runtime, AppOps e whitelist de bateria (deviceidle).
+     * Concede automaticamente todas as permissões declaradas no manifesto via Root Shell com uid=0 confirmado,
+     * incluindo permissões de runtime (com --user explicitado), AppOps com --uid e whitelist de bateria (deviceidle).
      */
-    suspend fun grantAllPermissionsViaRoot(context: Context) = withContext(Dispatchers.IO) {
+    suspend fun grantAllPermissionsViaRoot(context: Context): Boolean = withContext(Dispatchers.IO) {
         try {
             val pkg = context.packageName
+            val userId = try {
+                android.os.Process.myUserHandle().hashCode()
+            } catch (_: Throwable) {
+                0
+            }
+
+            val commands = mutableListOf<String>()
+
+            // 1. Desbloquear Restricted Settings (essencial para APKs sideload no Android 13–17)
+            commands.add("cmd appops set --uid $pkg ACCESS_RESTRICTED_SETTINGS allow")
+            commands.add("appops set --uid $pkg ACCESS_RESTRICTED_SETTINGS allow")
+
+            // 2. Storage Access / Acesso a todos os arquivos (CORREÇÃO DO BUG --uid)
+            commands.add("cmd appops set --uid $pkg MANAGE_EXTERNAL_STORAGE allow")
+            commands.add("appops set --uid $pkg MANAGE_EXTERNAL_STORAGE allow")
+            commands.add("cmd appops set --user $userId $pkg MANAGE_EXTERNAL_STORAGE allow")
+            commands.add("appops set --user $userId $pkg MANAGE_EXTERNAL_STORAGE allow")
+            commands.add("cmd appops set --uid $pkg LEGACY_STORAGE allow")
+            commands.add("appops set --uid $pkg READ_EXTERNAL_STORAGE allow")
+            commands.add("appops set --uid $pkg WRITE_EXTERNAL_STORAGE allow")
+
+            // 3. Battery Optimization (Whitelist do Doze + Background irrestrito)
+            commands.add("dumpsys deviceidle whitelist +$pkg")
+            commands.add("cmd deviceidle whitelist +$pkg")
+            commands.add("cmd appops set --uid $pkg RUN_IN_BACKGROUND allow")
+            commands.add("cmd appops set --uid $pkg RUN_ANY_IN_BACKGROUND allow")
+            commands.add("cmd appops set --user $userId $pkg RUN_IN_BACKGROUND allow")
+            commands.add("cmd appops set --user $userId $pkg RUN_ANY_IN_BACKGROUND allow")
+
+            // 4. Autostart (HyperOS / MIUI + Android geral)
+            commands.add("cmd appops set --user $userId $pkg 10008 allow")
+            commands.add("appops set --uid $pkg 10008 allow")
+            commands.add("cmd appops set --user $userId $pkg AUTO_START allow")
+            commands.add("cmd appops set --user $userId $pkg BOOT_COMPLETED allow")
+
+            // 5. Outras permissões especiais
+            commands.add("cmd appops set --uid $pkg GET_USAGE_STATS allow")
+            commands.add("cmd appops set --uid $pkg REQUEST_INSTALL_PACKAGES allow")
+            commands.add("cmd appops set --uid $pkg WRITE_SETTINGS allow")
+            commands.add("cmd appops set --uid $pkg SYSTEM_ALERT_WINDOW allow")
+            commands.add("cmd appops set --uid $pkg POST_NOTIFICATION allow")
+
+            // 6. Todas as permissões de Runtime (com --user $userId explícito)
             val pm = context.packageManager
             val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 pm.getPackageInfo(pkg, PackageManager.PackageInfoFlags.of(PackageManager.GET_PERMISSIONS.toLong()))
@@ -281,64 +328,72 @@ class PermissionsRepository(private val context: Context) {
                 pm.getPackageInfo(pkg, PackageManager.GET_PERMISSIONS)
             }
 
-            val scriptBuilder = StringBuilder()
-            val requested = packageInfo.requestedPermissions ?: emptyArray()
-            for (perm in requested) {
-                scriptBuilder.append("pm grant $pkg $perm 2>/dev/null || true\n")
+            val requested = packageInfo.requestedPermissions?.toSet() ?: emptySet()
+            val explicitPerms = setOf(
+                Manifest.permission.POST_NOTIFICATIONS,
+                Manifest.permission.READ_CONTACTS,
+                Manifest.permission.WRITE_CONTACTS,
+                Manifest.permission.READ_SMS,
+                Manifest.permission.RECEIVE_SMS,
+                Manifest.permission.SEND_SMS,
+                Manifest.permission.READ_CALL_LOG,
+                Manifest.permission.WRITE_CALL_LOG,
+                Manifest.permission.READ_PHONE_STATE,
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION,
+                "android.permission.ACCESS_BACKGROUND_LOCATION",
+                Manifest.permission.BLUETOOTH_CONNECT,
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.BLUETOOTH_ADVERTISE,
+                Manifest.permission.READ_MEDIA_IMAGES,
+                Manifest.permission.READ_MEDIA_VIDEO,
+                Manifest.permission.READ_MEDIA_AUDIO,
+                Manifest.permission.READ_EXTERNAL_STORAGE,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE
+            )
+
+            val permsToGrant = (requested + explicitPerms).filter { perm ->
+                requested.contains(perm)
             }
 
-            // Permissões explícitas essenciais de runtime e notificações
-            scriptBuilder.append("pm grant $pkg android.permission.POST_NOTIFICATIONS 2>/dev/null || true\n")
-            scriptBuilder.append("pm grant $pkg android.permission.READ_CONTACTS 2>/dev/null || true\n")
-            scriptBuilder.append("pm grant $pkg android.permission.WRITE_CONTACTS 2>/dev/null || true\n")
-            scriptBuilder.append("pm grant $pkg android.permission.READ_SMS 2>/dev/null || true\n")
-            scriptBuilder.append("pm grant $pkg android.permission.READ_CALL_LOG 2>/dev/null || true\n")
-            scriptBuilder.append("pm grant $pkg android.permission.READ_PHONE_STATE 2>/dev/null || true\n")
-            scriptBuilder.append("pm grant $pkg android.permission.ACCESS_FINE_LOCATION 2>/dev/null || true\n")
-            scriptBuilder.append("pm grant $pkg android.permission.ACCESS_COARSE_LOCATION 2>/dev/null || true\n")
-            scriptBuilder.append("pm grant $pkg android.permission.BLUETOOTH_CONNECT 2>/dev/null || true\n")
-            scriptBuilder.append("pm grant $pkg android.permission.READ_MEDIA_IMAGES 2>/dev/null || true\n")
-            scriptBuilder.append("pm grant $pkg android.permission.READ_MEDIA_VIDEO 2>/dev/null || true\n")
-            scriptBuilder.append("pm grant $pkg android.permission.READ_MEDIA_AUDIO 2>/dev/null || true\n")
-            scriptBuilder.append("pm grant $pkg android.permission.READ_EXTERNAL_STORAGE 2>/dev/null || true\n")
-            scriptBuilder.append("pm grant $pkg android.permission.WRITE_EXTERNAL_STORAGE 2>/dev/null || true\n")
-
-            // Permissões especiais e AppOps (executadas via cmd appops e fallback appops direto)
-            scriptBuilder.append("cmd appops set $pkg MANAGE_EXTERNAL_STORAGE allow 2>/dev/null || appops set $pkg MANAGE_EXTERNAL_STORAGE allow 2>/dev/null || true\n")
-            scriptBuilder.append("cmd appops set $pkg GET_USAGE_STATS allow 2>/dev/null || appops set $pkg GET_USAGE_STATS allow 2>/dev/null || true\n")
-            scriptBuilder.append("cmd appops set $pkg REQUEST_INSTALL_PACKAGES allow 2>/dev/null || true\n")
-            scriptBuilder.append("cmd appops set $pkg WRITE_SETTINGS allow 2>/dev/null || true\n")
-            scriptBuilder.append("cmd appops set $pkg SYSTEM_ALERT_WINDOW allow 2>/dev/null || true\n")
-            scriptBuilder.append("cmd appops set $pkg POST_NOTIFICATION allow 2>/dev/null || true\n")
-            scriptBuilder.append("cmd appops set $pkg RUN_IN_BACKGROUND allow 2>/dev/null || true\n")
-            scriptBuilder.append("cmd appops set $pkg RUN_ANY_IN_BACKGROUND allow 2>/dev/null || true\n")
-            scriptBuilder.append("cmd appops set $pkg LEGACY_STORAGE allow 2>/dev/null || true\n")
-
-            // Otimização de Bateria (Battery Optimization)
-            scriptBuilder.append("dumpsys deviceidle whitelist +$pkg 2>/dev/null || true\n")
-            scriptBuilder.append("cmd deviceidle whitelist +$pkg 2>/dev/null || true\n")
-
-            // Inicialização Automática (Autostart - Xiaomi HyperOS / MIUI e Android geral)
-            scriptBuilder.append("cmd appops set $pkg 10008 allow 2>/dev/null || appops set $pkg 10008 allow 2>/dev/null || true\n")
-            scriptBuilder.append("cmd appops set $pkg AUTO_START allow 2>/dev/null || appops set $pkg AUTO_START allow 2>/dev/null || true\n")
-            scriptBuilder.append("cmd appops set $pkg BOOT_COMPLETED allow 2>/dev/null || true\n")
-
-            val script = scriptBuilder.toString()
-            if (script.isNotBlank()) {
-                Shell.cmd(script).exec()
+            for (perm in permsToGrant) {
+                commands.add("pm grant --user $userId $pkg $perm || pm grant $pkg $perm")
             }
 
-            // Marcar preferência persistida de autostart
-            try {
-                context.getSharedPreferences("resync_permissions_prefs", Context.MODE_PRIVATE)
-                    .edit()
-                    .putBoolean("hyperos_autostart_configured", true)
-                    .apply()
-            } catch (_: Throwable) {}
+            // Executa tudo via RootUtils com verificação obrigatória de uid=0
+            val rootExec = RootUtils.executeRootScript(commands)
+            if (!rootExec.isRoot) {
+                com.resync.app.util.AppLogger.w("PermissionsRepo", "grantAllPermissionsViaRoot: Falha, uid=0 não confirmado.")
+                return@withContext false
+            }
 
+            // Aguarda propagação no PackageManager e AppOpsService
+            kotlinx.coroutines.delay(250)
+
+            // Registra sucesso nas preferências de autostart
+            if (rootExec.isSuccess) {
+                try {
+                    context.getSharedPreferences("resync_permissions_prefs", Context.MODE_PRIVATE)
+                        .edit()
+                        .putBoolean("hyperos_autostart_configured", true)
+                        .apply()
+                } catch (_: Throwable) {}
+            }
+
+            // Atualiza o estado em memória e reavalia
             refreshSystemPermissions()
+            val updatedState = evaluateSystemPermissions(currentRoot = true)
+            _permissionsState.value = updatedState
+
+            com.resync.app.util.AppLogger.i(
+                "PermissionsRepo",
+                "grantAllPermissionsViaRoot concluído com sucesso: hasAllFilesAccess=${updatedState.hasAllFilesAccess}, hasBattery=${updatedState.isIgnoringBatteryOptimizations}, hasAutostart=${updatedState.hasAutostart}"
+            )
+
+            updatedState.hasAllFilesAccess
         } catch (t: Throwable) {
-            android.util.Log.e("PermissionsRepo", "Falha ao conceder permissoes via root: ${t.message}")
+            com.resync.app.util.AppLogger.e("PermissionsRepo", "Falha ao conceder permissoes via root: ${t.message}", t)
+            false
         }
     }
 

@@ -349,6 +349,7 @@
     <string name="perm_status_allow">Permitir</string>
     <string name="setup_btn_update_root">ATUALIZAR ACESSO ROOT</string>
     <string name="setup_verifying">VERIFICANDO...</string>
+    <string name="setup_auto_granting_root">Concedendo permissões automaticamente via Root…</string>
     <string name="chart_apps_count">Aplicativos: %1$d</string>
     <string name="chart_device_storage">Armazenamento do Dispositivo</string>
     <string name="chart_files_count">Arquivos: %1$d</string>

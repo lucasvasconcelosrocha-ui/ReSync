@@ -1,19 +1,21 @@
 {
-  "versionCode": 43,
-  "versionName": "1.0.43",
-  "tag": "v1.0.43",
-  "apkName": "ReSync-v1.0.43.apk",
-  "releaseNotes": "🚀 **O QUE HÁ DE NOVO NESTA VERSÃO (v1.0.43) / WHAT'S NEW IN THIS VERSION:**\n\n🎬 **Listagem Real de Vídeos, Áudio e Imagens no Armazenamento**\n• Resolução definitiva do bug de listas vazias nas categorias de mídia através de StorageCategoryKey independente de idioma ou caracteres acentuados.\n• Busca em tempo real no MediaStore (DATA, RELATIVE_PATH, DISPLAY_NAME, SIZE) ordenada por tamanho decrescente e varredura profunda de fallback em /storage/emulated/0 (incluindo pastas WhatsApp, DCIM, Movies, Music, Recordings, etc.).\n• Indicador de carregamento discreto e painel expansível fluido com botão X.\n\n🔐 **Auto-Concessão 100% Automática via Root (Zero Diálogos Manuais)**\n• Removido pop-up manual intrusivo de POST_NOTIFICATIONS na inicialização; validação de Root em background concede a permissão silenciosamente via shell root.\n• Concessão total em lote único de todas as permissões do manifesto, AppOps (MANAGE_EXTERNAL_STORAGE, GET_USAGE_STATS, RUN_IN_BACKGROUND, etc.), otimização de bateria (deviceidle whitelist) e inicialização automática (Xiaomi HyperOS / MIUI 10008 & AUTO_START) no momento exato em que o Root é autorizado ou ao tocar em REQUEST ALL PERMISSIONS.\n• Atualização em tempo real de todos os badges para verde (Granted / Concedido) e localização 100% via stringResource (EN e PT-BR) no Setup Wizard.\n\n🏷️ **Versão Dinâmica no Modal de Changelog & Status Bar Padding**\n• Versão do modal de novidades obtida dinamicamente via BuildConfig.VERSION_NAME em tempo real.\n• Adicionado Modifier.statusBarsPadding() com espaçamento superior seguro para prevenir sobreposição aos ícones da barra de status.",
+  "versionCode": 44,
+  "versionName": "1.0.44",
+  "tag": "v1.0.44",
+  "apkName": "ReSync-v1.0.44.apk",
+  "releaseNotes": "🚀 **O QUE HÁ DE NOVO NESTA VERSÃO (v1.0.44) / WHAT'S NEW IN THIS VERSION:**\n\n🛡️ **Garantia de Shell Root Real e Limpeza de Cache libsu**\n• Descarte obrigatório de instâncias presas em `isRoot == false` no cache do libsu, forçando negociação limpa e real de permissões.\n• Validação obrigatória de identidade de root (`id` com `uid=0`) via `RootUtils.executeRootScript` antes de qualquer execução de privilégio, com fallback direto via ProcessBuilder (`su -c` e `su -mm -c`) e logging transparente em AppLogger.\n\n⚡ **Comandos Exatos de Permissão para Android 14–17 e Xiaomi HyperOS**\n• Desbloqueio de Restricted Settings via `appops set --uid $pkg ACCESS_RESTRICTED_SETTINGS allow` para APKs instalados via sideload.\n• Concessão de Acesso Total aos Arquivos (`MANAGE_EXTERNAL_STORAGE`) com flag `--uid` explícita, fazendo `Environment.isExternalStorageManager()` retornar `true` imediatamente.\n• Whitelist de bateria do Doze (`dumpsys deviceidle whitelist`) e liberação irrestrita de background.\n• Inicialização automática real no HyperOS/MIUI (`appops 10008` e `AUTO_START`) e concessão de runtime com `--user $userId` explícito.\n\n📲 **Fluxo 100% Automático no Setup e Permissões**\n• Eliminação de telas manuais com Root: botões e itens pendentes executam concessão silenciosa via Root antes de qualquer fallback manual.\n• Botão secundário de permissão de arquivos ocultado quando o acesso já se encontra concedido.",
   "functions": [
-    "StorageDetailsScreen real-time MediaStore and directory fallback scanning for Videos, Audio, Images and Documents",
-    "StorageCategoryKey enum eliminating accent and locale mismatches in storage categories",
-    "Silent Root auto-granting for POST_NOTIFICATIONS, manifest permissions, AppOps, battery whitelist and HyperOS autostart",
-    "Dynamic BuildConfig.VERSION_NAME in ChangelogModal header and preferences tracking",
-    "Safe statusBarsPadding in ChangelogModal preventing status bar overlap"
+    "RootUtils.executeRootScript with mandatory uid=0 validation and non-root libsu cache clearing",
+    "AppOps --uid MANAGE_EXTERNAL_STORAGE and ACCESS_RESTRICTED_SETTINGS for Android 14-17",
+    "Multi-user runtime permission grant with pm grant --user $userId",
+    "Doze whitelist and unrestricted background AppOps execution",
+    "HyperOS and MIUI 10008 autostart auto-configuration",
+    "Seamless real-time permission state refresh without manual settings redirects"
   ],
   "fixes": [
-    "Fixed empty file list bug in Videos and Audio categories due to accented locale matching",
-    "Eliminated manual notification permission prompt on app startup when Root is present",
-    "Eliminated hardcoded version 1.0.38 across ChangelogModal and string resources"
+    "Fixed libsu cached shell getting stuck in non-root state",
+    "Fixed Environment.isExternalStorageManager() returning false due to missing --uid appops",
+    "Prevented unnecessary Android manual settings screens when Root is active",
+    "Honest autostart verification checking real AppOps mode and root exit code"
   ]
 }

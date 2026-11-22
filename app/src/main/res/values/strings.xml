@@ -349,6 +349,7 @@
     <string name="perm_status_allow">Allow</string>
     <string name="setup_btn_update_root">UPDATE ROOT ACCESS</string>
     <string name="setup_verifying">VERIFYING...</string>
+    <string name="setup_auto_granting_root">Granting permissions automatically via Root…</string>
     <string name="chart_apps_count">Applications: %1$d</string>
     <string name="chart_device_storage">Device Storage</string>
     <string name="chart_files_count">Files: %1$d</string>

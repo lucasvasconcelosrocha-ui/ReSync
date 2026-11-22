@@ -1070,6 +1070,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 refreshRootStatus(forceNewShell = false)
                 refreshCapabilities()
+                refreshAllPermissions()
                 withContext(Dispatchers.Main) {
                     onComplete?.invoke(granted)
                 }
@@ -1079,12 +1080,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun grantAllPermissionsViaRoot(onComplete: (() -> Unit)? = null) {
+    fun grantAllPermissionsViaRoot(onComplete: ((Boolean) -> Unit)? = null) {
         viewModelScope.launch(Dispatchers.IO) {
-            permissionsRepository.grantAllPermissionsViaRoot(getApplication())
+            val success = permissionsRepository.grantAllPermissionsViaRoot(getApplication())
             refreshAllPermissions()
             withContext(Dispatchers.Main) {
-                onComplete?.invoke()
+                onComplete?.invoke(success)
             }
         }
     }
