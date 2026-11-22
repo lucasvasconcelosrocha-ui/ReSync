@@ -1,6 +1,7 @@
 package com.resync.app.ui.screens
 
 import com.resync.app.R
+import com.resync.app.util.showSafeToast
 import androidx.compose.ui.res.stringResource
 
 
@@ -185,11 +186,6 @@ fun StorageDetailsScreen(
                 val sel = "${MediaStore.MediaColumns.MIME_TYPE} LIKE 'application/%' OR ${MediaStore.MediaColumns.MIME_TYPE} LIKE 'text/%'"
                 queryUri(MediaStore.Files.getContentUri("external"), proj, sel)
             }
-            "outros" -> {
-                val proj = arrayOf(MediaStore.MediaColumns.DATA, MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.SIZE, MediaStore.MediaColumns.DATE_MODIFIED)
-                val sel = "${MediaStore.MediaColumns.SIZE} > 1048576"
-                queryUri(MediaStore.Files.getContentUri("external"), proj, sel)
-            }
         }
 
         // Fallback para escaneamento direto / root caso resultados estejam vazios
@@ -297,7 +293,7 @@ fun StorageDetailsScreen(
         val systemTotal = systemStat?.let { it.blockCountLong * it.blockSizeLong } ?: (used * 0.15).toLong()
 
         // 6. Outros
-        val accounted = appsSum + imagesBytes + videosBytes + audioBytes + docsBytes + cacheSum
+        val accounted = appsSum + imagesBytes + videosBytes + audioBytes + docsBytes + systemTotal
         val othersBytes = (used - accounted).coerceAtLeast(0L)
 
         categories = listOf(
@@ -306,7 +302,6 @@ fun StorageDetailsScreen(
             StorageCategory(context.getString(R.string.category_videos), videosBytes, AccentSunsetOrange, Icons.Default.VideoLibrary),
             StorageCategory(context.getString(R.string.category_audio), audioBytes, AccentNeonPurple, Icons.Default.MusicNote),
             StorageCategory("Documentos", docsBytes, AccentBrightAmber, Icons.Default.Description),
-            StorageCategory("Cache", cacheSum, StatusWarning, Icons.Default.CleaningServices),
             StorageCategory(context.getString(R.string.device_category_system), systemTotal, TextMuted, Icons.Default.Memory),
             StorageCategory("Outros", othersBytes, DarkCardBorder, Icons.Default.FolderOpen)
         )
@@ -942,7 +937,7 @@ fun StorageDetailsScreen(
                     }
                 }
 
-                // Linha 3: Documentos e Cache
+                // Linha 3: Documentos e Sistema
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -1006,61 +1001,7 @@ fun StorageDetailsScreen(
                         }
                     }
 
-                    // Card 6: Cache
-                    Card(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(16.dp))
-                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
-                            .clickable { onNavigateToStorageCache() },
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(Icons.Default.CleaningServices, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                                }
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
-                                ) {
-                                    Text(stringResource(R.string.storage_temporary), fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text("Cache", fontSize = 12.sp, color = TextSecondary)
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.Bottom,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(FormatUtils.formatBytes(totalAppCacheBytes), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                                Text(String.format(Locale("pt", "BR"), "%.1f%%", cachePercent), fontSize = 11.sp, color = TextMuted)
-                            }
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Box(modifier = Modifier.fillMaxWidth(0.25f).height(3.5.dp).clip(RoundedCornerShape(2.dp)).background(MaterialTheme.colorScheme.primary))
-                        }
-                    }
-                }
-
-                // Linha 4: Sistema e Outros
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    // Card 7: Sistema
+                    // Card 6: Sistema
                     Card(
                         modifier = Modifier
                             .weight(1f)
@@ -1107,64 +1048,52 @@ fun StorageDetailsScreen(
                             Box(modifier = Modifier.fillMaxWidth(0.2f).height(3.5.dp).clip(RoundedCornerShape(2.dp)).background(Color(0xFF64748B)))
                         }
                     }
+                }
 
-                    // Card 8: Outros
-                    Card(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(16.dp))
-                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
-                            .clickable {
-                                val catName = "Outros"
-                                expandedCategories = if (catName in expandedCategories) emptySet() else setOf(catName)
-                                if (catName in expandedCategories && categoryFilesMap[catName] == null) {
-                                    coroutineScope.launch {
-                                        isLoadingCategoryFiles = true
-                                        val files = queryCategoryFiles(catName)
-                                        categoryFilesMap = categoryFilesMap + (catName to files)
-                                        isLoadingCategoryFiles = false
-                                    }
-                                }
-                            },
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                // Linha 4: Outros (Largura Total - Não Clicável)
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp)),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color(0xFF94A3B8).copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(Color(0xFF94A3B8).copy(alpha = 0.15f)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(Icons.Default.FolderOpen, contentDescription = null, tint = Color(0xFF94A3B8), modifier = Modifier.size(20.dp))
-                                }
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = Color(0xFF94A3B8).copy(alpha = 0.12f),
-                                    border = BorderStroke(0.5.dp, Color(0xFF94A3B8).copy(alpha = 0.35f))
-                                ) {
-                                    Text(stringResource(R.string.storage_files_label), fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF94A3B8), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
-                                }
+                                Icon(Icons.Default.FolderOpen, contentDescription = null, tint = Color(0xFF94A3B8), modifier = Modifier.size(20.dp))
                             }
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text("Outros", fontSize = 12.sp, color = TextSecondary)
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.Bottom,
-                                horizontalArrangement = Arrangement.SpaceBetween
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = Color(0xFF94A3B8).copy(alpha = 0.12f),
+                                border = BorderStroke(0.5.dp, Color(0xFF94A3B8).copy(alpha = 0.35f))
                             ) {
-                                Text(FormatUtils.formatBytes(othersCat), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                                Text(String.format(Locale("pt", "BR"), "%.1f%%", othersPercent), fontSize = 11.sp, color = TextMuted)
+                                Text(stringResource(R.string.storage_files_label), fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF94A3B8), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
                             }
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Box(modifier = Modifier.fillMaxWidth(0.18f).height(3.5.dp).clip(RoundedCornerShape(2.dp)).background(Color(0xFF94A3B8)))
                         }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text("Outros", fontSize = 12.sp, color = TextSecondary)
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.Bottom,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(FormatUtils.formatBytes(othersCat), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                            Text(String.format(Locale("pt", "BR"), "%.1f%%", othersPercent), fontSize = 11.sp, color = TextMuted)
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Box(modifier = Modifier.fillMaxWidth(0.18f).height(3.5.dp).clip(RoundedCornerShape(2.dp)).background(Color(0xFF94A3B8)))
                     }
                 }
             }
@@ -1669,9 +1598,9 @@ fun StorageDetailsScreen(
                                     }
                                     usedStorageBytes = maxOf(0L, usedStorageBytes - freed)
                                     freeStorageBytes = minOf(totalStorageBytes, freeStorageBytes + freed)
-                                    Toast.makeText(context, context.getString(R.string.storage_file_deleted_toast, target.name), Toast.LENGTH_SHORT).show()
+                                    context.showSafeToast(context.getString(R.string.storage_file_deleted_toast, target.name), Toast.LENGTH_SHORT)
                                 } else {
-                                    Toast.makeText(context, context.getString(R.string.storage_file_delete_err_toast), Toast.LENGTH_SHORT).show()
+                                    context.showSafeToast(context.getString(R.string.storage_file_delete_err_toast), Toast.LENGTH_SHORT)
                                 }
                                 fileToDelete = null
                             }
@@ -1717,7 +1646,7 @@ fun StorageDetailsScreen(
                                     includeWallpaper = false,
                                     targetCloudProvider = null
                                 )
-                                Toast.makeText(context, context.getString(R.string.storage_internal_backup_started), Toast.LENGTH_SHORT).show()
+                                context.showSafeToast(context.getString(R.string.storage_internal_backup_started), Toast.LENGTH_SHORT)
                             },
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(containerColor = primaryAccent)
@@ -1742,7 +1671,7 @@ fun StorageDetailsScreen(
                                     includeWallpaper = false,
                                     targetCloudProvider = CloudProviderType.GOOGLE_DRIVE
                                 )
-                                Toast.makeText(context, context.getString(R.string.storage_cloud_backup_started), Toast.LENGTH_SHORT).show()
+                                context.showSafeToast(context.getString(R.string.storage_cloud_backup_started), Toast.LENGTH_SHORT)
                             },
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(containerColor = AccentElectricCyan)

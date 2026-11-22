@@ -104,10 +104,28 @@ class CapabilityManager(private val context: Context) {
                 // 1. Verifica flag do libsu
                 if (Shell.isAppGrantedRoot() == true) return@withTimeoutOrNull true
 
-                // 2. Testa Shell libsu executando id na sessão persistente Master
+                // 2. Verifica se a shell em cache ou ativa é root e está viva
+                try {
+                    val cached = Shell.getCachedShell()
+                    if (cached != null && cached.isAlive && cached.isRoot) {
+                        return@withTimeoutOrNull true
+                    }
+                } catch (_: Throwable) {}
+
+                // 3. Testa Shell libsu executando id na sessão persistente
                 try {
                     val res = Shell.cmd("id").exec()
                     if (res.isSuccess && res.out.any { it.contains("uid=0") }) {
+                        return@withTimeoutOrNull true
+                    }
+                } catch (_: Throwable) {}
+
+                // 4. Fallback com ProcessBuilder direto
+                try {
+                    val process = ProcessBuilder("su", "-c", "id").start()
+                    val output = process.inputStream.bufferedReader().use { it.readText() }
+                    process.waitFor()
+                    if (output.contains("uid=0")) {
                         return@withTimeoutOrNull true
                     }
                 } catch (_: Throwable) {}

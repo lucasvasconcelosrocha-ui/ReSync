@@ -4,7 +4,33 @@ Todas as mudanças notáveis deste projeto são documentadas neste arquivo.
 
 ---
 
-## [1.0.40] - 2026-11-20
+## [1.0.41] - 2026-11-22
+
+### 🚨 Correção de Estabilidade & Crash de Toast em Thread Secundária
+- **Implementação do `Context.showSafeToast`:** Eliminação completa do crash fatal `NullPointerException: Can't toast on a thread that has not called Looper.prepare()` no Android 17 (API 37), despachando a exibição via `Handler(Looper.getMainLooper())` sempre que invocado fora da Main Thread.
+- **Isolamento de Callbacks de Nuvem:** `MainViewModel.refreshActiveAccountData` e `refreshLegacyGoogleDriveData` agora invocam lambdas de conclusão (`onComplete`) estritamente em `withContext(NonCancellable + Dispatchers.Main.immediate)`.
+- **Substituição Abrangente:** Todas as chamadas de `Toast.makeText` em telas e componentes com operações assíncronas (`CloudSyncCenterScreen`, `StorageDetailsScreen`, `ActiveBackupsScreen`, `AccountScreen`, `GoogleDriveAccountsBottomSheet`) foram migradas para `showSafeToast`.
+
+### ⚡ Root Permanente & Concessão Automática de Permissões
+- **Eliminação do Falso 'Permissão Pendente':** Corrigido em `PermissionsRepository.kt` o comportamento onde checagens passivas de root (`!isInteractive`) resetavam indevidamente `isRootGranted = false` ao retornar ao aplicativo.
+- **Validação Multinível em `CapabilityManager.verifyRootAccess`:** Checagem robusta de `Shell.isAppGrantedRoot()`, verificação de integridade da shell ativa em cache, teste com `Shell.cmd("id")` e fallback resiliente via `ProcessBuilder("su", "-c", "id")`.
+- **Concessão Automática (`grantAllPermissionsViaRoot`):** Concede dinamicamente todas as permissões de runtime do manifesto via `pm grant`, além de habilitar `MANAGE_EXTERNAL_STORAGE`, `GET_USAGE_STATS`, `REQUEST_INSTALL_PACKAGES`, `WRITE_SETTINGS`, `SYSTEM_ALERT_WINDOW`, `RUN_IN_BACKGROUND` e inclusão na whitelist do Doze (`dumpsys deviceidle whitelist`).
+
+### 📱 Armazenamento Otimizado & Grade Balanceada
+- **Card 'Outros' Otimizado:** Card transformado em elemento puramente informativo, não clicável, em largura total (`fillMaxWidth()`) abaixo das 3 linhas de categorias, preservando 100% da identidade Bento UI OLED.
+- **Remoção do Card 'Cache':** Eliminada a redundância do card de Cache na grade geral (pois a tela já dispõe de painel e navegação dedicados para limpeza de cache).
+- **Grade Balanceada (3 Pares de 2):** Linha 1 (Apps / Imagens), Linha 2 (Vídeos / Áudio), Linha 3 (Documentos / Sistema).
+
+### ☁️ Menu FAB & Envio de Backups Existentes
+- **Scrim Escuro Semi-transparente:** Adicionado fundo escuro (`Color.Black.copy(alpha = 0.65f)`) com clique externo para dispensar o menu FAB.
+- **Botões FAB Sólidos Opacos:** Estilizados com container sólido `Color(0xFF161F2E)`, borda de 1dp `Color(0xFF263244)` e elevação de 6dp.
+- **Validações Pré-Ação:** Bloqueio e aviso prévio caso nenhuma conta Google esteja conectada e verificação de pastas vazias via `DocumentFile`.
+- **Inclusão Automática do `.index.json`:** Ao enviar backups locais existentes para o Google Drive, o arquivo de índice `.index.json` correspondente é automaticamente adicionado à fila de envio.
+
+### 🎨 Polimento Visual Bento OLED & UI de Backup
+- **Badge Verde Neon da Versão:** Adicionado badge `v1.0.41` com estilo Bento neon no cabeçalho de `ActiveBackupsScreen`, alinhado à `DashboardScreen`.
+- **Eliminação de Jargões (`#TIVE` / `0xTIVE_RESYNC`):** Substituídos pelo título real da rotina de backup em execução e formato padronizado `ID: RS-yyyyMMdd-HHmm`.
+- **Ajuste de Rodapé Pós-Backup:** Botão primário verde ajustado para linha única `"Concluir"` (PT) / `"Done"` (EN) (`btn_done`) e botões com altura padronizada de 48dp, espaçamento de 12dp e `navigationBarsPadding`.
 
 ### 🛡️ Correção Crítica do Crash ao Iniciar Backup (Zero Backup Crash Fix)
 - **Blindagem do `StatFs`:** Protegidas todas as invocações de `android.os.StatFs` em `BackupEngine.kt` e `RestoreEngine.kt` com criação preventiva de diretórios (`mkdirs()`), tratamento seguro em bloco `try/catch` e fallback resiliente para `context.filesDir.absolutePath`, evitando `IllegalArgumentException: Invalid path`.

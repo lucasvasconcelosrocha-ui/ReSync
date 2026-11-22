@@ -1,10 +1,62 @@
-# 🚀 ReSync v1.0.40 Release Notes
+# 🚀 ReSync v1.0.41 Release Notes
 
 ---
 
 ## 🇧🇷 Português
 
-### 🚀 O Que Há de Novo na Versão 1.0.40:
+### 🚀 O Que Há de Novo na Versão 1.0.41:
+
+#### 1. 🛡️ Correção de Estabilidade & Crash de Toast em Thread Secundária
+- **Fim do Crash de Toast em IO:** Implementada a utilidade `Context.showSafeToast` que despacha mensagens de Toast para o `Looper.getMainLooper()` quando invocadas a partir de threads de segundo plano (como `Dispatchers.IO`), eliminando o crash fatal ocorrido na sincronização da nuvem.
+- **Isolamento de Callbacks de Nuvem:** `refreshActiveAccountData` e rotinas de rede executam seus callbacks em `Dispatchers.Main.immediate`.
+
+#### 2. ⚡ Root Permanente & Concessão Automática de Permissões
+- **Persistência de Status de Root:** Corrigida regressão em `PermissionsRepository` que desativava o status de root ao trocar de tela em checagens passivas.
+- **Concessão Automática via Root:** Ao confirmar o privilégio de Superusuário, o ReSync agora concede automaticamente todas as permissões declaradas no manifesto, ajusta AppOps essenciais e inclui o app na lista branca do Doze em um único comando de shell de alto desempenho.
+
+#### 3. 📱 Armazenamento Balanceado & Remoção de Cache Redundante
+- **Grade 2x2 Equilibrada:** As categorias de armazenamento agora formam 3 pares consistentes (Apps/Imagens, Vídeos/Áudio, Documentos/Sistema) com o card "Outros" em largura total, não clicável, eliminando seções expansíveis desnecessárias.
+- **Eliminação do Card de Cache:** Removido o card duplicado da grade para manter o foco no painel dedicado de limpeza de cache.
+
+#### 4. ☁️ Menu FAB Otimizado & Envio de Backups Existentes
+- **Scrim Escuro Semi-transparente:** Adicionado fundo escuro (`alpha = 0.65f`) para fechamento do menu FAB com um toque fora.
+- **Inclusão do `.index.json`:** Ao enviar backups locais existentes para o Google Drive, o arquivo de índice correspondente é automaticamente enviado junto, garantindo restauração perfeita.
+
+#### 5. 🎨 Polimento Visual & UI de Backup
+- **Badge Verde Neon da Versão:** O cabeçalho superior da tela de backup ativo agora exibe o badge `v1.0.41` no mesmo padrão visual da Dashboard.
+- **Eliminação de Jargões (`#TIVE` / `0xTIVE_RESYNC`):** Exibição do nome real da operação e identificador de sessão limpo `ID: RS-yyyyMMdd-HHmm`.
+- **Botão Concluir em Linha Única:** Botão de ação pós-backup em linha única (`Done` / `Concluir`) e alinhamento visual de 48dp.
+
+---
+
+## 🇺🇸 English
+
+### 🚀 What's New in Version 1.0.41:
+
+#### 1. 🛡️ Stability Fix for Background Thread Toasts
+- **Safe Toast Dispatcher:** Created `Context.showSafeToast` to eliminate the fatal `Can't toast on a thread that has not called Looper.prepare()` by ensuring all Toast invocations are safely dispatched to the Main Looper.
+- **Main Thread Cloud Callbacks:** Wrapped all completion listeners in `withContext(NonCancellable + Dispatchers.Main.immediate)`.
+
+#### 2. ⚡ Persistent Root & Automatic Permission Granting
+- **Persistent Root Verification:** Fixed regression where passive root checks reset the granted status on app switch.
+- **Automated Root Grants:** Automatically grants manifest runtime permissions, AppOps settings, and battery whitelist via Root shell upon superuser confirmation.
+
+#### 3. 📱 Balanced Storage Overview & Redundancy Cleanup
+- **Balanced 2x2 Bento Grid:** Structured 3 balanced card pairs (Apps/Images, Videos/Audio, Documents/System) with full-width, non-clickable "Others" card.
+- **Removed Duplicate Cache Card:** Cleaned up redundant cache tile from the main storage breakdown.
+
+#### 4. ☁️ Enhanced Cloud FAB Menu & Backup Bundle Upload
+- **Dark FAB Scrim:** Added semi-transparent dark backdrop dismissable on outside touch with solid opaque FAB action items.
+- **Automatic `.index.json` Enqueue:** Enqueues accompanying index metadata file alongside backup archives when uploading to Google Drive.
+
+#### 5. 🎨 UI Refinement & Active Backup Polish
+- **Neon Green Version Badge:** Integrated `v1.0.41` badge in the TopBar of `ActiveBackupsScreen` matching Dashboard.
+- **Clean Real Identifiers:** Eliminated legacy `#TIVE` / `0xTIVE_RESYNC` placeholders in favor of actual backup titles and formatted session IDs.
+- **Single-Line Done Button:** Clean, single-line "Done" / "Concluir" action button with standardized 48dp button heights.
+
+---
+
+## 🚀 Versões Anteriores / Previous Versions:
 
 #### 1. 🛡️ Correção Crítica do Crash ao Iniciar Backup (Zero Backup Crash Fix)
 - **Blindagem Completa de StatFs:** Proteção contra falhas `IllegalArgumentException` ao calcular espaço livre, com criação de diretórios (`mkdirs`) e fallback automático para o diretório interno do aplicativo.

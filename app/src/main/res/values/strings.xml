@@ -609,6 +609,9 @@
     <string name="dns_voltage">Voltage</string>
     <string name="dns_watch">Watch</string>
     <string name="done_back_to_home">Done / Back to Home</string>
+    <string name="btn_done">Done</string>
+    <string name="active_backup_default_title">Active Backup</string>
+    <string name="processing_backup">Processing Backup</string>
     <string name="downloading_backup_from_drive">Downloading backup from Google Drive…</string>
     <string name="drive_file_not_found">File not found on Google Drive.</string>
     <string name="drive_session_expired">Google Drive session expired. Reconnect your account.</string>

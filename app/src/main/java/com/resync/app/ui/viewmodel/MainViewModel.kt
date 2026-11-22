@@ -21,6 +21,7 @@ import android.app.usage.StorageStatsManager
 import android.os.storage.StorageManager
 import android.os.Process
 import com.resync.app.util.FormatUtils
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -844,6 +845,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         checkForUpdateOnStartup()
         refreshNotificationStatus()
         refreshCapabilities()
+        viewModelScope.launch(Dispatchers.IO) {
+            refreshRootStatus(forceNewShell = false)
+        }
 
         viewModelScope.launch {
             installedApps.collectLatest { apps ->
@@ -998,6 +1002,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun refreshAllPermissions() {
         permissionsRepository.refreshSystemPermissions()
         refreshNotificationStatus()
+        refreshRootStatus(forceNewShell = false)
     }
 
     fun refreshNotificationStatus() {
@@ -2012,6 +2017,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         refreshActiveAccountData(isManual = true, onComplete = onComplete)
     }
 
+    private fun invokeCallbackOnMain(callback: (() -> Unit)?) {
+        if (callback == null) return
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+            callback()
+        } else {
+            android.os.Handler(android.os.Looper.getMainLooper()).post { callback() }
+        }
+    }
+
     fun refreshActiveAccountData(
         targetEmail: String? = null,
         isManual: Boolean = false,
@@ -2026,7 +2040,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _driveQuotaState.value = DriveQuotaState.Idle
                 _remoteBackupsState.value = RemoteBackupsState.Idle
                 _activeAccountReauthIntent.value = null
-                onComplete?.invoke()
+                invokeCallbackOnMain(onComplete)
             }
             return
         }
@@ -2035,7 +2049,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val existingJob = refreshJobsByEmail[email]
         if (existingJob != null && existingJob.isActive) {
             Log.d("DriveSync", "Refresh para $email ignorado: já em andamento.")
-            onComplete?.invoke()
+            invokeCallbackOnMain(onComplete)
             return
         }
 
@@ -2046,7 +2060,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val elapsed = now - lastRefresh
             if (elapsed < 30_000L) {
                 Log.d("DriveSync", "Auto-refresh para $email ignorado: cooldown ativo (${elapsed / 1000}s / 30s).")
-                onComplete?.invoke()
+                invokeCallbackOnMain(onComplete)
                 return
             }
         }
@@ -2142,7 +2156,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } finally {
                 _isRefreshingActiveAccount.value = false
                 refreshJobsByEmail.remove(email)
-                onComplete?.invoke()
+                withContext(NonCancellable + Dispatchers.Main.immediate) {
+                    onComplete?.invoke()
+                }
             }
         }
         refreshJobsByEmail[email] = job
@@ -2154,7 +2170,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _googleDriveState.value = GoogleDriveState.NOT_CONNECTED
                 _driveQuotaState.value = DriveQuotaState.Idle
                 _remoteBackupsState.value = RemoteBackupsState.Idle
-                onComplete?.invoke()
+                withContext(NonCancellable + Dispatchers.Main.immediate) {
+                    onComplete?.invoke()
+                }
                 return@launch
             }
             try {
@@ -2174,7 +2192,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     _remoteBackupsState.value = RemoteBackupsState.Loaded(b)
                 }
             } finally {
-                onComplete?.invoke()
+                withContext(NonCancellable + Dispatchers.Main.immediate) {
+                    onComplete?.invoke()
+                }
             }
         }
     }
@@ -3319,6 +3339,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     destFolderId = quickBackupsFolderId,
                     backupId = record.id
                 )
+
+                val indexFile = File("${f.absolutePath}.index.json")
+                if (indexFile.exists() && indexFile.length() > 0L) {
+                    enqueueFileUpload(
+                        localFilePath = indexFile.absolutePath,
+                        fileName = indexFile.name,
+                        targetEmail = email,
+                        destFolderId = quickBackupsFolderId,
+                        backupId = "${record.id}_index"
+                    )
+                }
             }
         }
     }

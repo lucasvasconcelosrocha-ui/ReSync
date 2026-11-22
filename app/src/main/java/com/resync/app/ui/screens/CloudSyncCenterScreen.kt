@@ -1,5 +1,8 @@
 package com.resync.app.ui.screens
 
+import com.resync.app.util.showSafeToast
+import androidx.documentfile.provider.DocumentFile
+
 import com.resync.app.R
 import androidx.compose.ui.res.stringResource
 
@@ -214,15 +217,22 @@ fun CloudSyncCenterScreen(
                         android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                 context.contentResolver.takePersistableUriPermission(uri, takeFlags)
             } catch (_: Throwable) {}
-            viewModel.uploadFolderTree(uri, DriveConstants.ROOT_FOLDER_NAME, selectedDriveAccountEmail)
-            coroutineScope.launch {
-                val res = snackbarHostState.showSnackbar(
-                    message = context.getString(R.string.cloud_folder_added_queue),
-                    actionLabel = "Ver fila",
-                    duration = SnackbarDuration.Short
-                )
-                if (res == SnackbarResult.ActionPerformed) {
-                    selectedTab = 1
+
+            val docFile = DocumentFile.fromTreeUri(context, uri)
+            val filesList = docFile?.listFiles()
+            if (filesList == null || filesList.isEmpty()) {
+                context.showSafeToast("A pasta selecionada está vazia.")
+            } else {
+                viewModel.uploadFolderTree(uri, DriveConstants.ROOT_FOLDER_NAME, selectedDriveAccountEmail)
+                coroutineScope.launch {
+                    val res = snackbarHostState.showSnackbar(
+                        message = context.getString(R.string.cloud_folder_added_queue),
+                        actionLabel = "Ver fila",
+                        duration = SnackbarDuration.Short
+                    )
+                    if (res == SnackbarResult.ActionPerformed) {
+                        selectedTab = 1
+                    }
                 }
             }
         }
@@ -278,7 +288,7 @@ fun CloudSyncCenterScreen(
             s.containsCategory(catName)
         }
         if (matching.isEmpty()) {
-            Toast.makeText(context, context.getString(R.string.cloud_no_backup_tag, catName), Toast.LENGTH_SHORT).show()
+            context.showSafeToast(context.getString(R.string.cloud_no_backup_tag, catName))
         } else if (matching.size == 1) {
             val file = matching.first()
             val localFile = resolveLocalMirrorFile(context, viewModel.backupRecords.value, file.name, file.id, file.sizeBytes)
@@ -335,13 +345,13 @@ fun CloudSyncCenterScreen(
                     },
                     onComplete = { addRes ->
                         if (addRes.isSuccess) {
-                            Toast.makeText(context, context.getString(R.string.cloud_gdrive_connected_valid), Toast.LENGTH_SHORT).show()
+                            context.showSafeToast(context.getString(R.string.cloud_gdrive_connected_valid))
                         }
                     }
                 )
             }
         } else {
-            Toast.makeText(context, context.getString(R.string.cloud_oauth_cancelled), Toast.LENGTH_SHORT).show()
+            context.showSafeToast(context.getString(R.string.cloud_oauth_cancelled))
         }
     }
 
@@ -351,7 +361,7 @@ fun CloudSyncCenterScreen(
             try {
                 consentLauncher.launch(intent)
             } catch (t: Throwable) {
-                Toast.makeText(context, context.getString(R.string.gdrive_auth_err, t.message ?: ""), Toast.LENGTH_LONG).show()
+                context.showSafeToast(context.getString(R.string.gdrive_auth_err, t.message ?: ""), Toast.LENGTH_LONG)
             }
         }
     }
@@ -371,15 +381,15 @@ fun CloudSyncCenterScreen(
                     },
                     onComplete = { addRes ->
                         if (addRes.isSuccess) {
-                            Toast.makeText(context, context.getString(R.string.cloud_account_connected_success), Toast.LENGTH_SHORT).show()
+                            context.showSafeToast(context.getString(R.string.cloud_account_connected_success))
                         }
                     }
                 )
             } else {
-                Toast.makeText(context, "Nenhuma conta Google foi selecionada.", Toast.LENGTH_SHORT).show()
+                context.showSafeToast("Nenhuma conta Google foi selecionada.")
             }
         } else if (result.resultCode == Activity.RESULT_CANCELED) {
-            Toast.makeText(context, context.getString(R.string.cloud_account_selection_cancelled), Toast.LENGTH_SHORT).show()
+            context.showSafeToast(context.getString(R.string.cloud_account_selection_cancelled))
         }
     }
 
@@ -392,7 +402,7 @@ fun CloudSyncCenterScreen(
                 val fallbackIntent = viewModel.gdriveProvider.oAuthManager.createChooseAccountIntent()
                 accountChooserLauncher.launch(fallbackIntent)
             } catch (e2: Throwable) {
-                Toast.makeText(context, context.getString(R.string.gdrive_account_picker_err, e2.message ?: ""), Toast.LENGTH_LONG).show()
+                context.showSafeToast(context.getString(R.string.gdrive_account_picker_err, e2.message ?: ""), Toast.LENGTH_LONG)
             }
         }
     }
@@ -596,11 +606,18 @@ fun CloudSyncCenterScreen(
                         ExtendedFloatingActionButton(
                             onClick = {
                                 isFabExpanded = false
-                                openFilesLauncher.launch(arrayOf("*/*"))
+                                val targetEmail = activeAccountEmail ?: multiAccounts.firstOrNull()?.email
+                                if (targetEmail.isNullOrBlank()) {
+                                    context.showSafeToast("Nenhuma conta Google Drive conectada.")
+                                } else {
+                                    openFilesLauncher.launch(arrayOf("*/*"))
+                                }
                             },
-                            containerColor = DarkSurfaceVariant,
+                            modifier = Modifier.border(1.dp, Color(0xFF263244), RoundedCornerShape(16.dp)),
+                            shape = RoundedCornerShape(16.dp),
+                            containerColor = Color(0xFF161F2E),
                             contentColor = primaryAccent,
-                            elevation = FloatingActionButtonDefaults.elevation(4.dp),
+                            elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp),
                             icon = { Icon(Icons.Default.InsertDriveFile, contentDescription = null) },
                             text = { Text(stringResource(R.string.cloud_send_files), fontSize = 12.sp, fontWeight = FontWeight.Bold) }
                         )
@@ -608,11 +625,18 @@ fun CloudSyncCenterScreen(
                         ExtendedFloatingActionButton(
                             onClick = {
                                 isFabExpanded = false
-                                openFolderLauncher.launch(null)
+                                val targetEmail = activeAccountEmail ?: multiAccounts.firstOrNull()?.email
+                                if (targetEmail.isNullOrBlank()) {
+                                    context.showSafeToast("Nenhuma conta Google Drive conectada.")
+                                } else {
+                                    openFolderLauncher.launch(null)
+                                }
                             },
-                            containerColor = DarkSurfaceVariant,
+                            modifier = Modifier.border(1.dp, Color(0xFF263244), RoundedCornerShape(16.dp)),
+                            shape = RoundedCornerShape(16.dp),
+                            containerColor = Color(0xFF161F2E),
                             contentColor = primaryAccent,
-                            elevation = FloatingActionButtonDefaults.elevation(4.dp),
+                            elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp),
                             icon = { Icon(Icons.Default.Folder, contentDescription = null) },
                             text = { Text("Enviar Pasta", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
                         )
@@ -620,11 +644,18 @@ fun CloudSyncCenterScreen(
                         ExtendedFloatingActionButton(
                             onClick = {
                                 isFabExpanded = false
-                                showBackupSelectionDialog = true
+                                val targetEmail = activeAccountEmail ?: multiAccounts.firstOrNull()?.email
+                                if (targetEmail.isNullOrBlank()) {
+                                    context.showSafeToast("Nenhuma conta Google Drive conectada.")
+                                } else {
+                                    showBackupSelectionDialog = true
+                                }
                             },
-                            containerColor = DarkSurfaceVariant,
+                            modifier = Modifier.border(1.dp, Color(0xFF263244), RoundedCornerShape(16.dp)),
+                            shape = RoundedCornerShape(16.dp),
+                            containerColor = Color(0xFF161F2E),
                             contentColor = primaryAccent,
-                            elevation = FloatingActionButtonDefaults.elevation(4.dp),
+                            elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp),
                             icon = { Icon(Icons.Default.Inventory2, contentDescription = null) },
                             text = { Text("Enviar Backup Existente", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
                         )
@@ -664,6 +695,7 @@ fun CloudSyncCenterScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.65f))
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null
@@ -1474,17 +1506,17 @@ fun CloudSyncCenterScreen(
                                 onClick = {
                                     val targetEmail = activeAccountEmail ?: multiAccounts.firstOrNull()?.email
                                     if (targetEmail.isNullOrBlank()) {
-                                        Toast.makeText(context, "Nenhuma conta Google Drive conectada.", Toast.LENGTH_SHORT).show()
+                                        context.showSafeToast("Nenhuma conta Google Drive conectada.")
                                     } else {
-                                        Toast.makeText(context, "Sincronizando conta ativa...", Toast.LENGTH_SHORT).show()
+                                        context.showSafeToast("Sincronizando conta ativa...")
                                         viewModel.refreshActiveAccountData(targetEmail, isManual = true) {
                                             val qErr = (viewModel.driveQuotaState.value as? DriveQuotaState.Error)?.message
                                             val bErr = (viewModel.remoteBackupsState.value as? RemoteBackupsState.Error)?.message
                                             val err = qErr ?: bErr
                                             if (err != null) {
-                                                Toast.makeText(context, context.getString(R.string.cloud_sync_err, err), Toast.LENGTH_LONG).show()
+                                                context.showSafeToast(context.getString(R.string.cloud_sync_err, err), Toast.LENGTH_LONG)
                                             } else {
-                                                Toast.makeText(context, context.getString(R.string.cloud_sync_success_toast), Toast.LENGTH_SHORT).show()
+                                                context.showSafeToast(context.getString(R.string.cloud_sync_success_toast))
                                             }
                                         }
                                     }
@@ -1509,17 +1541,17 @@ fun CloudSyncCenterScreen(
                                 onClick = {
                                     val targetEmail = activeAccountEmail ?: multiAccounts.firstOrNull()?.email
                                     if (targetEmail.isNullOrBlank()) {
-                                        Toast.makeText(context, "Nenhuma conta Google Drive conectada.", Toast.LENGTH_SHORT).show()
+                                        context.showSafeToast("Nenhuma conta Google Drive conectada.")
                                     } else {
-                                        Toast.makeText(context, "Verificando integridade dos backups...", Toast.LENGTH_SHORT).show()
+                                        context.showSafeToast("Verificando integridade dos backups...")
                                         viewModel.refreshActiveAccountData(targetEmail, isManual = true) {
                                             val qErr = (viewModel.driveQuotaState.value as? DriveQuotaState.Error)?.message
                                             val bErr = (viewModel.remoteBackupsState.value as? RemoteBackupsState.Error)?.message
                                             val err = qErr ?: bErr
                                             if (err != null) {
-                                                Toast.makeText(context, context.getString(R.string.cloud_verify_err, err), Toast.LENGTH_LONG).show()
+                                                context.showSafeToast(context.getString(R.string.cloud_verify_err, err), Toast.LENGTH_LONG)
                                             } else {
-                                                Toast.makeText(context, context.getString(R.string.cloud_integrity_verified_toast), Toast.LENGTH_SHORT).show()
+                                                context.showSafeToast(context.getString(R.string.cloud_integrity_verified_toast))
                                             }
                                         }
                                     }
@@ -1776,7 +1808,7 @@ fun CloudSyncCenterScreen(
                                     if (!lastRestoreLog.isNullOrBlank()) {
                                         TextButton(onClick = {
                                             clipboardManager.setText(AnnotatedString(lastRestoreLog!!))
-                                            Toast.makeText(context, context.getString(R.string.cloud_restore_log_copied), Toast.LENGTH_SHORT).show()
+                                            context.showSafeToast(context.getString(R.string.cloud_restore_log_copied))
                                         }) {
                                             Text("Copiar", color = primaryAccent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                         }
@@ -1914,7 +1946,7 @@ fun CloudSyncCenterScreen(
                                             onClick = {
                                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                                 clipboard.setPrimaryClip(ClipData.newPlainText("ReSync Crash Log", lastCrashLog))
-                                                Toast.makeText(context, context.getString(R.string.cloud_log_copied_success), Toast.LENGTH_SHORT).show()
+                                                context.showSafeToast(context.getString(R.string.cloud_log_copied_success))
                                             },
                                             colors = ButtonDefaults.buttonColors(containerColor = StatusError),
                                             shape = RoundedCornerShape(8.dp),
@@ -1978,7 +2010,7 @@ fun CloudSyncCenterScreen(
                     onClick = {
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         clipboard.setPrimaryClip(ClipData.newPlainText("ReSync Crash Log", lastCrashLog))
-                        Toast.makeText(context, context.getString(R.string.cloud_log_copied_clipboard), Toast.LENGTH_SHORT).show()
+                        context.showSafeToast(context.getString(R.string.cloud_log_copied_clipboard))
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = primaryAccent),
                     shape = RoundedCornerShape(8.dp)
@@ -2011,7 +2043,7 @@ fun CloudSyncCenterScreen(
                         val email = acc.email
                         accountToRemove = null
                         viewModel.removeDriveAccount(email)
-                        Toast.makeText(context, "Conta removida.", Toast.LENGTH_SHORT).show()
+                        context.showSafeToast("Conta removida.")
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = StatusError)
                 ) {
@@ -2084,7 +2116,7 @@ fun CloudSyncCenterScreen(
                             isDeletingLabelBackups = false
                             showDeleteSpecificLabelDialog = false
                             labelToDelete = ""
-                            Toast.makeText(context, context.getString(R.string.cloud_deleted_backups_toast, deletedCount), Toast.LENGTH_SHORT).show()
+                            context.showSafeToast(context.getString(R.string.cloud_deleted_backups_toast, deletedCount))
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = StatusError),
@@ -2168,7 +2200,7 @@ fun CloudSyncCenterScreen(
                         if (trimmed.isNotBlank()) {
                             viewModel.createDeviceLabel(trimmed, setAsActive)
                             showCreateLabelDialog = false
-                            Toast.makeText(context, context.getString(R.string.cloud_tag_created_success, trimmed), Toast.LENGTH_SHORT).show()
+                            context.showSafeToast(context.getString(R.string.cloud_tag_created_success, trimmed))
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = primaryAccent),
@@ -2228,7 +2260,7 @@ fun CloudSyncCenterScreen(
                             viewModel.renameDeviceLabel(labelToRename, trimmed) { count ->
                                 isRenaming = false
                                 showRenameLabelDialog = false
-                                Toast.makeText(context, "$count backup(s) atualizados com a nova etiqueta.", Toast.LENGTH_SHORT).show()
+                                context.showSafeToast("$count backup(s) atualizados com a nova etiqueta.")
                             }
                         }
                     },
@@ -2583,7 +2615,10 @@ fun CloudSyncCenterScreen(
     }
 
     if (showBackupSelectionDialog) {
-        val localBackups by viewModel.backupRecords.collectAsState()
+        val allLocalBackups by viewModel.backupRecords.collectAsState()
+        val localBackups = remember(allLocalBackups) {
+            allLocalBackups.filter { File(it.filePath).exists() && File(it.filePath).length() > 0L }
+        }
         val selectedBackupIds = remember { mutableStateListOf<String>() }
 
         AlertDialog(
@@ -2736,7 +2771,7 @@ fun CloudSyncCenterScreen(
                                 },
                                 onComplete = { addRes ->
                                     if (addRes.isSuccess) {
-                                        Toast.makeText(context, context.getString(R.string.gdrive_connected_success), Toast.LENGTH_SHORT).show()
+                                        context.showSafeToast(context.getString(R.string.gdrive_connected_success))
                                     }
                                 }
                             )

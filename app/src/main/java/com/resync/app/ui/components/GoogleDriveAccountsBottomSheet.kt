@@ -1,5 +1,7 @@
 package com.resync.app.ui.components
 
+
+import com.resync.app.util.showSafeToast
 import com.resync.app.R
 import androidx.compose.ui.res.stringResource
 
@@ -71,13 +73,13 @@ fun GoogleDriveAccountsBottomSheet(
                     onAuthNeeded = { pendingConsentIntent = it },
                     onComplete = { addRes ->
                         if (addRes.isSuccess) {
-                            Toast.makeText(context, context.getString(R.string.gdrive_connected_success), Toast.LENGTH_SHORT).show()
+                            context.showSafeToast(context.getString(R.string.gdrive_connected_success))
                         }
                     }
                 )
             }
         } else {
-            Toast.makeText(context, context.getString(R.string.gdrive_auth_not_completed), Toast.LENGTH_SHORT).show()
+            context.showSafeToast(context.getString(R.string.gdrive_auth_not_completed))
         }
     }
 
@@ -87,7 +89,7 @@ fun GoogleDriveAccountsBottomSheet(
             try {
                 consentLauncher.launch(intent)
             } catch (t: Throwable) {
-                Toast.makeText(context, context.getString(R.string.gdrive_auth_err, t.message ?: ""), Toast.LENGTH_SHORT).show()
+                context.showSafeToast(context.getString(R.string.gdrive_auth_err, t.message ?: ""))
             }
         }
     }
@@ -104,7 +106,7 @@ fun GoogleDriveAccountsBottomSheet(
                     onAuthNeeded = { pendingConsentIntent = it },
                     onComplete = { addRes ->
                         if (addRes.isSuccess) {
-                            Toast.makeText(context, context.getString(R.string.gdrive_account_connected, accountName), Toast.LENGTH_SHORT).show()
+                            context.showSafeToast(context.getString(R.string.gdrive_account_connected, accountName))
                         }
                     }
                 )
@@ -121,7 +123,7 @@ fun GoogleDriveAccountsBottomSheet(
                 val fallbackIntent = viewModel.gdriveProvider.oAuthManager.createChooseAccountIntent()
                 accountChooserLauncher.launch(fallbackIntent)
             } catch (e2: Throwable) {
-                Toast.makeText(context, context.getString(R.string.gdrive_account_picker_err, e2.message ?: ""), Toast.LENGTH_LONG).show()
+                context.showSafeToast(context.getString(R.string.gdrive_account_picker_err, e2.message ?: ""), Toast.LENGTH_LONG)
             }
         }
     }
@@ -407,7 +409,7 @@ fun GoogleDriveAccountsBottomSheet(
                         val emailToRemove = acc.email
                         accountPendingRemoval = null
                         viewModel.removeDriveAccount(emailToRemove)
-                        Toast.makeText(context, "Conta removida do ReSync.", Toast.LENGTH_SHORT).show()
+                        context.showSafeToast("Conta removida do ReSync.")
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = StatusError)
                 ) {

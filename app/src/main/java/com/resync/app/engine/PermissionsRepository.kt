@@ -236,23 +236,10 @@ class PermissionsRepository(private val context: Context) {
 
     /**
      * Checagem limpa e segura de root com timeout de 5 segundos.
-     * Quando isInteractive = false (ex: inicialização do app), realiza checagem passiva
-     * sem disparar pop-up de Superusuário.
+     * Quando isInteractive = false (ex: inicialização do app), realiza checagem segura
+     * sem resetar indevidamente o estado para não-concedido.
      */
     suspend fun checkRoot(forceNewShell: Boolean = false, isInteractive: Boolean = false): Boolean = withContext(Dispatchers.IO) {
-        // Inicialização ou verificação passiva não disparam prompt superusuário
-        if (!isInteractive && !forceNewShell) {
-            val isPassiveGranted = try {
-                Shell.isAppGrantedRoot() == true
-            } catch (_: Throwable) {
-                false
-            }
-            if (!isPassiveGranted) {
-                updateRootGranted(false)
-                return@withContext false
-            }
-        }
-
         val result = withTimeoutOrNull(5000L) {
             try {
                 if (forceNewShell) {
@@ -273,7 +260,59 @@ class PermissionsRepository(private val context: Context) {
         } ?: false
 
         updateRootGranted(result)
+        if (result) {
+            val state = _permissionsState.value
+            val hasPending = !state.hasAllFilesAccess || !state.areAllRuntimeGranted || !state.hasUsageStats || !state.isIgnoringBatteryOptimizations
+            if (hasPending) {
+                grantAllPermissionsViaRoot(context)
+            }
+        }
         result
+    }
+
+    /**
+     * Concede automaticamente todas as permissões declaradas no manifesto via Root Shell,
+     * incluindo permissões de runtime, AppOps e whitelist de bateria (deviceidle).
+     */
+    suspend fun grantAllPermissionsViaRoot(context: Context) = withContext(Dispatchers.IO) {
+        try {
+            val pkg = context.packageName
+            val pm = context.packageManager
+            val packageInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                pm.getPackageInfo(pkg, PackageManager.PackageInfoFlags.of(PackageManager.GET_PERMISSIONS.toLong()))
+            } else {
+                @Suppress("DEPRECATION")
+                pm.getPackageInfo(pkg, PackageManager.GET_PERMISSIONS)
+            }
+
+            val scriptBuilder = StringBuilder()
+            val requested = packageInfo.requestedPermissions ?: emptyArray()
+            for (perm in requested) {
+                val isGranted = ContextCompat.checkSelfPermission(context, perm) == PackageManager.PERMISSION_GRANTED
+                if (!isGranted) {
+                    scriptBuilder.append("pm grant $pkg $perm 2>/dev/null || true\n")
+                }
+            }
+
+            // AppOps e Whitelist
+            scriptBuilder.append("appops set $pkg MANAGE_EXTERNAL_STORAGE allow 2>/dev/null || true\n")
+            scriptBuilder.append("appops set $pkg GET_USAGE_STATS allow 2>/dev/null || true\n")
+            scriptBuilder.append("appops set $pkg REQUEST_INSTALL_PACKAGES allow 2>/dev/null || true\n")
+            scriptBuilder.append("appops set $pkg WRITE_SETTINGS allow 2>/dev/null || true\n")
+            scriptBuilder.append("appops set $pkg SYSTEM_ALERT_WINDOW allow 2>/dev/null || true\n")
+            scriptBuilder.append("appops set $pkg LEGACY_STORAGE allow 2>/dev/null || true\n")
+            scriptBuilder.append("appops set $pkg RUN_IN_BACKGROUND allow 2>/dev/null || true\n")
+            scriptBuilder.append("appops set $pkg RUN_ANY_IN_BACKGROUND allow 2>/dev/null || true\n")
+            scriptBuilder.append("dumpsys deviceidle whitelist +$pkg 2>/dev/null || true\n")
+
+            val script = scriptBuilder.toString()
+            if (script.isNotBlank()) {
+                Shell.cmd(script).exec()
+            }
+            refreshSystemPermissions()
+        } catch (t: Throwable) {
+            android.util.Log.e("PermissionsRepo", "Falha ao conceder permissoes via root: ${t.message}")
+        }
     }
 
     fun updateRootGranted(isGranted: Boolean) {

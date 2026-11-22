@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
+import com.resync.app.util.showSafeToast
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
@@ -74,8 +75,7 @@ fun ActiveBackupsScreen(
             ?: multiAccounts.firstOrNull()
     }
 
-    // Identificador da Sessão e Status Dinâmicos 100% Reais
-    val sessionId = activeOp?.id?.takeLast(4)?.uppercase() ?: "0000"
+    // Status Dinâmico 100% Real
     val isPaused = activeOp?.isPaused == true || activeOp?.status == OperationStatus.PAUSED
 
     val progressPercent = activeOp?.let { (it.progressPercent * 100f).coerceIn(0f, 100f) } ?: 0f
@@ -160,6 +160,23 @@ fun ActiveBackupsScreen(
                         ),
                         color = Color.White
                     )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFF00FF88).copy(alpha = 0.12f),
+                        border = BorderStroke(1.dp, Color(0xFF00FF88).copy(alpha = 0.45f))
+                    ) {
+                        Text(
+                            text = "v${com.resync.app.BuildConfig.VERSION_NAME}",
+                            color = Color(0xFF00FF88),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                        )
+                    }
                 }
 
                 Row(
@@ -375,29 +392,38 @@ fun ActiveBackupsScreen(
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // [ Done / Back to Home ] (Primary)
+                            // [ Done ] (Primary)
                             Button(
                                 onClick = onNavigateBack,
                                 modifier = Modifier
-                                    .weight(1.4f)
-                                    .height(46.dp),
+                                    .weight(1.3f)
+                                    .height(48.dp),
                                 shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = Color(0xFF00FF88),
                                     contentColor = Color.Black
                                 )
                             ) {
-                                Icon(Icons.Default.Check, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = stringResource(R.string.done_back_to_home),
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.Black
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(Icons.Default.Check, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = stringResource(R.string.btn_done),
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.Black,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
                             }
 
                             // [ View Backups ] (Secondary)
@@ -405,19 +431,28 @@ fun ActiveBackupsScreen(
                                 onClick = onNavigateBack,
                                 modifier = Modifier
                                     .weight(1f)
-                                    .height(46.dp),
+                                    .height(48.dp),
                                 shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
                                 border = BorderStroke(1.dp, Color(0xFF263244))
                             ) {
-                                Icon(Icons.Default.History, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(5.dp))
-                                Text(
-                                    text = stringResource(R.string.view_backups),
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Color.White
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(Icons.Default.History, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = stringResource(R.string.view_backups),
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color.White,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
                             }
                         }
                     }
@@ -452,7 +487,7 @@ fun ActiveBackupsScreen(
                         FuturisticCompletionOrb(
                             size = 104.dp,
                             onTap = {
-                                Toast.makeText(context, "System Ready • SHA-256 Verified", Toast.LENGTH_SHORT).show()
+                                context.showSafeToast("System Ready • SHA-256 Verified")
                             }
                         )
                         Spacer(modifier = Modifier.height(16.dp))
@@ -508,19 +543,25 @@ fun ActiveBackupsScreen(
                 ) {
                     Column {
                         Text(
-                            text = "Processando Backup",
+                            text = stringResource(R.string.processing_backup),
                             fontSize = 12.sp,
                             color = TextMuted,
                             fontWeight = FontWeight.Medium
                         )
+                        val backupDisplayTitle = activeOp?.title?.takeIf { it.isNotBlank() && !it.equals("active", ignoreCase = true) }
+                            ?: stringResource(R.string.active_backup_default_title)
                         Text(
-                            text = "#$sessionId",
-                            fontSize = 22.sp,
+                            text = backupDisplayTitle,
+                            fontSize = 20.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            color = Color.White
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
+                        val opTime = activeOp?.startTimeMillis?.takeIf { it > 0L } ?: System.currentTimeMillis()
+                        val dateStr = SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date(opTime))
                         Text(
-                            text = "SESSION ID: 0x${sessionId}_RESYNC",
+                            text = "ID: RS-$dateStr",
                             fontSize = 10.sp,
                             color = TextSecondary,
                             fontFamily = FontFamily.Monospace
@@ -959,7 +1000,7 @@ fun ActiveBackupsScreen(
                                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                         val clip = ClipData.newPlainText("Stdout Console", logText)
                                         clipboard.setPrimaryClip(clip)
-                                        Toast.makeText(context, context.getString(R.string.stdout_copied), Toast.LENGTH_SHORT).show()
+                                        context.showSafeToast(context.getString(R.string.stdout_copied))
                                     }
                                 ) {
                                     Row(

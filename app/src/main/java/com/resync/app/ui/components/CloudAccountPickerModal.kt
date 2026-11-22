@@ -1,5 +1,7 @@
 package com.resync.app.ui.components
 
+
+import com.resync.app.util.showSafeToast
 import com.resync.app.R
 import androidx.compose.ui.res.stringResource
 
@@ -76,13 +78,13 @@ fun CloudAccountPickerModal(
                     onAuthNeeded = { pendingConsentIntent = it },
                     onComplete = { addRes ->
                         if (addRes.isSuccess) {
-                            Toast.makeText(context, context.getString(R.string.gdrive_connected_success), Toast.LENGTH_SHORT).show()
+                            context.showSafeToast(context.getString(R.string.gdrive_connected_success))
                         }
                     }
                 )
             }
         } else {
-            Toast.makeText(context, context.getString(R.string.gdrive_auth_not_completed), Toast.LENGTH_SHORT).show()
+            context.showSafeToast(context.getString(R.string.gdrive_auth_not_completed))
         }
     }
 
@@ -92,7 +94,7 @@ fun CloudAccountPickerModal(
             try {
                 consentLauncher.launch(intent)
             } catch (t: Throwable) {
-                Toast.makeText(context, context.getString(R.string.gdrive_auth_err, t.message ?: ""), Toast.LENGTH_SHORT).show()
+                context.showSafeToast(context.getString(R.string.gdrive_auth_err, t.message ?: ""))
             }
         }
     }
@@ -111,7 +113,7 @@ fun CloudAccountPickerModal(
                     onComplete = { addRes ->
                         if (addRes.isSuccess) {
                             selectedEmail = accountName
-                            Toast.makeText(context, context.getString(R.string.gdrive_account_connected, accountName), Toast.LENGTH_SHORT).show()
+                            context.showSafeToast(context.getString(R.string.gdrive_account_connected, accountName))
                         }
                     }
                 )
@@ -128,7 +130,7 @@ fun CloudAccountPickerModal(
                 val fallbackIntent = viewModel.gdriveProvider.oAuthManager.createChooseAccountIntent()
                 accountChooserLauncher.launch(fallbackIntent)
             } catch (e2: Throwable) {
-                Toast.makeText(context, context.getString(R.string.gdrive_account_picker_err, e2.message ?: ""), Toast.LENGTH_LONG).show()
+                context.showSafeToast(context.getString(R.string.gdrive_account_picker_err, e2.message ?: ""), Toast.LENGTH_LONG)
             }
         }
     }

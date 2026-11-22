@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import android.widget.Toast
+import com.resync.app.util.showSafeToast
 import androidx.compose.ui.res.stringResource
 import com.resync.app.R
 import com.resync.app.util.LocaleHelper
@@ -390,7 +391,7 @@ fun AccountScreen(
                                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                             }
                             runCatching { context.startActivity(intent) }.onFailure {
-                                Toast.makeText(context, context.getString(R.string.account_no_email_app), Toast.LENGTH_SHORT).show()
+                                context.showSafeToast(context.getString(R.string.account_no_email_app), Toast.LENGTH_SHORT)
                             }
                         }
                     )
@@ -470,7 +471,7 @@ fun AccountScreen(
                             viewModel.removeDriveAccount(email)
                         }
                         showSignOutDialog = false
-                        Toast.makeText(context, context.getString(R.string.account_disconnected_success), Toast.LENGTH_SHORT).show()
+                        context.showSafeToast(context.getString(R.string.account_disconnected_success), Toast.LENGTH_SHORT)
                     }
                 ) {
                     Text(stringResource(R.string.account_sign_out), color = StatusError, fontWeight = FontWeight.Bold)
