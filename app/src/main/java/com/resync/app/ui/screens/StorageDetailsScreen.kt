@@ -88,6 +88,31 @@ data class StorageCategoryFile(
     val lastModified: Long
 )
 
+enum class StorageCategoryKey {
+    APPS, IMAGES, VIDEOS, AUDIO, DOCUMENTS, SYSTEM, OTHERS
+}
+
+fun resolveCategoryKey(name: String): StorageCategoryKey {
+    val n = name.trim().lowercase(Locale.ROOT)
+        .replace("á", "a")
+        .replace("à", "a")
+        .replace("ã", "a")
+        .replace("é", "e")
+        .replace("í", "i")
+        .replace("ó", "o")
+        .replace("õ", "o")
+        .replace("ú", "u")
+    return when {
+        n in listOf("apps", "aplicativos", "applications") -> StorageCategoryKey.APPS
+        n in listOf("imagens", "images", "imagem", "image", "fotos", "photos", "foto", "photo") -> StorageCategoryKey.IMAGES
+        n in listOf("videos", "video") -> StorageCategoryKey.VIDEOS
+        n in listOf("audio", "audios", "musicas", "music", "som") -> StorageCategoryKey.AUDIO
+        n in listOf("documentos", "documents", "documento", "document", "docs", "doc") -> StorageCategoryKey.DOCUMENTS
+        n in listOf("sistema", "system") -> StorageCategoryKey.SYSTEM
+        else -> StorageCategoryKey.OTHERS
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StorageDetailsScreen(
@@ -137,6 +162,7 @@ fun StorageDetailsScreen(
     suspend fun queryCategoryFiles(catName: String): List<StorageCategoryFile> = withContext(Dispatchers.IO) {
         val results = mutableListOf<StorageCategoryFile>()
         val seenPaths = mutableSetOf<String>()
+        val catKey = resolveCategoryKey(catName)
 
         fun queryUri(uri: Uri, projection: Array<String>, selection: String? = null, args: Array<String>? = null) {
             try {
@@ -148,80 +174,98 @@ fun StorageDetailsScreen(
                     "${MediaStore.MediaColumns.SIZE} DESC"
                 )?.use { cursor ->
                     val dataCol = cursor.getColumnIndex(MediaStore.MediaColumns.DATA)
+                    val relCol = cursor.getColumnIndex("relative_path")
                     val nameCol = cursor.getColumnIndex(MediaStore.MediaColumns.DISPLAY_NAME)
                     val sizeCol = cursor.getColumnIndex(MediaStore.MediaColumns.SIZE)
                     val dateCol = cursor.getColumnIndex(MediaStore.MediaColumns.DATE_MODIFIED)
-                    while (cursor.moveToNext() && results.size < 120) {
-                        val path = if (dataCol >= 0) cursor.getString(dataCol) else null
-                        if (path != null && seenPaths.add(path)) {
+                    while (cursor.moveToNext() && results.size < 150) {
+                        val name = if (nameCol >= 0) cursor.getString(nameCol) ?: "" else ""
+                        var path = if (dataCol >= 0) cursor.getString(dataCol) else null
+                        if (path.isNullOrBlank() && relCol >= 0 && name.isNotBlank()) {
+                            val rel = cursor.getString(relCol) ?: ""
+                            path = "/storage/emulated/0/${rel.trim('/')}/$name"
+                        }
+                        val size = if (sizeCol >= 0) cursor.getLong(sizeCol) else 0L
+                        val date = if (dateCol >= 0) cursor.getLong(dateCol) * 1000L else System.currentTimeMillis()
+
+                        if (!path.isNullOrBlank() && size > 0L && seenPaths.add(path)) {
                             val file = File(path)
-                            val size = if (sizeCol >= 0) cursor.getLong(sizeCol) else file.length()
-                            val name = if (nameCol >= 0) cursor.getString(nameCol) ?: file.name else file.name
-                            val date = if (dateCol >= 0) cursor.getLong(dateCol) * 1000L else file.lastModified()
-                            val parent = file.parentFile?.name ?: file.parent ?: ""
-                            if (file.exists() && size > 0L) {
-                                results.add(StorageCategoryFile(file, name, path, parent, size, date))
-                            }
+                            val parent = try { file.parentFile?.name ?: file.parent ?: "" } catch (_: Exception) { "" }
+                            results.add(StorageCategoryFile(file, if (name.isNotBlank()) name else file.name, path, parent, size, date))
                         }
                     }
                 }
             } catch (_: Exception) {}
         }
 
-        when (catName.lowercase()) {
-            "imagens" -> {
+        when (catKey) {
+            StorageCategoryKey.IMAGES -> {
                 val proj = arrayOf(MediaStore.MediaColumns.DATA, MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.SIZE, MediaStore.MediaColumns.DATE_MODIFIED)
                 queryUri(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, proj)
             }
-            "videos" -> {
+            StorageCategoryKey.VIDEOS -> {
                 val proj = arrayOf(MediaStore.MediaColumns.DATA, MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.SIZE, MediaStore.MediaColumns.DATE_MODIFIED)
                 queryUri(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, proj)
             }
-            "audio" -> {
+            StorageCategoryKey.AUDIO -> {
                 val proj = arrayOf(MediaStore.MediaColumns.DATA, MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.SIZE, MediaStore.MediaColumns.DATE_MODIFIED)
                 queryUri(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, proj)
             }
-            "documentos" -> {
+            StorageCategoryKey.DOCUMENTS -> {
                 val proj = arrayOf(MediaStore.MediaColumns.DATA, MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.SIZE, MediaStore.MediaColumns.DATE_MODIFIED)
                 val sel = "${MediaStore.MediaColumns.MIME_TYPE} LIKE 'application/%' OR ${MediaStore.MediaColumns.MIME_TYPE} LIKE 'text/%'"
                 queryUri(MediaStore.Files.getContentUri("external"), proj, sel)
             }
-            "outros", "others" -> {
+            StorageCategoryKey.OTHERS -> {
                 val proj = arrayOf(MediaStore.MediaColumns.DATA, MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.SIZE, MediaStore.MediaColumns.DATE_MODIFIED)
                 val sel = "${MediaStore.MediaColumns.MIME_TYPE} NOT LIKE 'image/%' AND ${MediaStore.MediaColumns.MIME_TYPE} NOT LIKE 'video/%' AND ${MediaStore.MediaColumns.MIME_TYPE} NOT LIKE 'audio/%' AND ${MediaStore.MediaColumns.SIZE} > 524288"
                 queryUri(MediaStore.Files.getContentUri("external"), proj, sel)
             }
+            else -> {}
         }
 
-        // Fallback para escaneamento direto / root caso resultados estejam vazios
-        if (results.isEmpty()) {
+        // Fallback para escaneamento direto / root caso resultados estejam vazios ou parciais
+        if (results.size < 10) {
             val extDir = Environment.getExternalStorageDirectory()
             if (extDir != null && extDir.exists()) {
-                val exts = when (catName.lowercase()) {
-                    "imagens" -> listOf("jpg", "jpeg", "png", "webp", "gif", "heic")
-                    "videos" -> listOf("mp4", "mkv", "mov", "avi", "webm", "3gp")
-                    "audio" -> listOf("mp3", "m4a", "aac", "flac", "wav", "ogg", "opus")
-                    "documentos" -> listOf("pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "epub")
-                    "outros", "others" -> listOf("zip", "rar", "7z", "tar", "gz", "apk", "bin", "iso", "img", "obb", "dat", "bak")
+                val exts = when (catKey) {
+                    StorageCategoryKey.IMAGES -> listOf("jpg", "jpeg", "png", "webp", "heic", "heif", "gif", "bmp", "dng")
+                    StorageCategoryKey.VIDEOS -> listOf("mp4", "mkv", "avi", "mov", "webm", "3gp", "flv", "wmv", "m4v")
+                    StorageCategoryKey.AUDIO -> listOf("mp3", "m4a", "flac", "wav", "ogg", "opus", "aac", "wma", "amr")
+                    StorageCategoryKey.DOCUMENTS -> listOf("pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "epub")
+                    StorageCategoryKey.OTHERS -> listOf("zip", "rar", "7z", "tar", "gz", "apk", "bin", "iso", "img", "obb", "dat", "bak")
                     else -> emptyList()
                 }
                 if (exts.isNotEmpty()) {
-                    val found = mutableListOf<File>()
-                    fun scan(dir: File, depth: Int = 0) {
-                        if (depth > 4 || found.size >= 50) return
+                    val candidateDirs = when (catKey) {
+                        StorageCategoryKey.IMAGES -> listOf(File(extDir, "DCIM"), File(extDir, "Pictures"), File(extDir, "Download"), File(extDir, "WhatsApp/Media/WhatsApp Images"), File(extDir, "Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Images"))
+                        StorageCategoryKey.VIDEOS -> listOf(File(extDir, "DCIM"), File(extDir, "Movies"), File(extDir, "Download"), File(extDir, "WhatsApp/Media/WhatsApp Video"), File(extDir, "Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Video"))
+                        StorageCategoryKey.AUDIO -> listOf(File(extDir, "Music"), File(extDir, "Download"), File(extDir, "Recordings"), File(extDir, "Podcasts"), File(extDir, "Audio"), File(extDir, "WhatsApp/Media/WhatsApp Audio"), File(extDir, "Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Audio"))
+                        StorageCategoryKey.DOCUMENTS -> listOf(File(extDir, "Documents"), File(extDir, "Download"), File(extDir, "WhatsApp/Media/WhatsApp Documents"), File(extDir, "Android/media/com.whatsapp/WhatsApp/Media/WhatsApp Documents"))
+                        StorageCategoryKey.OTHERS -> listOf(File(extDir, "Download"), File(extDir, "Android/obb"), extDir)
+                        else -> emptyList()
+                    }
+
+                    fun scanDir(dir: File, depth: Int = 0) {
+                        if (depth > 5 || results.size >= 150 || !dir.exists() || !dir.canRead()) return
                         dir.listFiles()?.forEach { f ->
-                            if (f.isDirectory && !f.name.startsWith(".") && f.name != "Android") {
-                                scan(f, depth + 1)
-                            } else if (f.isFile && f.extension.lowercase() in exts && f.length() > 0L) {
-                                found.add(f)
+                            if (f.isDirectory && !f.name.startsWith(".")) {
+                                scanDir(f, depth + 1)
+                            } else if (f.isFile && f.extension.lowercase(Locale.ROOT) in exts && f.length() > 0L) {
+                                if (seenPaths.add(f.absolutePath)) {
+                                    results.add(StorageCategoryFile(f, f.name, f.absolutePath, f.parentFile?.name ?: "", f.length(), f.lastModified()))
+                                }
                             }
                         }
                     }
-                    scan(extDir)
-                    found.forEach { f ->
-                        if (seenPaths.add(f.absolutePath)) {
-                            results.add(StorageCategoryFile(f, f.name, f.absolutePath, f.parentFile?.name ?: "", f.length(), f.lastModified()))
-                        }
+
+                    for (cDir in candidateDirs) {
+                        if (cDir.exists()) scanDir(cDir)
+                        if (results.size >= 50) break
+                    }
+
+                    if (results.isEmpty()) {
+                        scanDir(extDir)
                     }
                 }
             }
@@ -304,12 +348,12 @@ fun StorageDetailsScreen(
 
         categories = listOf(
             StorageCategory(context.getString(R.string.category_apps), appsSum, AccentElectricCyan, Icons.Default.Apps),
-            StorageCategory("Imagens", imagesBytes, AccentEmeraldGreen, Icons.Default.Image),
+            StorageCategory(context.getString(R.string.storage_images_total), imagesBytes, AccentEmeraldGreen, Icons.Default.Image),
             StorageCategory(context.getString(R.string.category_videos), videosBytes, AccentSunsetOrange, Icons.Default.VideoLibrary),
             StorageCategory(context.getString(R.string.category_audio), audioBytes, AccentNeonPurple, Icons.Default.MusicNote),
-            StorageCategory("Documentos", docsBytes, AccentBrightAmber, Icons.Default.Description),
+            StorageCategory(context.getString(R.string.storage_documents_total), docsBytes, AccentBrightAmber, Icons.Default.Description),
             StorageCategory(context.getString(R.string.device_category_system), systemTotal, TextMuted, Icons.Default.Memory),
-            StorageCategory("Outros", othersBytes, Color(0xFF94A3B8), Icons.Default.FolderOpen)
+            StorageCategory(context.getString(R.string.storage_other_total), othersBytes, Color(0xFF94A3B8), Icons.Default.FolderOpen)
         )
     }
 
@@ -716,7 +760,8 @@ fun StorageDetailsScreen(
                             .clip(RoundedCornerShape(16.dp))
                             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
                             .clickable {
-                                expandedCategories = if (context.getString(R.string.category_apps) in expandedCategories) emptySet() else setOf(context.getString(R.string.category_apps))
+                                val catKey = StorageCategoryKey.APPS
+                                expandedCategories = if (catKey.name in expandedCategories) emptySet() else setOf(catKey.name)
                             },
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                     ) {
@@ -766,13 +811,14 @@ fun StorageDetailsScreen(
                             .clip(RoundedCornerShape(16.dp))
                             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
                             .clickable {
-                                val catName = "Imagens"
-                                expandedCategories = if (catName in expandedCategories) emptySet() else setOf(catName)
-                                if (catName in expandedCategories && categoryFilesMap[catName] == null) {
+                                val catKey = StorageCategoryKey.IMAGES
+                                val catKeyName = catKey.name
+                                expandedCategories = if (catKeyName in expandedCategories) emptySet() else setOf(catKeyName)
+                                if (catKeyName in expandedCategories && categoryFilesMap[catKeyName] == null) {
                                     coroutineScope.launch {
                                         isLoadingCategoryFiles = true
-                                        val files = queryCategoryFiles(catName)
-                                        categoryFilesMap = categoryFilesMap + (catName to files)
+                                        val files = queryCategoryFiles(catKeyName)
+                                        categoryFilesMap = categoryFilesMap + (catKeyName to files)
                                         isLoadingCategoryFiles = false
                                     }
                                 }
@@ -803,7 +849,7 @@ fun StorageDetailsScreen(
                                 }
                             }
                             Spacer(modifier = Modifier.height(12.dp))
-                            Text("Imagens", fontSize = 12.sp, color = TextSecondary)
+                            Text(stringResource(R.string.storage_images_total), fontSize = 12.sp, color = TextSecondary)
                             Spacer(modifier = Modifier.height(2.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -831,13 +877,14 @@ fun StorageDetailsScreen(
                             .clip(RoundedCornerShape(16.dp))
                             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
                             .clickable {
-                                val catName = context.getString(R.string.category_videos)
-                                expandedCategories = if (catName in expandedCategories) emptySet() else setOf(catName)
-                                if (catName in expandedCategories && categoryFilesMap[catName] == null) {
+                                val catKey = StorageCategoryKey.VIDEOS
+                                val catKeyName = catKey.name
+                                expandedCategories = if (catKeyName in expandedCategories) emptySet() else setOf(catKeyName)
+                                if (catKeyName in expandedCategories && categoryFilesMap[catKeyName] == null) {
                                     coroutineScope.launch {
                                         isLoadingCategoryFiles = true
-                                        val files = queryCategoryFiles(catName)
-                                        categoryFilesMap = categoryFilesMap + (catName to files)
+                                        val files = queryCategoryFiles(catKeyName)
+                                        categoryFilesMap = categoryFilesMap + (catKeyName to files)
                                         isLoadingCategoryFiles = false
                                     }
                                 }
@@ -890,13 +937,14 @@ fun StorageDetailsScreen(
                             .clip(RoundedCornerShape(16.dp))
                             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
                             .clickable {
-                                val catName = context.getString(R.string.category_audio)
-                                expandedCategories = if (catName in expandedCategories) emptySet() else setOf(catName)
-                                if (catName in expandedCategories && categoryFilesMap[catName] == null) {
+                                val catKey = StorageCategoryKey.AUDIO
+                                val catKeyName = catKey.name
+                                expandedCategories = if (catKeyName in expandedCategories) emptySet() else setOf(catKeyName)
+                                if (catKeyName in expandedCategories && categoryFilesMap[catKeyName] == null) {
                                     coroutineScope.launch {
                                         isLoadingCategoryFiles = true
-                                        val files = queryCategoryFiles(catName)
-                                        categoryFilesMap = categoryFilesMap + (catName to files)
+                                        val files = queryCategoryFiles(catKeyName)
+                                        categoryFilesMap = categoryFilesMap + (catKeyName to files)
                                         isLoadingCategoryFiles = false
                                     }
                                 }
@@ -955,13 +1003,14 @@ fun StorageDetailsScreen(
                             .clip(RoundedCornerShape(16.dp))
                             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
                             .clickable {
-                                val catName = "Documentos"
-                                expandedCategories = if (catName in expandedCategories) emptySet() else setOf(catName)
-                                if (catName in expandedCategories && categoryFilesMap[catName] == null) {
+                                val catKey = StorageCategoryKey.DOCUMENTS
+                                val catKeyName = catKey.name
+                                expandedCategories = if (catKeyName in expandedCategories) emptySet() else setOf(catKeyName)
+                                if (catKeyName in expandedCategories && categoryFilesMap[catKeyName] == null) {
                                     coroutineScope.launch {
                                         isLoadingCategoryFiles = true
-                                        val files = queryCategoryFiles(catName)
-                                        categoryFilesMap = categoryFilesMap + (catName to files)
+                                        val files = queryCategoryFiles(catKeyName)
+                                        categoryFilesMap = categoryFilesMap + (catKeyName to files)
                                         isLoadingCategoryFiles = false
                                     }
                                 }
@@ -992,7 +1041,7 @@ fun StorageDetailsScreen(
                                 }
                             }
                             Spacer(modifier = Modifier.height(12.dp))
-                            Text("Documentos", fontSize = 12.sp, color = TextSecondary)
+                            Text(stringResource(R.string.storage_documents_total), fontSize = 12.sp, color = TextSecondary)
                             Spacer(modifier = Modifier.height(2.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -1063,13 +1112,14 @@ fun StorageDetailsScreen(
                         .clip(RoundedCornerShape(16.dp))
                         .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
                         .clickable {
-                            val catName = "Outros"
-                            expandedCategories = if (catName in expandedCategories) emptySet() else setOf(catName)
-                            if (catName in expandedCategories && categoryFilesMap[catName] == null) {
+                            val catKey = StorageCategoryKey.OTHERS
+                            val catKeyName = catKey.name
+                            expandedCategories = if (catKeyName in expandedCategories) emptySet() else setOf(catKeyName)
+                            if (catKeyName in expandedCategories && categoryFilesMap[catKeyName] == null) {
                                 coroutineScope.launch {
                                     isLoadingCategoryFiles = true
-                                    val files = queryCategoryFiles(catName)
-                                    categoryFilesMap = categoryFilesMap + (catName to files)
+                                    val files = queryCategoryFiles(catKeyName)
+                                    categoryFilesMap = categoryFilesMap + (catKeyName to files)
                                     isLoadingCategoryFiles = false
                                 }
                             }
@@ -1100,7 +1150,7 @@ fun StorageDetailsScreen(
                             }
                         }
                         Spacer(modifier = Modifier.height(12.dp))
-                        Text("Outros", fontSize = 12.sp, color = TextSecondary)
+                        Text(stringResource(R.string.storage_other_total), fontSize = 12.sp, color = TextSecondary)
                         Spacer(modifier = Modifier.height(2.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -1119,9 +1169,9 @@ fun StorageDetailsScreen(
             // Seção Expansível Detalhada de Arquivos / Categoria Selecionada (Substitui lista duplicada)
             AnimatedVisibility(visible = expandedCategories.isNotEmpty()) {
                 val selectedCatName = expandedCategories.firstOrNull() ?: ""
-                val catObj = categories.find { it.name.equals(selectedCatName, ignoreCase = true) }
-                val isAppsCategory = selectedCatName.equals(context.getString(R.string.category_apps), ignoreCase = true) ||
-                        selectedCatName.lowercase() in listOf("apps", "aplicativos", "applications")
+                val catKey = resolveCategoryKey(selectedCatName)
+                val catObj = categories.find { resolveCategoryKey(it.name) == catKey }
+                val isAppsCategory = catKey == StorageCategoryKey.APPS
                 Column(modifier = Modifier.fillMaxWidth().padding(top = 14.dp)) {
                     Card(
                         modifier = Modifier
@@ -1148,7 +1198,8 @@ fun StorageDetailsScreen(
                                         text = if (isAppsCategory) {
                                             stringResource(R.string.storage_installed_apps_title)
                                         } else {
-                                            stringResource(R.string.storage_files_in_cat, selectedCatName)
+                                            val displayName = catObj?.name ?: selectedCatName
+                                            stringResource(R.string.storage_files_in_cat, displayName)
                                         },
                                         fontSize = 13.5.sp,
                                         fontWeight = FontWeight.Bold,
@@ -1230,7 +1281,7 @@ fun StorageDetailsScreen(
                                         }
                                     }
                                 } else {
-                                    val files = categoryFilesMap[selectedCatName]
+                                    val files = categoryFilesMap[catKey.name] ?: categoryFilesMap[selectedCatName]
                                     if (isLoadingCategoryFiles && files == null) {
                                         Box(
                                             modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
@@ -1246,7 +1297,7 @@ fun StorageDetailsScreen(
                                         Text(stringResource(R.string.storage_no_files_found), fontSize = 11.sp, color = TextMuted, modifier = Modifier.padding(vertical = 8.dp))
                                     } else {
                                         LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            items(files.take(25), key = { it.path }) { fItem ->
+                                            items(files.take(50), key = { it.path }) { fItem ->
                                                 Row(
                                                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                                                     verticalAlignment = Alignment.CenterVertically

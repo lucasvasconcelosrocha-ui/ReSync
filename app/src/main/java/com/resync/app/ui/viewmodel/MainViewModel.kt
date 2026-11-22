@@ -1065,6 +1065,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val granted = capabilityManager.requestRootAccess()
                 permissionsRepository.updateRootGranted(granted)
+                if (granted) {
+                    permissionsRepository.grantAllPermissionsViaRoot(getApplication())
+                }
                 refreshRootStatus(forceNewShell = false)
                 refreshCapabilities()
                 withContext(Dispatchers.Main) {
@@ -1072,6 +1075,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             } finally {
                 _isRequestingRoot.value = false
+            }
+        }
+    }
+
+    fun grantAllPermissionsViaRoot(onComplete: (() -> Unit)? = null) {
+        viewModelScope.launch(Dispatchers.IO) {
+            permissionsRepository.grantAllPermissionsViaRoot(getApplication())
+            refreshAllPermissions()
+            withContext(Dispatchers.Main) {
+                onComplete?.invoke()
             }
         }
     }

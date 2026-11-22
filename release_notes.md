@@ -1,3 +1,48 @@
+# 🚀 ReSync v1.0.43 Release Notes
+
+---
+
+## 🇧🇷 Português
+
+### 🚀 O Que Há de Novo na Versão 1.0.43:
+
+#### 1. 🎬 Listagem Real de Arquivos em Vídeos, Áudio e Imagens
+- **Correção da Lista Vazia:** Corrigido problema de mapeamento de categorias causado por caracteres acentuados ("Vídeos", "Áudio") com a adoção de enum fixo `StorageCategoryKey`.
+- **Busca em Tempo Real & Fallback:** Busca otimizada via MediaStore e varredura profunda em diretórios locais (incluindo pastas WhatsApp e DCIM) cobrindo extensões de vídeo, áudio e imagem.
+- **UI Fluida:** Indicador discreto de carregamento enquanto os arquivos são indexados.
+
+#### 2. 🔐 Auto-Concessão 100% Automática via Root
+- **Zero Pop-ups com Root:** O app não abre mais diálogo de notificações se o dispositivo possuir Root; a permissão é concedida em background via shell `su`.
+- **Concessão em Lote Completo:** Concede automaticamente todas as permissões de manifesto, AppOps (arquivos, uso, background), whitelist de bateria e inicialização automática (Xiaomi HyperOS / MIUI).
+- **Badges Verdes Instantâneos:** Todos os status são atualizados imediatamente na interface do assistente de configuração sem necessidade de abrir telas de configurações manuais.
+- **Tradução Completa no Setup:** Textos padronizados com suporte a Português e Inglês.
+
+#### 3. 🏷️ Versão Dinâmica no Changelog & Padding do Topo
+- **Versão Dinâmica:** O modal de novidades reflete a versão real instalada (`BuildConfig.VERSION_NAME`).
+- **Barra de Status Protegida:** Espaçamento superior com `statusBarsPadding()` para garantir que o cabeçalho nunca sobreponha ícones do sistema.
+
+---
+
+## 🇺🇸 English
+
+### 🚀 What's New in Version 1.0.43:
+
+#### 1. 🎬 Real Media Storage File Listing (Videos, Audio, Images)
+- **Resolved Empty List Issue:** Fixed accented locale mismatch by using a locale-invariant `StorageCategoryKey` enum.
+- **Real-Time Queries & Directory Fallback:** MediaStore queries complemented with fallback directory scanning (including WhatsApp Media and DCIM) for videos, audio, and images.
+- **Smooth UI:** Subtle loading indicator and interactive file list with close button.
+
+#### 2. 🔐 100% Automatic Root Permission Granting
+- **Zero Prompts with Root:** Preempted manual notification prompt on launch by validating Root first and granting silently.
+- **Complete Batch Auto-Grant:** Automatically grants runtime permissions, AppOps, battery whitelist, and HyperOS/MIUI autostart without manual settings visits.
+- **Live Badge Updates:** All permission statuses transition to green instantly.
+
+#### 3. 🏷️ Dynamic Version in Changelog & Top Padding
+- **Dynamic Versioning:** Changelog displays real installed version (`BuildConfig.VERSION_NAME`).
+- **Status Bar Padding:** Enhanced layout with `statusBarsPadding()` preventing notch and status bar icon collision.
+
+---
+
 # 🚀 ReSync v1.0.42 Release Notes
 
 ---

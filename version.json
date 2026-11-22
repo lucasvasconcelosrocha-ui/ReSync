@@ -1,18 +1,19 @@
 {
-  "versionCode": 42,
-  "versionName": "1.0.42",
-  "tag": "v1.0.42",
-  "apkName": "ReSync-v1.0.42.apk",
-  "releaseNotes": "🚀 **O QUE HÁ DE NOVO NESTA VERSÃO (v1.0.42) / WHAT'S NEW IN THIS VERSION:**\n\n📂 **Lista Expansível do Card Outros Restaurada**\n• Restauração completa do clique no card Outros na tela de Armazenamento, abrindo o painel expansível com os arquivos correspondentes e botão de fechamento X.\n• Suporte na busca e escaneamento direto para extensões de arquivos diversos (.zip, .rar, .7z, .tar, .gz, .apk, .bin, .iso, .img, .obb, .dat, .bak).\n\n🧹 **Atalho de Armazenamento na TopBar da Dashboard**\n• Adicionado ícone de vassoura/limpeza na TopBar inicial com navegação direta para a tela de Armazenamento.\n• Espaçamento horizontal ajustado (10dp) garantindo que nenhum ícone quebre linha ou fique espremido.\n\n📱 **Correção da Lista de Aplicativos Instalados**\n• Corrigido bug de categoria onde o card Aplicativos exibia 'Nenhum arquivo encontrado' em português e inglês.\n• Lista de aplicativos ordenada por tamanho total em ordem decrescente exibindo ícone real, nome, pacote, indicador de cache e tamanho formatado.",
+  "versionCode": 43,
+  "versionName": "1.0.43",
+  "tag": "v1.0.43",
+  "apkName": "ReSync-v1.0.43.apk",
+  "releaseNotes": "🚀 **O QUE HÁ DE NOVO NESTA VERSÃO (v1.0.43) / WHAT'S NEW IN THIS VERSION:**\n\n🎬 **Listagem Real de Vídeos, Áudio e Imagens no Armazenamento**\n• Resolução definitiva do bug de listas vazias nas categorias de mídia através de StorageCategoryKey independente de idioma ou caracteres acentuados.\n• Busca em tempo real no MediaStore (DATA, RELATIVE_PATH, DISPLAY_NAME, SIZE) ordenada por tamanho decrescente e varredura profunda de fallback em /storage/emulated/0 (incluindo pastas WhatsApp, DCIM, Movies, Music, Recordings, etc.).\n• Indicador de carregamento discreto e painel expansível fluido com botão X.\n\n🔐 **Auto-Concessão 100% Automática via Root (Zero Diálogos Manuais)**\n• Removido pop-up manual intrusivo de POST_NOTIFICATIONS na inicialização; validação de Root em background concede a permissão silenciosamente via shell root.\n• Concessão total em lote único de todas as permissões do manifesto, AppOps (MANAGE_EXTERNAL_STORAGE, GET_USAGE_STATS, RUN_IN_BACKGROUND, etc.), otimização de bateria (deviceidle whitelist) e inicialização automática (Xiaomi HyperOS / MIUI 10008 & AUTO_START) no momento exato em que o Root é autorizado ou ao tocar em REQUEST ALL PERMISSIONS.\n• Atualização em tempo real de todos os badges para verde (Granted / Concedido) e localização 100% via stringResource (EN e PT-BR) no Setup Wizard.\n\n🏷️ **Versão Dinâmica no Modal de Changelog & Status Bar Padding**\n• Versão do modal de novidades obtida dinamicamente via BuildConfig.VERSION_NAME em tempo real.\n• Adicionado Modifier.statusBarsPadding() com espaçamento superior seguro para prevenir sobreposição aos ícones da barra de status.",
   "functions": [
-    "StorageDetailsScreen Outros card clickable with expandable file list and close button",
-    "Dashboard TopBar cleaning shortcut navigating directly to Storage Details screen",
-    "Storage installed apps expandable panel displaying real app icons, cache badges, and formatted sizes",
-    "Balanced TopBar spacing of 10dp preventing overflow or wrapping on narrow screens",
-    "Fast MediaStore and direct fallback scanning for Other storage category files"
+    "StorageDetailsScreen real-time MediaStore and directory fallback scanning for Videos, Audio, Images and Documents",
+    "StorageCategoryKey enum eliminating accent and locale mismatches in storage categories",
+    "Silent Root auto-granting for POST_NOTIFICATIONS, manifest permissions, AppOps, battery whitelist and HyperOS autostart",
+    "Dynamic BuildConfig.VERSION_NAME in ChangelogModal header and preferences tracking",
+    "Safe statusBarsPadding in ChangelogModal preventing status bar overlap"
   ],
   "fixes": [
-    "Fixed empty apps list bug when opening Aplicativos / Applications category in Storage Details",
-    "Restored interactive expandable files list for Outros / Others category card"
+    "Fixed empty file list bug in Videos and Audio categories due to accented locale matching",
+    "Eliminated manual notification permission prompt on app startup when Root is present",
+    "Eliminated hardcoded version 1.0.38 across ChangelogModal and string resources"
   ]
 }

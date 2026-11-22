@@ -4,6 +4,29 @@ Todas as mudanças notáveis deste projeto são documentadas neste arquivo.
 
 ---
 
+## [1.0.43] - 2026-11-22
+
+### 🎬 Listagem Real de Arquivos em Vídeos, Áudio e Imagens (Armazenamento)
+- **Eliminação do Bug de Categoria e Acentuação:** Implementação do enum `StorageCategoryKey` e resolvedor de chaves insensível a acentuação e idioma, corrigindo a falha em que "Vídeos" e "Áudio" (com acentos) não encontravam correspondência na busca.
+- **Busca em Tempo Real no MediaStore:** Consulta completa a `MediaStore.Video`, `MediaStore.Audio` e `MediaStore.Images` por `SIZE DESC`, com suporte a caminhos relativos em caso de Scoped Storage.
+- **Varredura Profunda de Fallback:** Varredura em pastas prioritárias (`DCIM`, `Pictures`, `Movies`, `Music`, `Download`, `Recordings`, `WhatsApp Media`, etc.) cobrindo extensões de vídeo, áudio e imagem caso o MediaStore retorne dados incompletos.
+- **Feedback Visual na UI:** Indicador discreto de progresso durante a busca assíncrona e garantia de que nenhuma categoria com tamanho > 0 MB exiba "Nenhum arquivo encontrado.".
+
+### 🔐 Auto-Concessão 100% Automática via Root (Zero Diálogos Manuais)
+- **Eliminação de Diálogo Precoce de Notificações:** Removida a solicitação de `POST_NOTIFICATIONS` na inicialização do app antes da checagem de Root; caso o dispositivo possua Root, a concessão ocorre silenciosamente via shell `su` sem exibir diálogos na tela.
+- **Concessão Abrangente em Lote Único:** Execução automática no exato momento da confirmação de Root e no botão `REQUEST ALL PERMISSIONS`, aplicando:
+  - Todas as permissões de manifesto (`pm grant $pkg $perm`)
+  - Permissões especiais e AppOps (`MANAGE_EXTERNAL_STORAGE`, `GET_USAGE_STATS`, `REQUEST_INSTALL_PACKAGES`, `WRITE_SETTINGS`, `SYSTEM_ALERT_WINDOW`, `POST_NOTIFICATION`, `RUN_IN_BACKGROUND`, etc.)
+  - Otimização de bateria (`deviceidle whitelist`)
+  - Inicialização automática no Xiaomi HyperOS / MIUI (`appops 10008` e `AUTO_START`)
+- **Atualização Instantânea da UI:** Reavaliação automática de todos os estados, refletindo badges em verde (`Granted` / `Concedido`) imediatamente e internacionalização 100% via `stringResource(...)`.
+
+### 🏷️ Versão Dinâmica no Modal de Changelog & Status Bar Padding
+- **Versão em Tempo Real:** Cabeçalho e controle de exibição do modal de novidades utilizam dinamicamente `BuildConfig.VERSION_NAME` em vez de strings hardcoded.
+- **Proteção da Barra de Status:** Adicionado `Modifier.statusBarsPadding()` e padding superior para prevenir qualquer sobreposição com ícones da barra de status ou câmera frontal.
+
+---
+
 ## [1.0.42] - 2026-11-22
 
 ### 📂 Restauração do Card 'Outros' & Painel Expansível

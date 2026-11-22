@@ -48,6 +48,10 @@ import com.resync.app.ui.theme.*
 import com.resync.app.ui.viewmodel.MainViewModel
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.resync.app.util.LocaleHelper
 
 class MainActivity : ComponentActivity() {
@@ -96,13 +100,22 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         handleNotificationIntent(intent)
 
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            if (androidx.core.content.ContextCompat.checkSelfPermission(
-                    this,
-                    android.Manifest.permission.POST_NOTIFICATIONS
-                ) != android.content.pm.PackageManager.PERMISSION_GRANTED
-            ) {
-                notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        lifecycleScope.launch(Dispatchers.IO) {
+            val isRoot = com.resync.app.engine.PermissionsRepository.getInstance(applicationContext).checkRoot(isInteractive = false)
+            if (isRoot) {
+                com.resync.app.engine.PermissionsRepository.getInstance(applicationContext).grantAllPermissionsViaRoot(applicationContext)
+            } else {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    if (androidx.core.content.ContextCompat.checkSelfPermission(
+                            this@MainActivity,
+                            android.Manifest.permission.POST_NOTIFICATIONS
+                        ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+                    ) {
+                        withContext(Dispatchers.Main) {
+                            notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                    }
+                }
             }
         }
 

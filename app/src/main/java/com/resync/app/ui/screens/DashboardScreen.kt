@@ -48,6 +48,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.resync.app.BuildConfig
 import com.resync.app.R
 import com.resync.app.ui.viewmodel.DriveQuotaState
 import com.resync.app.ui.viewmodel.GoogleDriveState
@@ -173,7 +174,7 @@ fun DashboardScreen(
     var showSecurityModal by remember { mutableStateOf(false) }
     val changelogPrefs = remember { context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE) }
     var showChangelogModal by remember {
-        mutableStateOf(changelogPrefs.getString("last_seen_changelog_version", "") != "1.0.38")
+        mutableStateOf(changelogPrefs.getString("last_seen_changelog_version", "") != BuildConfig.VERSION_NAME)
     }
     val telegramPrefs = remember { context.getSharedPreferences("resync_prefs", Context.MODE_PRIVATE) }
     var showTelegramModal by remember {
@@ -1530,15 +1531,15 @@ fun DashboardScreen(
             }
         )
     } else if (showChangelogModal) {
-        // Modal Automático de Novidades (Changelog v1.0.38)
+        // Modal Automático de Novidades (Changelog dinâmico)
         ChangelogModal(
-            versionName = "1.0.38",
+            versionName = BuildConfig.VERSION_NAME,
             primaryAccent = primaryAccent,
             onDismiss = {
                 showChangelogModal = false
             },
             onConfirm = {
-                changelogPrefs.edit().putString("last_seen_changelog_version", "1.0.38").apply()
+                changelogPrefs.edit().putString("last_seen_changelog_version", BuildConfig.VERSION_NAME).apply()
                 showChangelogModal = false
             }
         )
@@ -2409,7 +2410,9 @@ private fun ChangelogModal(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .statusBarsPadding()
                 .navigationBarsPadding()
+                .padding(top = 8.dp)
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 24.dp)
         ) {

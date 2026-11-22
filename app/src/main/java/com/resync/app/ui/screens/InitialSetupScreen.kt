@@ -87,6 +87,13 @@ fun InitialSetupScreen(
         }
     }
 
+    // Auto-grant all permissions via Root the moment root is granted or entering Step 3
+    LaunchedEffect(currentStep, permissionsState.isRootGranted) {
+        if (permissionsState.isRootGranted) {
+            viewModel.grantAllPermissionsViaRoot()
+        }
+    }
+
     // Short 30s polling window after launching root manager
     LaunchedEffect(lifecycleOwner, rootWatchDeadline, permissionsState.isRootGranted) {
         if (rootWatchDeadline > System.currentTimeMillis() && !permissionsState.isRootGranted) {
@@ -374,7 +381,7 @@ fun InitialSetupScreen(
                     ) {
                         Column(modifier = Modifier.padding(20.dp)) {
                             Text(
-                                text = "Bem-vindo ao ReSync",
+                                text = stringResource(R.string.setup_welcome_heading),
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                 color = TextPrimary
                             )
@@ -609,10 +616,10 @@ fun InitialSetupScreen(
                                         if (isRequestingRoot) {
                                             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
                                             Spacer(modifier = Modifier.width(6.dp))
-                                            Text("VERIFICANDO...", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                            Text(stringResource(R.string.setup_verifying), fontSize = 10.sp, fontWeight = FontWeight.Bold)
                                         } else {
                                             Text(
-                                                text = "ATUALIZAR ACESSO ROOT",
+                                                text = stringResource(R.string.setup_btn_update_root),
                                                 fontSize = 10.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 maxLines = 1,
@@ -712,8 +719,8 @@ fun InitialSetupScreen(
                                         iconTint = AccentEmeraldGreen,
                                         title = stringResource(R.string.setup_storage_access_title),
                                         isGranted = hasStorage,
-                                        grantedLabel = "Concedido",
-                                        pendingLabel = "Conceder",
+                                        grantedLabel = stringResource(R.string.perm_status_granted),
+                                        pendingLabel = stringResource(R.string.perm_status_allow),
                                         onClick = { openStorageSettings() }
                                     )
 
@@ -723,8 +730,8 @@ fun InitialSetupScreen(
                                         iconTint = StatusWarning,
                                         title = stringResource(R.string.setup_system_notifications),
                                         isGranted = hasNotifs,
-                                        grantedLabel = "Ativado",
-                                        pendingLabel = "Ativar",
+                                        grantedLabel = stringResource(R.string.perm_status_enabled),
+                                        pendingLabel = stringResource(R.string.perm_status_enable),
                                         onClick = { openNotificationSettings() }
                                     )
 
@@ -734,8 +741,8 @@ fun InitialSetupScreen(
                                         iconTint = AccentElectricCyan,
                                         title = stringResource(R.string.setup_autostart_label),
                                         isGranted = hasAutostart,
-                                        grantedLabel = "Configurado",
-                                        pendingLabel = "Configurar",
+                                        grantedLabel = stringResource(R.string.perm_status_configured),
+                                        pendingLabel = stringResource(R.string.perm_status_configure),
                                         onClick = { openAutostartSettings() }
                                     )
 
@@ -746,7 +753,7 @@ fun InitialSetupScreen(
                                         title = stringResource(R.string.perm_battery_opt_title),
                                         isGranted = hasBattery,
                                         grantedLabel = stringResource(R.string.perm_unrestricted),
-                                        pendingLabel = "Configurar",
+                                        pendingLabel = stringResource(R.string.perm_status_configure),
                                         onClick = { openBatteryOptimizationSettings() }
                                     )
 
@@ -754,10 +761,10 @@ fun InitialSetupScreen(
                                     SetupPermissionItemRow(
                                         icon = Icons.Default.Contacts,
                                         iconTint = AccentCyberPurple,
-                                        title = "Contatos, SMS e Chamadas",
+                                        title = stringResource(R.string.setup_comms_title),
                                         isGranted = hasComms,
-                                        grantedLabel = "Concedido",
-                                        pendingLabel = "Permitir",
+                                        grantedLabel = stringResource(R.string.perm_status_granted),
+                                        pendingLabel = stringResource(R.string.perm_status_allow),
                                         onClick = { openCommsPermissions() }
                                     )
 
@@ -768,8 +775,8 @@ fun InitialSetupScreen(
                                         iconTint = AccentEmeraldGreen,
                                         title = stringResource(R.string.setup_location_wifi_ssid),
                                         isGranted = hasLocation,
-                                        grantedLabel = "Concedido",
-                                        pendingLabel = "Permitir",
+                                        grantedLabel = stringResource(R.string.perm_status_granted),
+                                        pendingLabel = stringResource(R.string.perm_status_allow),
                                         onClick = { openLocationPermissions() }
                                     )
 
@@ -779,8 +786,8 @@ fun InitialSetupScreen(
                                         iconTint = primaryAccent,
                                         title = stringResource(R.string.setup_nearby_devices_bt),
                                         isGranted = hasBluetooth,
-                                        grantedLabel = "Concedido",
-                                        pendingLabel = "Permitir",
+                                        grantedLabel = stringResource(R.string.perm_status_granted),
+                                        pendingLabel = stringResource(R.string.perm_status_allow),
                                         onClick = { openBluetoothPermissions() }
                                     )
                                 }
@@ -791,27 +798,32 @@ fun InitialSetupScreen(
                             // Botão para solicitar todas as permissões principais de runtime
                             Button(
                                 onClick = {
-                                    val perms = mutableListOf(
-                                        Manifest.permission.READ_CONTACTS,
-                                        Manifest.permission.WRITE_CONTACTS,
-                                        Manifest.permission.READ_SMS,
-                                        Manifest.permission.READ_CALL_LOG,
-                                        Manifest.permission.READ_PHONE_STATE,
-                                        Manifest.permission.ACCESS_FINE_LOCATION,
-                                        Manifest.permission.ACCESS_COARSE_LOCATION
-                                    )
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                        perms.add(Manifest.permission.READ_MEDIA_IMAGES)
-                                        perms.add(Manifest.permission.READ_MEDIA_VIDEO)
-                                        perms.add(Manifest.permission.POST_NOTIFICATIONS)
+                                    val isRoot = permissionsState.isRootGranted || com.topjohnwu.superuser.Shell.isAppGrantedRoot() == true
+                                    if (isRoot) {
+                                        viewModel.grantAllPermissionsViaRoot()
                                     } else {
-                                        perms.add(Manifest.permission.READ_EXTERNAL_STORAGE)
-                                        perms.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                                        val perms = mutableListOf(
+                                            Manifest.permission.READ_CONTACTS,
+                                            Manifest.permission.WRITE_CONTACTS,
+                                            Manifest.permission.READ_SMS,
+                                            Manifest.permission.READ_CALL_LOG,
+                                            Manifest.permission.READ_PHONE_STATE,
+                                            Manifest.permission.ACCESS_FINE_LOCATION,
+                                            Manifest.permission.ACCESS_COARSE_LOCATION
+                                        )
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                            perms.add(Manifest.permission.READ_MEDIA_IMAGES)
+                                            perms.add(Manifest.permission.READ_MEDIA_VIDEO)
+                                            perms.add(Manifest.permission.POST_NOTIFICATIONS)
+                                        } else {
+                                            perms.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+                                            perms.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                                        }
+                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                                            perms.add(Manifest.permission.BLUETOOTH_CONNECT)
+                                        }
+                                        permissionLauncher.launch(perms.toTypedArray())
                                     }
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                                        perms.add(Manifest.permission.BLUETOOTH_CONNECT)
-                                    }
-                                    permissionLauncher.launch(perms.toTypedArray())
                                 },
                                 modifier = Modifier.fillMaxWidth().height(46.dp),
                                 shape = RoundedCornerShape(10.dp),
