@@ -1150,6 +1150,9 @@
     <string name="storage_odm_settings">ODM Settings</string>
     <string name="storage_os_info">OS INFORMATION</string>
     <string name="storage_other_total">Other</string>
+    <string name="storage_photos">Photos</string>
+    <string name="storage_top_usage">Top usage</string>
+    <string name="storage_hide_details">Hide</string>
     <string name="storage_picker_all_files_desc">To view and select folders such as DCIM, Documents and SD cards on Android 11+, grant the special storage permission.</string>
     <string name="storage_picker_all_files_req">Full Files Access Required</string>
     <string name="storage_picker_choose_folders">Choose folders and files for quick backup</string>

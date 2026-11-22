@@ -1,10 +1,50 @@
-# 🚀 ReSync v1.0.44 Release Notes
+# 🚀 ReSync v1.0.45 Release Notes
 
 ---
 
 ## 🇧🇷 Português
 
-### 🚀 O Que Há de Novo na Versão 1.0.44:
+### 🚀 O Que Há de Novo na Versão 1.0.45:
+
+#### 1. 📊 Fonte Única de Verdade e Enum Fixo de Armazenamento
+- **Eliminação de Comparações de String Traduzida:** Correção definitiva dos cards "Images", "Documents" e "Other" que exibiam `0 B` e `0,0%` quando o app estava em inglês ou com strings localizadas.
+- **Tipagem Estrita com `StorageCategory`:** Uso exclusivo do enum tipado (`APPS`, `IMAGES`, `VIDEOS`, `AUDIO`, `DOCUMENTS`, `SYSTEM`, `OTHER`) em toda a renderização de cards, cálculo de métricas e painéis expansíveis.
+
+#### 2. 🔍 Scanner Real com MediaStore e Fallback em `/storage/emulated/0`
+- **Consulta MediaStore + Varredura Rápida de Disco:** Detecção precisa dos bytes reais para todas as categorias, desduplicando caminhos absolutos e cobrindo extensões de documentos (`pdf`, `doc`, `docx`, `xls`, `xlsx`, `txt`, etc.) e arquivos gerais.
+- **Cálculo Confiável de Outros:** Diferença exata de espaço usado deduzido de apps, mídias e sistema, com fallback em disco.
+
+#### 3. ⚡ Sincronização Dinâmica em Tempo Real
+- **Barra de Progresso e Percentual:** Barras de progresso proporcionais ao percentual real em disco (zero se 0 B).
+- **Atualização Instantânea On-Demand:** Ao tocar no card para expandir a lista, se a listagem encontrar arquivos com soma maior, o tamanho e o percentual do card são atualizados imediatamente.
+
+#### 4. 🌐 Tradução Completa da Tela de Armazenamento
+- Internacionalização dos textos restantes: "Ver detalhes" / "Ocultar", "Maior uso" e "Fotos".
+
+---
+
+## 🇺🇸 English
+
+### 🚀 What's New in Version 1.0.45:
+
+#### 1. 📊 Single Source of Truth & Fixed Storage Enum
+- **Elimination of Localized String Comparisons:** Fixed an issue where "Images", "Documents", and "Other" cards showed `0 B` and `0.0%` in English.
+- **Strict `StorageCategory` Typing:** Full usage of `StorageCategory` enum (`APPS`, `IMAGES`, `VIDEOS`, `AUDIO`, `DOCUMENTS`, `SYSTEM`, `OTHER`) across cards, metrics, and expandable panels.
+
+#### 2. 🔍 Real Storage Scanner with MediaStore and Filesystem Fallback
+- **MediaStore + Direct Storage Scan:** Accurate byte calculation for all categories with path deduplication and extension fallbacks for documents and general files.
+- **Reliable 'Other' Storage Calculation:** Deducts accounted categories from total used space with fallback on-disk scanning.
+
+#### 3. ⚡ Real-Time Dynamic Synchronization
+- **Dynamic Percentage & Progress Bars:** Progress bar widths accurately reflect disk percentages.
+- **On-Demand Real-Time Update:** Opening an expandable card immediately syncs the card size and percentage if files sum to more than previously detected.
+
+#### 4. 🌐 Complete Storage Screen Localization
+- Translated remaining hardcoded strings: "View details" / "Hide", "Top usage", and "Photos".
+
+---
+
+## [1.0.44]
 
 #### 1. 🛡️ Garantia de Shell Root Real e Limpeza de Cache libsu
 - **Descarte de Cache Não-Root:** Força encerramento do cache do libsu se estiver preso em `isRoot == false`.

@@ -4,6 +4,29 @@ Todas as mudanças notáveis deste projeto são documentadas neste arquivo.
 
 ---
 
+## [1.0.45] - 2026-11-22
+
+### 📊 Fonte Única de Verdade e Enum Fixo para Armazenamento
+- **Eliminação de Comparações por String:** Substituição de comparações frágeis (`"Imagens"`, `"Documentos"`, `"Outros"`) pelo enum tipado `StorageCategory` (`APPS`, `IMAGES`, `VIDEOS`, `AUDIO`, `DOCUMENTS`, `SYSTEM`, `OTHER`), garantindo que os cards exibam o tamanho real em qualquer idioma (inclusive Inglês padrão).
+- **Modelo de Dados Reativo `categorySizes`:** Tamanhos e percentuais lidos diretamente do mapa associativo indexado por enum.
+
+### 🔍 Scanner de Armazenamento Unificado e Confiável
+- **Medição MediaStore + Fallback do Filesystem:** Consulta a `MediaStore.Images`, `MediaStore.Video`, `MediaStore.Audio` e `MediaStore.Files` (documentos com MIME `application/%` e `text/%`), complementada por varredura rápida e desduplicada em `/storage/emulated/0` para diretórios candidatos (`DCIM`, `Pictures`, `Movies`, `Music`, `Documents`, `Download`, WhatsApp, etc.).
+- **Cálculo Consistente de Outros:** Espaço restante calculado por dedução do espaço usado total com fallback para varredura de arquivos não-mídia (`zip`, `rar`, `apk`, `bin`, etc.).
+
+### ⚡ Sincronização Dinâmica em Tempo Real dos Cards
+- **Cálculo Dinâmico de Percentual:** Percentual derivado em relação ao `totalStorageBytes` do aparelho.
+- **Barra de Progresso Proporcional:** Barras visuais dos cards ajustadas proporcionalmente à porcentagem real (0 se 0 B).
+- **Atualização On-Demand na Abertura do Card:** Ao expandir qualquer card, se a lista detalhada de arquivos encontrar uma soma maior ou se o card estava zerado, os `bytes` e o percentual são atualizados instantaneamente em tempo real.
+
+### 🌐 Internacionalização e Tradução em `StorageDetailsScreen.kt`
+- **Substituição de Textos Hardcoded:**
+  - `"Ver detalhes"` e `"Ocultar"` internacionalizados via `R.string.view_details` e `R.string.storage_hide_details`.
+  - `"Maior uso"` -> `R.string.storage_top_usage`.
+  - `"Fotos"` -> `R.string.storage_photos`.
+
+---
+
 ## [1.0.44] - 2026-11-22
 
 ### 🛡️ Garantia de Shell Root Real e Limpeza de Cache libsu

@@ -19,11 +19,11 @@ android {
     val vCode = (System.getenv("VERSION_CODE")
         ?: project.findProperty("versionCode")?.toString()
         ?: versionProperties.getProperty("versionCode")
-        ?: "44").toInt()
+        ?: "45").toInt()
     val vName = System.getenv("VERSION_NAME")
         ?: project.findProperty("versionName")?.toString()
         ?: versionProperties.getProperty("versionName")
-        ?: "1.0.44"
+        ?: "1.0.45"
 
     defaultConfig {
         applicationId = "com.resync.app"
