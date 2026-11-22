@@ -253,11 +253,24 @@ fun DashboardScreen(
                     }
                 }
 
-                // Canto superior direito: Lock, Terminal, Settings, Foto de Perfil
+                // Canto superior direito: Armazenamento, Lock, Terminal, Settings, Foto de Perfil
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    // 0. Armazenamento / Limpeza de Cache (Vassoura)
+                    IconButton(
+                        onClick = onNavigateToStorageDetails,
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CleaningServices,
+                            contentDescription = stringResource(R.string.dash_storage_title),
+                            tint = Color.White,
+                            modifier = Modifier.size(19.dp)
+                        )
+                    }
+
                     // 1. Cadeado / Segurança
                     IconButton(
                         onClick = onNavigateToPermissions,

@@ -1,23 +1,18 @@
 {
-  "versionCode": 41,
-  "versionName": "1.0.41",
-  "tag": "v1.0.41",
-  "apkName": "ReSync-v1.0.41.apk",
-  "releaseNotes": "🚀 **O QUE HÁ DE NOVO NESTA VERSÃO (v1.0.41) / WHAT'S NEW IN THIS VERSION:**\n\n🛡️ **Correção Cirúrgica de Toast em IO & Estabilidade da Nuvem**\n• Prevenção definitiva do crash fatal 'Can't toast on a thread that has not called Looper.prepare()' através de showSafeToast com despacho seguro para a Main Thread.\n• Callbacks de sincronização assíncrona executados com garantia de execução no Dispatchers.Main.immediate.\n\n⚡ **Root Permanente & Auto-concessão de Permissões**\n• Eliminação do falso 'Permissão pendente' ao retornar ao app, com verificação de shell em cache, libsu e fallback via ProcessBuilder.\n• Auto-concessão instantânea via root para permissões de manifesto, AppOps e whitelist de bateria (deviceidle).\n\n📱 **Armazenamento Otimizado & Grade Balanceada**\n• Grade Bento OLED 2x2 com 3 pares equilibrados (Apps/Imagens, Vídeos/Áudio, Documentos/Sistema) e 'Outros' em largura total não clicável.\n• Remoção do card de Cache redundante na visão geral de armazenamento.\n\n☁️ **Menu FAB & Envio de Backups para a Nuvem**\n• Scrim escuro semi-transparente para dismiss ao toque externo e botões FAB sólidos opacos com borda.\n• Validação prévia de conta Google conectada e pastas vazias, além de inclusão automática do arquivo .index.json no envio de backups existentes.\n\n🎨 **Polimento Visual Bento OLED & UI de Backup**\n• Badge verde neon com a versão exata v1.0.41 adicionado no cabeçalho superior de ActiveBackupsScreen.\n• Remoção definitiva do jargão #TIVE e 0xTIVE_RESYNC, exibindo título real e identificador formatado de sessão.\n• Botão Concluir/Done em linha única e botões de rodapé com altura de 48dp perfeitamente alinhados.",
+  "versionCode": 42,
+  "versionName": "1.0.42",
+  "tag": "v1.0.42",
+  "apkName": "ReSync-v1.0.42.apk",
+  "releaseNotes": "🚀 **O QUE HÁ DE NOVO NESTA VERSÃO (v1.0.42) / WHAT'S NEW IN THIS VERSION:**\n\n📂 **Lista Expansível do Card Outros Restaurada**\n• Restauração completa do clique no card Outros na tela de Armazenamento, abrindo o painel expansível com os arquivos correspondentes e botão de fechamento X.\n• Suporte na busca e escaneamento direto para extensões de arquivos diversos (.zip, .rar, .7z, .tar, .gz, .apk, .bin, .iso, .img, .obb, .dat, .bak).\n\n🧹 **Atalho de Armazenamento na TopBar da Dashboard**\n• Adicionado ícone de vassoura/limpeza na TopBar inicial com navegação direta para a tela de Armazenamento.\n• Espaçamento horizontal ajustado (10dp) garantindo que nenhum ícone quebre linha ou fique espremido.\n\n📱 **Correção da Lista de Aplicativos Instalados**\n• Corrigido bug de categoria onde o card Aplicativos exibia 'Nenhum arquivo encontrado' em português e inglês.\n• Lista de aplicativos ordenada por tamanho total em ordem decrescente exibindo ícone real, nome, pacote, indicador de cache e tamanho formatado.",
   "functions": [
-    "Context.showSafeToast utility guaranteeing thread-safe Toast execution on Main Looper",
-    "Persistent root verification avoiding false pending state across app switches",
-    "grantAllPermissionsViaRoot auto-granting manifest runtime permissions, AppOps, and deviceidle whitelist",
-    "Balanced Bento OLED storage grid with non-clickable Outros card in full width and removed Cache card",
-    "Cloud FAB menu with dark scrim, opaque solid buttons, and automatic .index.json bundle upload",
-    "Neon green version badge in ActiveBackupsScreen TopBar matching Dashboard",
-    "Clean session ID and real active backup titles replacing legacy #TIVE jargon",
-    "Single-line Done/Concluir button and balanced 48dp post-backup action buttons"
+    "StorageDetailsScreen Outros card clickable with expandable file list and close button",
+    "Dashboard TopBar cleaning shortcut navigating directly to Storage Details screen",
+    "Storage installed apps expandable panel displaying real app icons, cache badges, and formatted sizes",
+    "Balanced TopBar spacing of 10dp preventing overflow or wrapping on narrow screens",
+    "Fast MediaStore and direct fallback scanning for Other storage category files"
   ],
   "fixes": [
-    "Fixed fatal Toast NPE crash when called from Dispatchers.IO in CloudSyncCenterScreenKt",
-    "Fixed root status dropping to false on app return during non-interactive checks",
-    "Fixed #TIVE and 0xTIVE_RESYNC title truncation in active backups",
-    "Fixed storage category grid balance and eliminated redundant cache card"
+    "Fixed empty apps list bug when opening Aplicativos / Applications category in Storage Details",
+    "Restored interactive expandable files list for Outros / Others category card"
   ]
 }

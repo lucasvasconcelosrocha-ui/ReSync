@@ -612,6 +612,7 @@
     <string name="btn_done">Done</string>
     <string name="active_backup_default_title">Active Backup</string>
     <string name="processing_backup">Processing Backup</string>
+    <string name="storage_installed_apps_title">Installed Apps</string>
     <string name="downloading_backup_from_drive">Downloading backup from Google Drive…</string>
     <string name="drive_file_not_found">File not found on Google Drive.</string>
     <string name="drive_session_expired">Google Drive session expired. Reconnect your account.</string>

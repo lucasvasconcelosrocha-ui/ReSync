@@ -1,3 +1,43 @@
+# 🚀 ReSync v1.0.42 Release Notes
+
+---
+
+## 🇧🇷 Português
+
+### 🚀 O Que Há de Novo na Versão 1.0.42:
+
+#### 1. 📂 Restauração do Card 'Outros' & Painel Expansível
+- **Clique e Painel Interativo:** O card da categoria **Outros** na tela de Armazenamento volta a ser interativo, abrindo o painel expansível inferior de arquivos com botão `X` para fechar.
+- **Busca de Arquivos Diversos:** Suporte nativo a arquivos de arquivos compactados e binários (`.zip`, `.rar`, `.7z`, `.tar`, `.gz`, `.apk`, `.bin`, `.iso`, `.img`, etc.) via MediaStore e escaneamento direto.
+
+#### 2. 🧹 Atalho de Limpeza/Armazenamento na TopBar
+- **Acesso Rápido com Vassoura:** Novo botão na TopBar da tela inicial com o ícone de limpeza/vassoura, levando diretamente à tela de Armazenamento e métricas de disco.
+- **Layout Seguro de TopBar:** Ajuste de espaçamento horizontal (`10.dp`) para total compatibilidade com qualquer largura de display.
+
+#### 3. 📱 Correção da Lista de Aplicativos Instalados
+- **Fim da Lista Vazia em Aplicativos:** Corrigida a verificação localizada que causava o falso "Nenhum arquivo encontrado" ao tocar no card Aplicativos.
+- **Detalhes Completos dos Apps:** Exibição com ícone real, nome, pacote, tamanho de cache se houver e tamanho total decrescente.
+
+---
+
+## 🇺🇸 English
+
+### 🚀 What's New in Version 1.0.42:
+
+#### 1. 📂 Restored 'Others' Card Click & Expandable File List
+- **Interactive Others Card:** Tapping the **Others** card in Storage Details now expands the files panel with full close button `X` support.
+- **Comprehensive Scanning:** MediaStore queries and directory fallback for diverse extensions (`.zip`, `.rar`, `.7z`, `.tar`, `.gz`, `.apk`, `.bin`, `.iso`, `.img`, etc.).
+
+#### 2. 🧹 Storage Shortcut in Dashboard TopBar
+- **Broom/Cleaning Icon:** Instant navigation to Storage Details from the Dashboard TopBar via the cleaning broom icon.
+- **Narrow Screen Spacing:** Safe 10dp icon distribution ensuring zero wrapping or crowding.
+
+#### 3. 📱 Fixed Installed Apps Category List
+- **Resolved Empty Apps List:** Fixed locale matching bug where opening Applications showed "No files found".
+- **Rich App Item Details:** Displays real app icons, titles, package name, cache badges, and formatted sizes sorted descending.
+
+---
+
 # 🚀 ReSync v1.0.41 Release Notes
 
 ---

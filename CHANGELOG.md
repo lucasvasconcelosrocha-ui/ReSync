@@ -4,6 +4,23 @@ Todas as mudanças notáveis deste projeto são documentadas neste arquivo.
 
 ---
 
+## [1.0.42] - 2026-11-22
+
+### 📂 Restauração do Card 'Outros' & Painel Expansível
+- **Clique Interativo Restaurado:** Restabelecido o `Modifier.clickable` no card da categoria **Outros / Others** em `StorageDetailsScreen.kt`, alinhado às categorias Documentos, Vídeos, Áudio e Imagens.
+- **Lista de Arquivos Expansível:** Ao tocar em Outros, o painel expansível inferior é aberto exibindo os arquivos dessa categoria com opção de fechamento imediato via botão `X`.
+- **Escaneamento Otimizado:** Implementada busca em MediaStore para arquivos não-multimídia acima de 512KB e varredura de fallback para extensões comuns (`.zip`, `.rar`, `.7z`, `.tar`, `.gz`, `.apk`, `.bin`, `.iso`, `.img`, `.obb`, `.dat`, `.bak`).
+
+### 🧹 Atalho de Armazenamento na TopBar da Dashboard
+- **Ícone de Vassoura/Limpeza:** Adicionado o ícone `Icons.Default.CleaningServices` à direita na TopBar da `DashboardScreen.kt`, fornecendo acesso com 1 toque à tela de Armazenamento.
+- **Espaçamento Seguro:** Ajustado o espaçamento entre ícones para `10.dp`, prevenindo quebras de linha ou sobreposições mesmo em aparelhos com telas compactas ou fontes ampliadas.
+
+### 📱 Correção da Lista de Aplicativos Instalados
+- **Eliminação do Bug de Categoria:** Corrigida a validação de categoria que causava exibição indevida de *"Nenhum arquivo encontrado"* ao abrir o card Aplicativos em português e inglês.
+- **Listagem Completa & Ordenação:** População completa dos aplicativos instalados (`installedApps`) ordenados por tamanho decrescente, exibindo ícone real (`RealAppIcon`), nome do app, pacote, badge de cache formatado e tamanho total.
+
+---
+
 ## [1.0.41] - 2026-11-22
 
 ### 🚨 Correção de Estabilidade & Crash de Toast em Thread Secundária

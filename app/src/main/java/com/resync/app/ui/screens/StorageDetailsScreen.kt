@@ -186,6 +186,11 @@ fun StorageDetailsScreen(
                 val sel = "${MediaStore.MediaColumns.MIME_TYPE} LIKE 'application/%' OR ${MediaStore.MediaColumns.MIME_TYPE} LIKE 'text/%'"
                 queryUri(MediaStore.Files.getContentUri("external"), proj, sel)
             }
+            "outros", "others" -> {
+                val proj = arrayOf(MediaStore.MediaColumns.DATA, MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.SIZE, MediaStore.MediaColumns.DATE_MODIFIED)
+                val sel = "${MediaStore.MediaColumns.MIME_TYPE} NOT LIKE 'image/%' AND ${MediaStore.MediaColumns.MIME_TYPE} NOT LIKE 'video/%' AND ${MediaStore.MediaColumns.MIME_TYPE} NOT LIKE 'audio/%' AND ${MediaStore.MediaColumns.SIZE} > 524288"
+                queryUri(MediaStore.Files.getContentUri("external"), proj, sel)
+            }
         }
 
         // Fallback para escaneamento direto / root caso resultados estejam vazios
@@ -197,6 +202,7 @@ fun StorageDetailsScreen(
                     "videos" -> listOf("mp4", "mkv", "mov", "avi", "webm", "3gp")
                     "audio" -> listOf("mp3", "m4a", "aac", "flac", "wav", "ogg", "opus")
                     "documentos" -> listOf("pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "epub")
+                    "outros", "others" -> listOf("zip", "rar", "7z", "tar", "gz", "apk", "bin", "iso", "img", "obb", "dat", "bak")
                     else -> emptyList()
                 }
                 if (exts.isNotEmpty()) {
@@ -303,7 +309,7 @@ fun StorageDetailsScreen(
             StorageCategory(context.getString(R.string.category_audio), audioBytes, AccentNeonPurple, Icons.Default.MusicNote),
             StorageCategory("Documentos", docsBytes, AccentBrightAmber, Icons.Default.Description),
             StorageCategory(context.getString(R.string.device_category_system), systemTotal, TextMuted, Icons.Default.Memory),
-            StorageCategory("Outros", othersBytes, DarkCardBorder, Icons.Default.FolderOpen)
+            StorageCategory("Outros", othersBytes, Color(0xFF94A3B8), Icons.Default.FolderOpen)
         )
     }
 
@@ -1050,12 +1056,24 @@ fun StorageDetailsScreen(
                     }
                 }
 
-                // Linha 4: Outros (Largura Total - Não Clicável)
+                // Linha 4: Outros (Largura Total - Clicável)
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(16.dp))
-                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp)),
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
+                        .clickable {
+                            val catName = "Outros"
+                            expandedCategories = if (catName in expandedCategories) emptySet() else setOf(catName)
+                            if (catName in expandedCategories && categoryFilesMap[catName] == null) {
+                                coroutineScope.launch {
+                                    isLoadingCategoryFiles = true
+                                    val files = queryCategoryFiles(catName)
+                                    categoryFilesMap = categoryFilesMap + (catName to files)
+                                    isLoadingCategoryFiles = false
+                                }
+                            }
+                        },
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
@@ -1102,6 +1120,8 @@ fun StorageDetailsScreen(
             AnimatedVisibility(visible = expandedCategories.isNotEmpty()) {
                 val selectedCatName = expandedCategories.firstOrNull() ?: ""
                 val catObj = categories.find { it.name.equals(selectedCatName, ignoreCase = true) }
+                val isAppsCategory = selectedCatName.equals(context.getString(R.string.category_apps), ignoreCase = true) ||
+                        selectedCatName.lowercase() in listOf("apps", "aplicativos", "applications")
                 Column(modifier = Modifier.fillMaxWidth().padding(top = 14.dp)) {
                     Card(
                         modifier = Modifier
@@ -1118,14 +1138,18 @@ fun StorageDetailsScreen(
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
-                                        imageVector = catObj?.icon ?: Icons.Default.Folder,
+                                        imageVector = catObj?.icon ?: (if (isAppsCategory) Icons.Default.Apps else Icons.Default.Folder),
                                         contentDescription = null,
-                                        tint = catObj?.color ?: MaterialTheme.colorScheme.primary,
+                                        tint = catObj?.color ?: (if (isAppsCategory) AccentElectricCyan else MaterialTheme.colorScheme.primary),
                                         modifier = Modifier.size(20.dp)
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = stringResource(R.string.storage_files_in_cat, selectedCatName),
+                                        text = if (isAppsCategory) {
+                                            stringResource(R.string.storage_installed_apps_title)
+                                        } else {
+                                            stringResource(R.string.storage_files_in_cat, selectedCatName)
+                                        },
                                         fontSize = 13.5.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = TextPrimary
@@ -1142,38 +1166,87 @@ fun StorageDetailsScreen(
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                             Spacer(modifier = Modifier.height(8.dp))
                             Column(modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 4.dp, bottom = 4.dp)) {
-                                if (selectedCatName.lowercase() in listOf("apps")) {
-                                    val filteredSortedApps = remember(installedApps, appsFilter) {
-                                        when (appsFilter) {
-                                            "USER" -> installedApps.filter { !it.isSystemApp }
-                                            "SYSTEM" -> installedApps.filter { it.isSystemApp }
-                                            else -> installedApps
-                                        }.sortedByDescending { it.sizeBytes }
+                                if (isAppsCategory) {
+                                    val sortedApps = remember(installedApps) {
+                                        installedApps.sortedByDescending { it.sizeBytes }
                                     }
-                                    LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        items(filteredSortedApps.take(15), key = { it.packageName }) { app ->
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth().clickable { onNavigateToAppDetail(app) }.padding(vertical = 4.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                RealAppIcon(packageName = app.packageName, size = 32.dp)
-                                                Spacer(modifier = Modifier.width(10.dp))
-                                                Column(modifier = Modifier.weight(1f)) {
-                                                    Text(text = app.appName, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                                    Text(text = app.packageName, fontSize = 9.5.sp, color = TextMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    val cacheByPkg = remember(appCacheList) {
+                                        appCacheList.associate { it.app.packageName to it.cacheBytes }
+                                    }
+                                    if (sortedApps.isEmpty()) {
+                                        Text(
+                                            text = if (isLoadingApps) "Carregando..." else stringResource(R.string.storage_no_files_found),
+                                            fontSize = 11.sp,
+                                            color = TextMuted,
+                                            modifier = Modifier.padding(vertical = 8.dp)
+                                        )
+                                    } else {
+                                        LazyColumn(
+                                            modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            items(sortedApps, key = { it.packageName }) { app ->
+                                                val cacheBytes = cacheByPkg[app.packageName] ?: 0L
+                                                val subtitleText = if (cacheBytes > 0L) {
+                                                    "${app.packageName} • ${FormatUtils.formatBytes(cacheBytes)} cache"
+                                                } else {
+                                                    app.packageName
                                                 }
-                                                Spacer(modifier = Modifier.width(8.dp))
-                                                Text(text = FormatUtils.formatBytes(app.sizeBytes), fontSize = 11.5.sp, fontWeight = FontWeight.Bold, color = catObj?.color ?: MaterialTheme.colorScheme.primary)
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clickable { onNavigateToAppDetail(app) }
+                                                        .padding(vertical = 4.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    RealAppIcon(packageName = app.packageName, size = 32.dp)
+                                                    Spacer(modifier = Modifier.width(10.dp))
+                                                    Column(modifier = Modifier.weight(1f)) {
+                                                        Text(
+                                                            text = app.appName,
+                                                            fontSize = 12.sp,
+                                                            fontWeight = FontWeight.SemiBold,
+                                                            color = TextPrimary,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                        Text(
+                                                            text = subtitleText,
+                                                            fontSize = 9.5.sp,
+                                                            color = TextMuted,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                    }
+                                                    Spacer(modifier = Modifier.width(8.dp))
+                                                    Text(
+                                                        text = FormatUtils.formatBytes(app.sizeBytes),
+                                                        fontSize = 11.5.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = catObj?.color ?: AccentElectricCyan
+                                                    )
+                                                }
                                             }
                                         }
                                     }
                                 } else {
                                     val files = categoryFilesMap[selectedCatName]
-                                    if (files.isNullOrEmpty()) {
+                                    if (isLoadingCategoryFiles && files == null) {
+                                        Box(
+                                            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(20.dp),
+                                                strokeWidth = 2.dp,
+                                                color = catObj?.color ?: MaterialTheme.colorScheme.primary
+                                            )
+                                        }
+                                    } else if (files.isNullOrEmpty()) {
                                         Text(stringResource(R.string.storage_no_files_found), fontSize = 11.sp, color = TextMuted, modifier = Modifier.padding(vertical = 8.dp))
                                     } else {
                                         LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            items(files.take(15), key = { it.path }) { fItem ->
+                                            items(files.take(25), key = { it.path }) { fItem ->
                                                 Row(
                                                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                                                     verticalAlignment = Alignment.CenterVertically
