@@ -44,6 +44,8 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -154,6 +156,9 @@ fun CloudSyncCenterScreen(
     val fullDeviceLabel = selectedViewLabel.ifBlank { customDeviceLabel }
     val effectiveViewLabel: String = fullDeviceLabel.trim()
 
+    val cloudLabelComponentSummary by viewModel.cloudLabelComponentSummary.collectAsState()
+    val remoteCategorySummaries by viewModel.remoteCategorySummaries.collectAsState()
+
     val remoteList: List<DriveFileMetadata> = (remoteBackupsState as? RemoteBackupsState.Loaded)?.backups ?: remoteBackups
     val labelBackups: List<DriveFileMetadata> = remember(remoteList, effectiveViewLabel) {
         if (effectiveViewLabel.isBlank()) {
@@ -169,6 +174,29 @@ fun CloudSyncCenterScreen(
             }
         }
     }
+
+    LaunchedEffect(effectiveViewLabel, activeAccountEmail, remoteList) {
+        viewModel.loadCloudLabelComponentSummary(effectiveViewLabel, activeAccountEmail)
+    }
+
+    val overviewScrollState = rememberScrollState()
+    var isFabVisible by remember { mutableStateOf(true) }
+    var previousScrollOffset by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(overviewScrollState.value) {
+        val currentOffset = overviewScrollState.value
+        val diff = currentOffset - previousScrollOffset
+        if (currentOffset <= 20) {
+            isFabVisible = true
+        } else if (diff > 12) {
+            isFabVisible = false
+        } else if (diff < -12) {
+            isFabVisible = true
+        }
+        previousScrollOffset = currentOffset
+    }
+
+    val shouldShowFab = (isFabVisible || isFabExpanded) && selectedTab == 0 && (activeAccountEmail != null || multiAccounts.isNotEmpty())
 
     var showLabelManagerModal by remember { mutableStateOf(false) }
     var showCreateLabelDialog by remember { mutableStateOf(false) }
@@ -284,8 +312,10 @@ fun CloudSyncCenterScreen(
 
     val onOpenCategoryRestore: (String) -> Unit = { catName ->
         val matching = labelBackups.filter { file ->
-            val s = CloudBackupCategoryHelper.inspectRemoteFile(file, context)
+            val s = remoteCategorySummaries[file.id] ?: CloudBackupCategoryHelper.inspectRemoteFile(file, context)
             s.containsCategory(catName)
+        }.ifEmpty {
+            if (labelBackups.isNotEmpty()) listOf(labelBackups.first()) else emptyList()
         }
         if (matching.isEmpty()) {
             context.showSafeToast(context.getString(R.string.cloud_no_backup_tag, catName))
@@ -585,133 +615,36 @@ fun CloudSyncCenterScreen(
                     }
                 }
             }
-        },
-        floatingActionButton = {
-            Column(
-                horizontalAlignment = Alignment.End,
-                modifier = Modifier
-                    .navigationBarsPadding()
-                    .padding(bottom = 88.dp, end = 16.dp)
-            ) {
-                AnimatedVisibility(
-                    visible = isFabExpanded,
-                    enter = fadeIn() + expandVertically(),
-                    exit = fadeOut() + shrinkVertically()
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.End,
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    ) {
-                        ExtendedFloatingActionButton(
-                            onClick = {
-                                isFabExpanded = false
-                                val targetEmail = activeAccountEmail ?: multiAccounts.firstOrNull()?.email
-                                if (targetEmail.isNullOrBlank()) {
-                                    context.showSafeToast("Nenhuma conta Google Drive conectada.")
-                                } else {
-                                    openFilesLauncher.launch(arrayOf("*/*"))
-                                }
-                            },
-                            modifier = Modifier.border(1.dp, Color(0xFF263244), RoundedCornerShape(16.dp)),
-                            shape = RoundedCornerShape(16.dp),
-                            containerColor = Color(0xFF161F2E),
-                            contentColor = primaryAccent,
-                            elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp),
-                            icon = { Icon(Icons.Default.InsertDriveFile, contentDescription = null) },
-                            text = { Text(stringResource(R.string.cloud_send_files), fontSize = 12.sp, fontWeight = FontWeight.Bold) }
-                        )
-
-                        ExtendedFloatingActionButton(
-                            onClick = {
-                                isFabExpanded = false
-                                val targetEmail = activeAccountEmail ?: multiAccounts.firstOrNull()?.email
-                                if (targetEmail.isNullOrBlank()) {
-                                    context.showSafeToast("Nenhuma conta Google Drive conectada.")
-                                } else {
-                                    openFolderLauncher.launch(null)
-                                }
-                            },
-                            modifier = Modifier.border(1.dp, Color(0xFF263244), RoundedCornerShape(16.dp)),
-                            shape = RoundedCornerShape(16.dp),
-                            containerColor = Color(0xFF161F2E),
-                            contentColor = primaryAccent,
-                            elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp),
-                            icon = { Icon(Icons.Default.Folder, contentDescription = null) },
-                            text = { Text("Enviar Pasta", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
-                        )
-
-                        ExtendedFloatingActionButton(
-                            onClick = {
-                                isFabExpanded = false
-                                val targetEmail = activeAccountEmail ?: multiAccounts.firstOrNull()?.email
-                                if (targetEmail.isNullOrBlank()) {
-                                    context.showSafeToast("Nenhuma conta Google Drive conectada.")
-                                } else {
-                                    showBackupSelectionDialog = true
-                                }
-                            },
-                            modifier = Modifier.border(1.dp, Color(0xFF263244), RoundedCornerShape(16.dp)),
-                            shape = RoundedCornerShape(16.dp),
-                            containerColor = Color(0xFF161F2E),
-                            contentColor = primaryAccent,
-                            elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp),
-                            icon = { Icon(Icons.Default.Inventory2, contentDescription = null) },
-                            text = { Text("Enviar Backup Existente", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
-                        )
-                    }
-                }
-
-                FloatingActionButton(
-                    onClick = { isFabExpanded = !isFabExpanded },
-                    containerColor = primaryAccent,
-                    contentColor = Color.White,
-                    shape = CircleShape
-                ) {
-                    Icon(
-                        imageVector = if (isFabExpanded) Icons.Default.Close else Icons.Default.CloudUpload,
-                        contentDescription = stringResource(R.string.cloud_gdrive_actions)
-                    )
-                }
-            }
         }
     ) { innerPadding ->
-        PullToRefreshBox(
-            isRefreshing = isPullRefreshing,
-            onRefresh = {
-                isPullRefreshing = true
-                coroutineScope.launch {
-                    viewModel.refreshCloudData()
-                    delay(600)
-                    isPullRefreshing = false
-                }
-            },
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 16.dp)
         ) {
-            if (isFabExpanded) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.65f))
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) { isFabExpanded = false }
-                )
-            }
-
-            when (selectedTab) {
-                0 -> {
-                    // TAB 0: Visão Geral e Conexão Gratuita
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(rememberScrollState())
-                            .padding(bottom = 120.dp)
-                    ) {
+            PullToRefreshBox(
+                isRefreshing = isPullRefreshing,
+                onRefresh = {
+                    isPullRefreshing = true
+                    coroutineScope.launch {
+                        viewModel.refreshCloudData()
+                        delay(600)
+                        isPullRefreshing = false
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp)
+            ) {
+                when (selectedTab) {
+                    0 -> {
+                        // TAB 0: Visão Geral e Conexão Gratuita
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(overviewScrollState)
+                                .padding(bottom = 120.dp)
+                        ) {
                         Spacer(modifier = Modifier.height(14.dp))
 
                         // OAuth Configuration / Connection Error Card
@@ -1156,34 +1089,18 @@ fun CloudSyncCenterScreen(
                         Spacer(modifier = Modifier.height(16.dp))
 
                         // Cartão "Etiqueta do backup na nuvem"
-                        val categorySummaries = remember(labelBackups) {
-                            labelBackups.map { it to CloudBackupCategoryHelper.inspectRemoteFile(it, context) }
+                        val categorySummaries = remember(labelBackups, remoteCategorySummaries) {
+                            labelBackups.map { it to (remoteCategorySummaries[it.id] ?: CloudBackupCategoryHelper.inspectRemoteFile(it, context)) }
                         }
 
-                        val remoteAppsCount = remember(categorySummaries) {
-                            categorySummaries.sumOf { (_, s) -> if (s.hasApps) s.countApps.coerceAtLeast(1) else 0 }
-                        }
-                        val remoteSmsCount = remember(categorySummaries) {
-                            categorySummaries.sumOf { (_, s) -> if (s.hasSms) s.countSms.coerceAtLeast(1) else 0 }
-                        }
-                        val remoteCallsCount = remember(categorySummaries) {
-                            categorySummaries.sumOf { (_, s) -> if (s.hasCalls) s.countCalls.coerceAtLeast(1) else 0 }
-                        }
-                        val remoteFoldersCount = remember(categorySummaries) {
-                            categorySummaries.sumOf { (_, s) -> if (s.hasFolders) s.countFolders.coerceAtLeast(1) else 0 }
-                        }
-                        val remoteBluetoothCount = remember(categorySummaries) {
-                            categorySummaries.sumOf { (_, s) -> if (s.hasBluetooth) s.countBluetooth.coerceAtLeast(1) else 0 }
-                        }
-                        val remoteDnsCount = remember(categorySummaries) {
-                            categorySummaries.sumOf { (_, s) -> if (s.hasDns) s.countDns.coerceAtLeast(1) else 0 }
-                        }
-                        val remoteWifiCount = remember(categorySummaries) {
-                            categorySummaries.sumOf { (_, s) -> if (s.hasWifi) s.countWifi.coerceAtLeast(1) else 0 }
-                        }
-                        val remoteContactsCount = remember(categorySummaries) {
-                            categorySummaries.sumOf { (_, s) -> if (s.hasContacts) s.countContacts.coerceAtLeast(1) else 0 }
-                        }
+                        val remoteAppsCount = if (cloudLabelComponentSummary.totalBackupsCount > 0) cloudLabelComponentSummary.appsCount else categorySummaries.sumOf { (_, s) -> if (s.hasApps) s.countApps.coerceAtLeast(1) else 0 }
+                        val remoteSmsCount = if (cloudLabelComponentSummary.totalBackupsCount > 0) cloudLabelComponentSummary.smsCount else categorySummaries.sumOf { (_, s) -> if (s.hasSms) s.countSms.coerceAtLeast(1) else 0 }
+                        val remoteCallsCount = if (cloudLabelComponentSummary.totalBackupsCount > 0) cloudLabelComponentSummary.callsCount else categorySummaries.sumOf { (_, s) -> if (s.hasCalls) s.countCalls.coerceAtLeast(1) else 0 }
+                        val remoteFoldersCount = if (cloudLabelComponentSummary.totalBackupsCount > 0) cloudLabelComponentSummary.foldersCount else categorySummaries.sumOf { (_, s) -> if (s.hasFolders) s.countFolders.coerceAtLeast(1) else 0 }
+                        val remoteBluetoothCount = if (cloudLabelComponentSummary.totalBackupsCount > 0) cloudLabelComponentSummary.bluetoothCount else categorySummaries.sumOf { (_, s) -> if (s.hasBluetooth) s.countBluetooth.coerceAtLeast(1) else 0 }
+                        val remoteDnsCount = if (cloudLabelComponentSummary.totalBackupsCount > 0) cloudLabelComponentSummary.dnsCount else categorySummaries.sumOf { (_, s) -> if (s.hasDns) s.countDns.coerceAtLeast(1) else 0 }
+                        val remoteWifiCount = if (cloudLabelComponentSummary.totalBackupsCount > 0) cloudLabelComponentSummary.wifiCount else categorySummaries.sumOf { (_, s) -> if (s.hasWifi) s.countWifi.coerceAtLeast(1) else 0 }
+                        val remoteContactsCount = if (cloudLabelComponentSummary.totalBackupsCount > 0) cloudLabelComponentSummary.contactsCount else categorySummaries.sumOf { (_, s) -> if (s.hasContacts) s.countContacts.coerceAtLeast(1) else 0 }
 
                         val labelBackupsBytes = remember(labelBackups) {
                             labelBackups.sumOf { it.sizeBytes }
@@ -1368,7 +1285,9 @@ fun CloudSyncCenterScreen(
                                 Triple("Contatos", "$remoteContactsCount contatos", Icons.Default.Contacts to AccentSunsetOrange)
                             )
                         }
-                        val activePartitionsCount = remember(partitionsList) {
+                        val activePartitionsCount = if (cloudLabelComponentSummary.totalBackupsCount > 0) {
+                            cloudLabelComponentSummary.activePartitionsCount
+                        } else {
                             partitionsList.count { it.second.startsWith("0").not() }
                         }
 
@@ -1524,16 +1443,17 @@ fun CloudSyncCenterScreen(
                                 modifier = Modifier.weight(1f).height(48.dp),
                                 shape = RoundedCornerShape(12.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = primaryAccent),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                                 enabled = !isRefreshingActiveAccount
                             ) {
                                 if (isRefreshingActiveAccount) {
-                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.Black, strokeWidth = 2.dp)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("SINCRONIZANDO...", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Color.Black, maxLines = 1)
+                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.Black, strokeWidth = 2.dp)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(stringResource(R.string.dashboard_syncing), fontWeight = FontWeight.Bold, fontSize = 11.sp, color = Color.Black, maxLines = 1, softWrap = false)
                                 } else {
-                                    Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(stringResource(R.string.cloud_sync_now), fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, softWrap = false)
+                                    Icon(Icons.Default.Sync, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(stringResource(R.string.cloud_sync_now), fontWeight = FontWeight.Bold, fontSize = 11.sp, maxLines = 1, softWrap = false)
                                 }
                             }
 
@@ -1563,16 +1483,17 @@ fun CloudSyncCenterScreen(
                                     containerColor = MaterialTheme.colorScheme.surface,
                                     contentColor = primaryAccent
                                 ),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                                 enabled = !isRefreshingActiveAccount
                             ) {
                                 if (isRefreshingActiveAccount) {
-                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), color = primaryAccent, strokeWidth = 2.dp)
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("VERIFICANDO...", color = primaryAccent, fontWeight = FontWeight.Bold, fontSize = 11.sp, maxLines = 1)
+                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), color = primaryAccent, strokeWidth = 2.dp)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("VERIFICANDO...", color = primaryAccent, fontWeight = FontWeight.Bold, fontSize = 11.sp, maxLines = 1, softWrap = false)
                                 } else {
-                                    Icon(Icons.Default.Verified, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("VERIFICAR", color = primaryAccent, fontWeight = FontWeight.Bold, fontSize = 12.sp, maxLines = 1, softWrap = false)
+                                    Icon(Icons.Default.Verified, contentDescription = null, tint = primaryAccent, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("VERIFICAR", color = primaryAccent, fontWeight = FontWeight.Bold, fontSize = 11.sp, maxLines = 1, softWrap = false)
                                 }
                             }
                         }
@@ -1962,6 +1883,113 @@ fun CloudSyncCenterScreen(
                         }
 
                         Spacer(modifier = Modifier.height(96.dp))
+                    }
+                }
+            }
+        }
+
+            if (isFabExpanded) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.65f))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { isFabExpanded = false }
+                )
+            }
+
+            AnimatedVisibility(
+                visible = shouldShowFab,
+                enter = fadeIn() + scaleIn(initialScale = 0.8f),
+                exit = fadeOut() + scaleOut(targetScale = 0.8f),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 16.dp, bottom = 16.dp)
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.End
+                ) {
+                    AnimatedVisibility(
+                        visible = isFabExpanded,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically()
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.End,
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.padding(bottom = 12.dp)
+                        ) {
+                            ExtendedFloatingActionButton(
+                                onClick = {
+                                    isFabExpanded = false
+                                    val targetEmail = activeAccountEmail ?: multiAccounts.firstOrNull()?.email
+                                    if (targetEmail.isNullOrBlank()) {
+                                        context.showSafeToast("Nenhuma conta Google Drive conectada.")
+                                    } else {
+                                        openFilesLauncher.launch(arrayOf("*/*"))
+                                    }
+                                },
+                                modifier = Modifier.border(1.dp, Color(0xFF263244), RoundedCornerShape(16.dp)),
+                                shape = RoundedCornerShape(16.dp),
+                                containerColor = Color(0xFF161F2E),
+                                contentColor = primaryAccent,
+                                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp),
+                                icon = { Icon(Icons.Default.InsertDriveFile, contentDescription = null) },
+                                text = { Text(stringResource(R.string.cloud_send_files), fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                            )
+
+                            ExtendedFloatingActionButton(
+                                onClick = {
+                                    isFabExpanded = false
+                                    val targetEmail = activeAccountEmail ?: multiAccounts.firstOrNull()?.email
+                                    if (targetEmail.isNullOrBlank()) {
+                                        context.showSafeToast("Nenhuma conta Google Drive conectada.")
+                                    } else {
+                                        openFolderLauncher.launch(null)
+                                    }
+                                },
+                                modifier = Modifier.border(1.dp, Color(0xFF263244), RoundedCornerShape(16.dp)),
+                                shape = RoundedCornerShape(16.dp),
+                                containerColor = Color(0xFF161F2E),
+                                contentColor = primaryAccent,
+                                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp),
+                                icon = { Icon(Icons.Default.Folder, contentDescription = null) },
+                                text = { Text("Enviar Pasta", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                            )
+
+                            ExtendedFloatingActionButton(
+                                onClick = {
+                                    isFabExpanded = false
+                                    val targetEmail = activeAccountEmail ?: multiAccounts.firstOrNull()?.email
+                                    if (targetEmail.isNullOrBlank()) {
+                                        context.showSafeToast("Nenhuma conta Google Drive conectada.")
+                                    } else {
+                                        showBackupSelectionDialog = true
+                                    }
+                                },
+                                modifier = Modifier.border(1.dp, Color(0xFF263244), RoundedCornerShape(16.dp)),
+                                shape = RoundedCornerShape(16.dp),
+                                containerColor = Color(0xFF161F2E),
+                                contentColor = primaryAccent,
+                                elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 6.dp),
+                                icon = { Icon(Icons.Default.Inventory2, contentDescription = null) },
+                                text = { Text("Enviar Backup Existente", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                            )
+                        }
+                    }
+
+                    FloatingActionButton(
+                        onClick = { isFabExpanded = !isFabExpanded },
+                        containerColor = primaryAccent,
+                        contentColor = Color.White,
+                        shape = CircleShape
+                    ) {
+                        Icon(
+                            imageVector = if (isFabExpanded) Icons.Default.Close else Icons.Default.CloudUpload,
+                            contentDescription = stringResource(R.string.cloud_gdrive_actions)
+                        )
                     }
                 }
             }
@@ -2432,10 +2460,15 @@ fun CloudSyncCenterScreen(
 
     if (selectedCategoryModal != null) {
         val catName = selectedCategoryModal!!
-        val matchingBackups = remember(labelBackups, catName) {
-            labelBackups.filter { file ->
-                val s = CloudBackupCategoryHelper.inspectRemoteFile(file, context)
+        val matchingBackups = remember(labelBackups, catName, remoteCategorySummaries) {
+            val filtered = labelBackups.filter { file ->
+                val s = remoteCategorySummaries[file.id] ?: CloudBackupCategoryHelper.inspectRemoteFile(file, context)
                 s.containsCategory(catName)
+            }
+            if (filtered.isEmpty() && labelBackups.isNotEmpty()) {
+                labelBackups
+            } else {
+                filtered
             }
         }
 

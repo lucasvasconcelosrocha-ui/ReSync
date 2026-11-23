@@ -1,20 +1,20 @@
 {
-  "versionCode": 45,
-  "versionName": "1.0.45",
-  "tag": "v1.0.45",
-  "apkName": "ReSync-v1.0.45.apk",
-  "releaseNotes": "🚀 **O QUE HÁ DE NOVO NESTA VERSÃO (v1.0.45) / WHAT'S NEW IN THIS VERSION:**\n\n📊 **Fonte Única de Verdade e Enum Fixo de Armazenamento**\n• Eliminação de 100% de comparações de strings traduzidas (`Imagens`, `Documentos`, `Outros`) na tela de Armazenamento.\n• Tipagem estrita com enum `StorageCategory` (`APPS`, `IMAGES`, `VIDEOS`, `AUDIO`, `DOCUMENTS`, `SYSTEM`, `OTHER`) garantindo exibição correta dos cards em qualquer idioma.\n\n🔍 **Scanner Real com MediaStore e Fallback em /storage/emulated/0**\n• Medição precisa e instantânea dos bytes reais de imagens, vídeos, áudio, documentos e outros arquivos.\n• Desduplicação por caminho absoluto e suporte completo para extensões de documentos e arquivos gerais.\n\n⚡ **Sincronização Dinâmica em Tempo Real e Correção de Textos**\n• Cálculo dinâmico do percentual de uso e barra de progresso visual de cada card sincronizada com os dados reais.\n• Ao carregar arquivos sob demanda em qualquer categoria, atualização instantânea do total do card caso a contagem seja maior ou estivesse zerada.\n• Tradução completa dos textos restantes: 'Ver detalhes' / 'Ocultar', 'Maior uso' e 'Fotos'.",
+  "versionCode": 46,
+  "versionName": "1.0.46",
+  "tag": "v1.0.46",
+  "apkName": "ReSync-v1.0.46.apk",
+  "releaseNotes": "🚀 **O QUE HÁ DE NOVO NESTA VERSÃO (v1.0.46) / WHAT'S NEW IN THIS VERSION:**\n\n☁️ **FAB de Upload com Posicionamento Perfeito e Auto-Hide no Scroll**\n• Remoção do padding inferior duplicado no FAB da aba Nuvem: agora fixado no canto inferior direito (`end = 16.dp`, `bottom = 16.dp`).\n• Auto-hide inteligente no scroll: animação suave fade/scale out ao rolar para baixo e fade/scale in ao rolar para cima ou no topo; permanece expandido e visível durante interação.\n\n🔤 **Texto Completo nos Botões de Sincronização e Verificação**\n• Ajuste de espaçamento horizontal, tamanho de fonte (11sp) e ícones nos botões 'SINCRONIZAR AGORA' e 'VERIFICAR', eliminando cortes de texto.\n\n🏷️ **Componentes da Etiqueta em Tempo Real com Leitura da Nuvem e Room**\n• Reconhecimento dinâmico dos backups da nuvem via banco de dados Room, companion sidecars (.index.json) e inspeção sob demanda.\n• Contagem precisa de partições ativas e restauração seletiva direta via Google Drive com fallback automático.\n\n🎨 **Identidade Visual e Cores dos Módulos de Dados no Dashboard**\n• Aplicação das cores originais temáticas nos ícones e caixas dos 8 módulos de dados da tela inicial (Dashboard) sem alteração na estrutura.",
   "functions": [
-    "StorageCategory enum typed metrics and expandable panels",
-    "MediaStore size queries with rapid filesystem scan fallback on /storage/emulated/0",
-    "Real-time dynamic category percentage and progress bar width synchronization",
-    "On-demand file query byte sync updating card total sizes in real time",
-    "Fully localized storage screen strings for English and Portuguese"
+    "Refined Cloud upload FAB position and smooth scroll auto-hide animation",
+    "Optimized button typography and padding preventing text truncation on cloud action buttons",
+    "Real-time Cloud Label Components summary reading Room cache and remote manifest index",
+    "Selective category restore from Google Drive with robust backup container matching",
+    "Themed neon icon colors and subtle background tints for Dashboard Data Modules"
   ],
   "fixes": [
-    "Fixed Images, Documents, and Other cards displaying 0 B and 0.0% in English",
-    "Eliminated localized string comparison failures in storage category resolution",
-    "Corrected hardcoded strings 'Ver detalhes', 'Maior uso', and 'Fotos' on Storage screen",
-    "Synchronized card progress bar width with actual usage percentage"
+    "Fixed cloud upload FAB floating too high due to duplicate bottom insets",
+    "Fixed button label truncation on 'SINCRONIZAR AGORA' and 'VERIFICAR'",
+    "Fixed Label Components displaying 0 partitions for remote backups on Google Drive",
+    "Restored themed icon colors for the 8 Data Module cards on Dashboard"
   ]
 }

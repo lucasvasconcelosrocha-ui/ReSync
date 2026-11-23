@@ -42,6 +42,7 @@ import com.resync.app.data.room.AppRoomDatabase
 import com.resync.app.data.room.CloudAccount as RoomCloudAccount
 import java.io.File
 import java.util.concurrent.ConcurrentLinkedQueue
+import com.resync.app.cloud.gdrive.CloudBackupCategoryHelper
 
 enum class GoogleDriveState {
     NOT_CONNECTED,   // ⚪ Não conectado
@@ -85,6 +86,20 @@ sealed class ManifestInspectState {
     data class Ready(val manifest: BackupManifest, val fileToRestore: File?) : ManifestInspectState()
     data class Error(val message: String, val canRetry: Boolean = true) : ManifestInspectState()
 }
+
+data class LabelComponentsSummary(
+    val appsCount: Int = 0,
+    val smsCount: Int = 0,
+    val callsCount: Int = 0,
+    val foldersCount: Int = 0,
+    val bluetoothCount: Int = 0,
+    val dnsCount: Int = 0,
+    val wifiCount: Int = 0,
+    val contactsCount: Int = 0,
+    val activePartitionsCount: Int = 0,
+    val totalBackupsCount: Int = 0,
+    val totalSizeBytes: Long = 0L
+)
 
 sealed interface IndividualRestoreUiState {
     object Idle : IndividualRestoreUiState
@@ -190,11 +205,18 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     )
     val selectedViewLabel: StateFlow<String> = _selectedViewLabel.asStateFlow()
 
+    private val _cloudLabelComponentSummary = MutableStateFlow(LabelComponentsSummary())
+    val cloudLabelComponentSummary: StateFlow<LabelComponentsSummary> = _cloudLabelComponentSummary.asStateFlow()
+
+    private val _remoteCategorySummaries = MutableStateFlow<Map<String, CloudBackupCategoryHelper.CategorySummary>>(emptyMap())
+    val remoteCategorySummaries: StateFlow<Map<String, CloudBackupCategoryHelper.CategorySummary>> = _remoteCategorySummaries.asStateFlow()
+
     fun setSelectedViewLabel(label: String) {
         val trimmed = label.trim()
         if (trimmed.isNotBlank()) {
             _selectedViewLabel.value = trimmed
             prefs.edit().putString("selected_view_label", trimmed).apply()
+            loadCloudLabelComponentSummary(trimmed)
         }
     }
 
@@ -208,6 +230,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val updated = (_savedDeviceLabels.value + trimmed).distinct().sorted()
             _savedDeviceLabels.value = updated
             prefs.edit().putStringSet("saved_device_labels_set", updated.toSet()).apply()
+            loadCloudLabelComponentSummary(trimmed)
         }
     }
 
@@ -223,6 +246,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 _customDeviceLabel.value = trimmed
                 prefs.edit().putString("custom_device_label", trimmed).apply()
             }
+            loadCloudLabelComponentSummary(trimmed)
         }
     }
 
@@ -272,6 +296,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (patchRes.isSuccess) updatedCount++
             }
 
+            loadCloudLabelComponentSummary(newTrimmed)
             refreshActiveAccountData(activeEmail, isManual = true)
             withContext(Dispatchers.Main) {
                 onFinished(updatedCount)
@@ -298,7 +323,126 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     _customDeviceLabel.value = fallback
                     prefs.edit().putString("custom_device_label", fallback).apply()
                 }
+                loadCloudLabelComponentSummary(fallback)
                 onFinished(deletedCount)
+            }
+        }
+    }
+
+    fun loadCloudLabelComponentSummary(label: String? = null, targetEmail: String? = null) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val effectiveLabel = (label ?: _selectedViewLabel.value.ifBlank { _customDeviceLabel.value }).trim()
+            val remoteList = _remoteDriveBackups.value
+            val matchingFiles = if (effectiveLabel.isBlank()) {
+                remoteList
+            } else {
+                remoteList.filter { file ->
+                    val prop = file.appProperties["deviceLabel"]?.trim()
+                    if (!prop.isNullOrBlank()) {
+                        prop.equals(effectiveLabel, ignoreCase = true)
+                    } else {
+                        file.name.contains(effectiveLabel, ignoreCase = true)
+                    }
+                }
+            }
+
+            if (matchingFiles.isEmpty()) {
+                _cloudLabelComponentSummary.value = LabelComponentsSummary()
+                _remoteCategorySummaries.value = emptyMap()
+                return@launch
+            }
+
+            val roomDao = AppRoomDatabase.getInstance(context).backupIndexDao()
+            val summariesMap = mutableMapOf<String, CloudBackupCategoryHelper.CategorySummary>()
+
+            for (file in matchingFiles) {
+                val cached = try {
+                    roomDao.getByDriveFileId(file.id) ?: roomDao.getByTitle(file.name)
+                } catch (_: Throwable) { null }
+
+                if (cached != null) {
+                    val manifest = CloudBackupCategoryHelper.decompressManifestGzipBase64(cached.manifestGzipBase64)
+                    if (manifest != null && manifest.items.isNotEmpty()) {
+                        summariesMap[file.id] = CloudBackupCategoryHelper.fromManifest(manifest)
+                        continue
+                    }
+                }
+
+                val summary = CloudBackupCategoryHelper.inspectRemoteFile(file, context)
+                summariesMap[file.id] = summary
+            }
+
+            fun computeCombined(map: Map<String, CloudBackupCategoryHelper.CategorySummary>): LabelComponentsSummary {
+                val apps = map.values.sumOf { if (it.hasApps) it.countApps.coerceAtLeast(1) else 0 }
+                val sms = map.values.sumOf { if (it.hasSms) it.countSms.coerceAtLeast(1) else 0 }
+                val calls = map.values.sumOf { if (it.hasCalls) it.countCalls.coerceAtLeast(1) else 0 }
+                val folders = map.values.sumOf { if (it.hasFolders) it.countFolders.coerceAtLeast(1) else 0 }
+                val bt = map.values.sumOf { if (it.hasBluetooth) it.countBluetooth.coerceAtLeast(1) else 0 }
+                val dns = map.values.sumOf { if (it.hasDns) it.countDns.coerceAtLeast(1) else 0 }
+                val wifi = map.values.sumOf { if (it.hasWifi) it.countWifi.coerceAtLeast(1) else 0 }
+                val contacts = map.values.sumOf { if (it.hasContacts) it.countContacts.coerceAtLeast(1) else 0 }
+
+                var activePartitions = 0
+                if (apps > 0) activePartitions++
+                if (sms > 0) activePartitions++
+                if (calls > 0) activePartitions++
+                if (folders > 0) activePartitions++
+                if (bt > 0) activePartitions++
+                if (dns > 0) activePartitions++
+                if (wifi > 0) activePartitions++
+                if (contacts > 0) activePartitions++
+
+                return LabelComponentsSummary(
+                    appsCount = apps,
+                    smsCount = sms,
+                    callsCount = calls,
+                    foldersCount = folders,
+                    bluetoothCount = bt,
+                    dnsCount = dns,
+                    wifiCount = wifi,
+                    contactsCount = contacts,
+                    activePartitionsCount = activePartitions,
+                    totalBackupsCount = matchingFiles.size,
+                    totalSizeBytes = matchingFiles.sumOf { it.sizeBytes }
+                )
+            }
+
+            _remoteCategorySummaries.value = summariesMap
+            _cloudLabelComponentSummary.value = computeCombined(summariesMap)
+
+            val email = targetEmail ?: _activeAccountEmail.value
+            if (!email.isNullOrBlank()) {
+                var updatedAny = false
+                for (file in matchingFiles) {
+                    val currentSummary = summariesMap[file.id]
+                    val isArchiveContainer = file.name.endsWith(".resync", ignoreCase = true) ||
+                            file.name.endsWith(".svb", ignoreCase = true) ||
+                            file.name.endsWith(".zip", ignoreCase = true) ||
+                            file.sizeBytes > 5L * 1024 * 1024
+
+                    if (isArchiveContainer && (currentSummary == null || (currentSummary.hasApps && currentSummary.countApps <= 1))) {
+                        try {
+                            val inspectRes = backupIndexManager.inspectDriveBackup(
+                                fileId = file.id,
+                                expectedName = file.name,
+                                expectedSizeBytes = file.sizeBytes,
+                                accountEmail = email
+                            )
+                            if (inspectRes.isSuccess) {
+                                val manifest = inspectRes.getOrNull()
+                                if (manifest != null && manifest.items.isNotEmpty()) {
+                                    val detailed = CloudBackupCategoryHelper.fromManifest(manifest)
+                                    summariesMap[file.id] = detailed
+                                    updatedAny = true
+                                }
+                            }
+                        } catch (_: Throwable) {}
+                    }
+                }
+                if (updatedAny) {
+                    _remoteCategorySummaries.value = summariesMap
+                    _cloudLabelComponentSummary.value = computeCombined(summariesMap)
+                }
             }
         }
     }
@@ -2147,6 +2291,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         )
                     }
                     preloadBackupIndexes(remoteDummyRecords, email)
+                    loadCloudLabelComponentSummary(targetEmail = email)
                 } catch (t: Throwable) {
                     Log.w("MainViewModel", "Erro ao listar backups para $email: ${t.message}")
                     if (_remoteBackupsState.value !is RemoteBackupsState.Loaded) {
@@ -2204,6 +2349,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     val b = bRes.getOrThrow()
                     _remoteDriveBackups.value = b
                     _remoteBackupsState.value = RemoteBackupsState.Loaded(b)
+                    loadCloudLabelComponentSummary()
                 }
             } finally {
                 withContext(NonCancellable + Dispatchers.Main.immediate) {

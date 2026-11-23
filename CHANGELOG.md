@@ -4,6 +4,25 @@ Todas as mudanças notáveis deste projeto são documentadas neste arquivo.
 
 ---
 
+## [1.0.46] - 2026-11-23
+
+### ☁️ FAB de Upload com Posicionamento Perfeito e Auto-Hide no Scroll
+- **Eliminação de Insets Duplicados:** Removido o padding inferior duplicado no FAB da aba Nuvem (`CloudSyncCenterScreen.kt`), alinhando-o perfeitamente ao canto inferior direito com `end = 16.dp` e `bottom = 16.dp`.
+- **Auto-Hide Inteligente no Scroll:** Integração com `overviewScrollState` via animação suave de fade e scale out ao rolar para baixo, e fade/scale in ao rolar para cima ou no topo (`offset <= 20`). O botão permanece visível enquanto o menu de upload estiver aberto/expandido.
+
+### 🔤 Otimização Tipográfica dos Botões de Sincronização
+- **Eliminação de Cortes de Texto:** Ajuste fino do `contentPadding` horizontal (`8.dp`), tamanho de ícone (`16.dp`), espaçamento (`4.dp`) e fonte (`11.sp` com `softWrap = false` e `maxLines = 1`) nos botões "SINCRONIZAR AGORA" e "VERIFICAR", garantindo que nenhum caractere seja cortado.
+- **Tradução Durante Sincronização:** Uso de `R.string.dashboard_syncing` para manter coerência internacional com o restante do app.
+
+### 🏷️ Leitura em Tempo Real dos Componentes da Etiqueta na Nuvem
+- **Integração com Room e Manifestos Remotos:** `CloudBackupCategoryHelper` e `MainViewModel` agora consultam o cache do Room (`BackupIndexDao`) e inspecionam o manifesto de containers (.resync, .svb) para computar contagens exatas das 8 partições remotas.
+- **Restauração Seletiva Confiável:** Ao tocar em qualquer partição de "Componentes da Etiqueta", se houver um único backup remoto correspondente ou containers gerais, a tela `RestoreSelectionScreen` é aberta diretamente com fonte `RestoreSource.DRIVE` e a categoria pré-selecionada.
+
+### 🎨 Cores dos Ícones nos Módulos de Dados (Dashboard)
+- **Cores Temáticas nos Cards Bento:** Aplicação cirúrgica das cores temáticas oficiais (`AccentElectricCyan`, `AccentEmeraldGreen`, `AccentSunsetOrange`, `AccentNeonPurple`, `StatusWarning`, `AccentNeonBlue`, `AccentCyberPurple`) nos ícones e caixas dos 8 módulos de dados da tela inicial, mantendo intacta toda a estrutura e identidade visual Bento OLED.
+
+---
+
 ## [1.0.45] - 2026-11-22
 
 ### 📊 Fonte Única de Verdade e Enum Fixo para Armazenamento

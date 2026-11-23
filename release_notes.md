@@ -1,3 +1,47 @@
+# 🚀 ReSync v1.0.46 Release Notes
+
+---
+
+## 🇧🇷 Português
+
+### 🚀 O Que Há de Novo na Versão 1.0.46:
+
+#### 1. ☁️ FAB de Upload com Posicionamento Perfeito e Auto-Hide no Scroll
+- **Eliminação de Insets Duplicados:** Corrigido o posicionamento do FAB azul de upload na aba Nuvem (`CloudSyncCenterScreen.kt`), alinhado exatamente ao canto inferior direito com `end = 16.dp` e `bottom = 16.dp`.
+- **Auto-Hide Suave no Scroll:** O FAB desaparece com animação suave de fade e escala ao rolar a página para baixo e reaparece ao rolar para cima ou no topo; permanece expandido e visível durante interação.
+
+#### 2. 🔤 Texto Completo nos Botões de Ação da Nuvem
+- **Eliminação de Cortes:** Ajuste fino de padding horizontal, espaçamentos e tamanho tipográfico (11sp) em "SINCRONIZAR AGORA" e "VERIFICAR", impedindo que qualquer letra seja cortada em telas compactas.
+
+#### 3. 🏷️ Leitura em Tempo Real dos Componentes da Etiqueta
+- **Reconhecimento Remoto Preciso:** Leitura de metadados, Room cache e manifestos de containers na nuvem pelo `CloudBackupCategoryHelper` e `MainViewModel`, garantindo que os cards de partições exibam os números reais de itens.
+- **Restauração Seletiva no Drive:** Clique em qualquer partição abre diretamente o seletor de restauração no Drive com a categoria correta pré-selecionada.
+
+#### 4. 🎨 Cores dos Ícones nos Módulos de Dados (Dashboard)
+- **Cores Oficiais Temáticas:** Os 8 cards de módulos de dados do Início agora exibem as cores correspondentes (Ciano Elétrico, Verde Esmeralda, Laranja Sunset, Roxo Neon, Amarelo Aviso, Azul Neon e Roxo Cibernético) no ícone e caixa de fundo, mantendo a estrutura original Bento OLED.
+
+---
+
+## 🇺🇸 English
+
+### 🚀 What's New in Version 1.0.46:
+
+#### 1. ☁️ Refined Cloud Upload FAB & Scroll Auto-Hide
+- **Removed Duplicate Insets:** The Cloud screen FAB is now cleanly anchored to the bottom-end corner with `end = 16.dp` and `bottom = 16.dp`.
+- **Smooth Scroll Auto-Hide:** Automatically scales and fades out when scrolling down and reappears when scrolling up or at the top; stays visible while menu actions are open.
+
+#### 2. 🔤 Clean Typography on Cloud Action Buttons
+- **Prevented Button Text Truncation:** Tuned padding, font sizing (11sp), and icon spacing on "SYNC NOW" and "VERIFY" buttons to guarantee no letters get cut off.
+
+#### 3. 🏷️ Real-Time Cloud Label Components
+- **Direct Cloud & Cache Sync:** Category partition counters in Label Components now inspect Room cache and remote manifest archives in real-time.
+- **Drive Selective Restore:** Tapping a partition launches selective restore from Google Drive with the category pre-selected.
+
+#### 4. 🎨 Themed Icons for Dashboard Data Modules
+- **Consistent Visual Identity:** Restored official accent colors for all 8 Data Module cards on the Dashboard while preserving original layout and OLED theme.
+
+---
+
 # 🚀 ReSync v1.0.45 Release Notes
 
 ---

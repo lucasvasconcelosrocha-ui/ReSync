@@ -37,14 +37,14 @@ object CloudBackupCategoryHelper {
     ) {
         fun containsCategory(categoryKey: String): Boolean {
             return when (categoryKey.lowercase()) {
-                "apps", "aplicativos" -> hasApps
-                "sms", "mensagens", "messages" -> hasSms
-                "calls", "chamadas" -> hasCalls
-                "folders", "pastas", "files" -> hasFolders
-                "bluetooth" -> hasBluetooth
-                "dns" -> hasDns
-                "wifi", "wi-fi" -> hasWifi
-                "contacts", "contatos" -> hasContacts
+                "apps", "aplicativos", "applications", "app" -> hasApps
+                "sms", "mensagens", "messages", "mensagem", "message" -> hasSms
+                "calls", "chamadas", "call", "chamada", "call_log", "calllog" -> hasCalls
+                "folders", "pastas", "files", "folder", "pasta", "arquivos", "storage" -> hasFolders
+                "bluetooth", "bt" -> hasBluetooth
+                "dns", "dns_config" -> hasDns
+                "wifi", "wi-fi", "wireless", "wifi_config" -> hasWifi
+                "contacts", "contatos", "contact", "contato" -> hasContacts
                 else -> false
             }
         }
@@ -102,7 +102,7 @@ object CloudBackupCategoryHelper {
         return summary.toAppProperties(currentLabel, backupTitle ?: localFile.nameWithoutExtension)
     }
 
-    private suspend fun extractCategorySummaryFromLocalFile(localFile: File): CategorySummary {
+    suspend fun extractCategorySummaryFromLocalFile(localFile: File): CategorySummary {
         // 1. Try reading from companion sidecar index file (.index.json)
         val baseName = localFile.nameWithoutExtension
         val sidecar = File(localFile.parentFile, "$baseName.index.json")
@@ -131,10 +131,10 @@ object CloudBackupCategoryHelper {
         } catch (_: Throwable) {}
 
         // 3. Fallback based on file name heuristics
-        return fromFilename(localFile.name)
+        return fromFilename(localFile.name, localFile.length())
     }
 
-    private fun fromManifest(manifest: BackupManifest): CategorySummary {
+    fun fromManifest(manifest: BackupManifest): CategorySummary {
         val items = manifest.items
         val appPackages = items.filter { it.type in listOf(BackupItemType.APP_APK, BackupItemType.APP_SPLIT_APKS, BackupItemType.APP_DATA) }
             .mapNotNull { it.metadata["packageName"] ?: it.archiveEntryPath.substringAfter("apps/").substringBefore("/").takeIf { p -> p.isNotBlank() } }
@@ -169,11 +169,12 @@ object CloudBackupCategoryHelper {
         )
     }
 
-    private fun fromFilename(fileName: String): CategorySummary {
+    fun fromFilename(fileName: String, sizeBytes: Long = 0L): CategorySummary {
         val nameLower = fileName.lowercase()
-        val isFullPackage = nameLower.endsWith(".resync") || nameLower.endsWith(".svb") ||
+        val isContainer = nameLower.endsWith(".resync") || nameLower.endsWith(".svb") ||
                 nameLower.contains("backup") || nameLower.contains("completo") ||
-                nameLower.contains("rapido") || nameLower.contains("quick")
+                nameLower.contains("rapido") || nameLower.contains("quick") ||
+                sizeBytes > 5L * 1024 * 1024 // containers are typically large archives
 
         val isApp = nameLower.endsWith(".apk") || nameLower.contains("app")
         val isSms = nameLower.contains("sms") || nameLower.contains("message") || nameLower.contains("mensag")
@@ -186,7 +187,7 @@ object CloudBackupCategoryHelper {
 
         val hasAnySpecific = isApp || isSms || isCall || isFolder || isBt || isDns || isWifi || isContacts
 
-        if (isFullPackage && !hasAnySpecific) {
+        if ((isContainer && (!hasAnySpecific || nameLower.endsWith(".resync") || nameLower.endsWith(".svb"))) || sizeBytes > 5L * 1024 * 1024) {
             // Full comprehensive package contains all 8 categories
             return CategorySummary(
                 hasApps = true, countApps = 1,
@@ -201,29 +202,44 @@ object CloudBackupCategoryHelper {
         }
 
         return CategorySummary(
-            hasApps = isApp || (isFullPackage && !hasAnySpecific),
-            countApps = if (isApp || (isFullPackage && !hasAnySpecific)) 1 else 0,
-            hasSms = isSms || (isFullPackage && !hasAnySpecific),
-            countSms = if (isSms || (isFullPackage && !hasAnySpecific)) 1 else 0,
-            hasCalls = isCall || (isFullPackage && !hasAnySpecific),
-            countCalls = if (isCall || (isFullPackage && !hasAnySpecific)) 1 else 0,
-            hasFolders = isFolder || (isFullPackage && !hasAnySpecific),
-            countFolders = if (isFolder || (isFullPackage && !hasAnySpecific)) 1 else 0,
-            hasBluetooth = isBt || (isFullPackage && !hasAnySpecific),
-            countBluetooth = if (isBt || (isFullPackage && !hasAnySpecific)) 1 else 0,
-            hasDns = isDns || (isFullPackage && !hasAnySpecific),
-            countDns = if (isDns || (isFullPackage && !hasAnySpecific)) 1 else 0,
-            hasWifi = isWifi || (isFullPackage && !hasAnySpecific),
-            countWifi = if (isWifi || (isFullPackage && !hasAnySpecific)) 1 else 0,
-            hasContacts = isContacts || (isFullPackage && !hasAnySpecific),
-            countContacts = if (isContacts || (isFullPackage && !hasAnySpecific)) 1 else 0
+            hasApps = isApp || (isContainer && !hasAnySpecific),
+            countApps = if (isApp || (isContainer && !hasAnySpecific)) 1 else 0,
+            hasSms = isSms || (isContainer && !hasAnySpecific),
+            countSms = if (isSms || (isContainer && !hasAnySpecific)) 1 else 0,
+            hasCalls = isCall || (isContainer && !hasAnySpecific),
+            countCalls = if (isCall || (isContainer && !hasAnySpecific)) 1 else 0,
+            hasFolders = isFolder || (isContainer && !hasAnySpecific),
+            countFolders = if (isFolder || (isContainer && !hasAnySpecific)) 1 else 0,
+            hasBluetooth = isBt || (isContainer && !hasAnySpecific),
+            countBluetooth = if (isBt || (isContainer && !hasAnySpecific)) 1 else 0,
+            hasDns = isDns || (isContainer && !hasAnySpecific),
+            countDns = if (isDns || (isContainer && !hasAnySpecific)) 1 else 0,
+            hasWifi = isWifi || (isContainer && !hasAnySpecific),
+            countWifi = if (isWifi || (isContainer && !hasAnySpecific)) 1 else 0,
+            hasContacts = isContacts || (isContainer && !hasAnySpecific),
+            countContacts = if (isContacts || (isContainer && !hasAnySpecific)) 1 else 0
         )
+    }
+
+    fun decompressManifestGzipBase64(compressedBase64: String): BackupManifest? {
+        return try {
+            val bytes = android.util.Base64.decode(compressedBase64, android.util.Base64.DEFAULT)
+            val isGzip = bytes.size >= 2 && bytes[0] == 0x1F.toByte() && bytes[1] == 0x8B.toByte()
+            val jsonStr = if (isGzip) {
+                java.util.zip.GZIPInputStream(java.io.ByteArrayInputStream(bytes)).bufferedReader(Charsets.UTF_8).use { it.readText() }
+            } else {
+                String(bytes, Charsets.UTF_8)
+            }
+            gson.fromJson(jsonStr, BackupManifest::class.java)
+        } catch (_: Throwable) {
+            null
+        }
     }
 
     /**
      * Inspects a remote file retrieved from Google Drive.
-     * Uses local companion index if mirrored locally, then `appProperties` if present;
-     * falls back to full package or filename analysis.
+     * Uses local companion index if mirrored locally, then Room database cache,
+     * then `appProperties` if present; falls back to full package or filename analysis.
      */
     fun inspectRemoteFile(file: DriveFileMetadata, context: Context? = null): CategorySummary {
         // 0. If local mirror with companion index exists on device, extract actual detailed count
@@ -250,6 +266,20 @@ object CloudBackupCategoryHelper {
                         if (manifest?.items != null && manifest.items.isNotEmpty()) {
                             return fromManifest(manifest)
                         }
+                    }
+                }
+            } catch (_: Throwable) {}
+
+            // Check Room cache if index was saved previously
+            try {
+                val cached = kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+                    val dao = com.resync.app.data.room.AppRoomDatabase.getInstance(context).backupIndexDao()
+                    dao.getByDriveFileId(file.id) ?: dao.getByTitle(file.name)
+                }
+                if (cached != null) {
+                    val manifest = decompressManifestGzipBase64(cached.manifestGzipBase64)
+                    if (manifest != null && manifest.items.isNotEmpty()) {
+                        return fromManifest(manifest)
                     }
                 }
             } catch (_: Throwable) {}
@@ -300,6 +330,6 @@ object CloudBackupCategoryHelper {
         }
 
         // Fallback to filename & heuristics for older backups
-        return fromFilename(file.name)
+        return fromFilename(file.name, file.sizeBytes)
     }
 }

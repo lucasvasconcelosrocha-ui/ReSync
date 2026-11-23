@@ -1360,6 +1360,7 @@ fun DashboardScreen(
                     subtitle = stringResource(R.string.dashboard_apps_installed_count, appsCount),
                     badgeText = "$userAppsCount OK",
                     badgeColor = Color(0xFF10B981),
+                    iconTint = AccentElectricCyan,
                     onClick = onNavigateToApps
                 )
                 DataModuleBentoCard(
@@ -1369,6 +1370,7 @@ fun DashboardScreen(
                     subtitle = stringResource(R.string.dashboard_section_sms_mms),
                     badgeText = "3.4k",
                     badgeColor = Color(0xFF38BDF8),
+                    iconTint = AccentElectricCyan,
                     onClick = { onNavigateToCategory("messages") }
                 )
             }
@@ -1387,6 +1389,7 @@ fun DashboardScreen(
                     subtitle = stringResource(R.string.dashboard_section_history),
                     badgeText = "980",
                     badgeColor = Color(0xFF10B981),
+                    iconTint = AccentEmeraldGreen,
                     onClick = { onNavigateToCategory("calls") }
                 )
                 DataModuleBentoCard(
@@ -1396,6 +1399,7 @@ fun DashboardScreen(
                     subtitle = stringResource(R.string.dashboard_section_vcf),
                     badgeText = "842",
                     badgeColor = TextSecondary,
+                    iconTint = AccentSunsetOrange,
                     onClick = { onNavigateToCategory("contacts") }
                 )
             }
@@ -1414,6 +1418,7 @@ fun DashboardScreen(
                     subtitle = stringResource(R.string.dashboard_section_storage),
                     badgeText = "Pastas",
                     badgeColor = Color(0xFF38BDF8),
+                    iconTint = AccentNeonPurple,
                     onClick = onNavigateToFolders
                 )
                 DataModuleBentoCard(
@@ -1423,6 +1428,7 @@ fun DashboardScreen(
                     subtitle = stringResource(R.string.dashboard_section_saved_passwords),
                     badgeText = "Redes",
                     badgeColor = Color(0xFF10B981),
+                    iconTint = StatusWarning,
                     onClick = { onNavigateToCategory("wifi") }
                 )
             }
@@ -1441,6 +1447,7 @@ fun DashboardScreen(
                     subtitle = stringResource(R.string.dashboard_section_paired_keys),
                     badgeText = "18 DEV",
                     badgeColor = Color(0xFF38BDF8),
+                    iconTint = AccentNeonBlue,
                     onClick = { onNavigateToCategory("bluetooth") }
                 )
                 DataModuleBentoCard(
@@ -1450,6 +1457,7 @@ fun DashboardScreen(
                     subtitle = stringResource(R.string.dashboard_section_doh_tls),
                     badgeText = "ATIVO",
                     badgeColor = Color(0xFF10B981),
+                    iconTint = AccentCyberPurple,
                     onClick = { onNavigateToCategory("dns") }
                 )
             }
@@ -2298,6 +2306,8 @@ private fun DataModuleBentoCard(
     subtitle: String,
     badgeText: String,
     badgeColor: Color,
+    iconTint: Color = Color.White,
+    iconBgColor: Color = if (iconTint == Color.White) Color(0xFF1A2230) else iconTint.copy(alpha = 0.12f),
     onClick: () -> Unit
 ) {
     Surface(
@@ -2324,13 +2334,13 @@ private fun DataModuleBentoCard(
                     modifier = Modifier
                         .size(34.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFF1A2230)),
+                        .background(iconBgColor),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = icon,
                         contentDescription = title,
-                        tint = Color.White,
+                        tint = iconTint,
                         modifier = Modifier.size(18.dp)
                     )
                 }
