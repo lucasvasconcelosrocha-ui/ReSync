@@ -28,7 +28,7 @@
     <string name="account_language">Idioma</string>
     <string name="account_link_account">Vincular conta</string>
     <string name="account_logger_desc">Registro de eventos, diagnósticos e histórico de operações</string>
-    <string name="account_logger_title">Logger</string>
+    <string name="account_logger_title">Registros</string>
     <string name="account_logout">Sair da conta</string>
     <string name="account_logout_confirm_msg">Deseja desconectar a conta %1$s do Google Drive?</string>
     <string name="account_logout_confirm_title">Sair da conta?</string>
@@ -69,14 +69,14 @@
     <string name="active_flow_realtime">Fluxo em tempo real</string>
     <string name="active_not_configured">Não configurado</string>
     <string name="active_options">Opções</string>
-    <string name="active_pipeline_title">Pipeline Atômico de Execução</string>
+    <string name="active_pipeline_title">Etapas do processo</string>
     <string name="active_protected_background">Segundo Plano Protegido</string>
-    <string name="active_protected_background_desc">Você pode sair do aplicativo com segurança. O serviço em primeiro plano (Foreground Service) continuará gravando com wakelock e prioridade Root via KernelSU.</string>
+    <string name="active_protected_background_desc">Você pode sair do aplicativo com segurança. O processo continuará em segundo plano com prioridade do sistema.</string>
     <string name="active_queued">Na fila</string>
     <string name="active_review">Revisão</string>
     <string name="active_status_active">Ativo</string>
     <string name="active_step1_desc">Preservados contextos uid:gid, capabilities e xattr</string>
-    <string name="active_step1_title">1. Snapshots &amp; Metadados SELinux</string>
+    <string name="active_step1_title">1. Preparação de dados e permissões</string>
     <string name="active_step2_active">%1$d%% ATIVO</string>
     <string name="active_step2_desc">Executando checkpoint SQLite WAL com flock</string>
     <string name="active_step2_title">2. Dump de Bancos &amp; tar.zst</string>
@@ -90,12 +90,12 @@
     <string name="active_steps_count">%1$d Etapas</string>
     <string name="active_synced">Sincronizado</string>
     <string name="active_tar_level3">tar.zst (Nível 3)</string>
-    <string name="active_thermal_battery">Térmico / Bateria</string>
+    <string name="active_thermal_battery">Temperatura e bateria</string>
     <string name="active_thermal_high">ELEVADO</string>
     <string name="active_thermal_normal">NORMAL</string>
     <string name="active_uploading_cloud">Enviando Nuvem</string>
     <string name="active_waiting">Aguardando</string>
-    <string name="active_wakelock_active">WAKELOCK ATIVO</string>
+    <string name="active_wakelock_active">Execução contínua</string>
     <string name="add_another_account">Adicionar outra conta</string>
     <string name="all_apps_up_to_date">Todos os aplicativos estão atualizados</string>
     <string name="all_processes_finished">Todos os processos anteriores foram finalizados. O sistema está ocioso e pronto para novas tarefas.</string>
@@ -359,13 +359,13 @@
     <string name="choose_drive_account">Escolha a conta do Google Drive</string>
     <string name="cloud_account_connected_success">Conta Google Drive conectada com sucesso!</string>
     <string name="cloud_account_selection_cancelled">Seleção de conta cancelada.</string>
-    <string name="cloud_active_partitions_count">%1$d partições ativas</string>
+    <string name="cloud_active_partitions_count">%1$d categorias salvas</string>
     <string name="cloud_added_backups_toast">%1$d backup(s) adicionados à fila de envio!</string>
     <string name="cloud_app_closed_last_time">O app fechou da última vez</string>
     <string name="cloud_auth_error_title">Erro de Configuração / Autenticação</string>
     <string name="cloud_auth_failed_desc">Falha ao autenticar com o Google Drive.</string>
     <string name="cloud_auto_sync_active">Sincronização automática ativa</string>
-    <string name="cloud_auto_sync_desc">Execução segura via WorkManager em segundo plano</string>
+    <string name="cloud_auto_sync_desc">Execução automática em segundo plano</string>
     <string name="cloud_auto_sync_title">Sincronização Automática (Gratuita)</string>
     <string name="cloud_available_space">Espaço disponível</string>
     <string name="cloud_check_net_perm">Verifique sua conexão à internet e conceda as permissões necessárias na tela de consentimento.</string>
@@ -457,7 +457,7 @@
     <string name="dashboard_apk_scheme_valid">V2/V3 APK Scheme Válido</string>
     <string name="dashboard_apps_installed_count">%1$d instalados</string>
     <string name="dashboard_cloud_backups">Backups Nuvem</string>
-    <string name="dashboard_data_allocation">Alocação de Dados</string>
+    <string name="dashboard_data_allocation">Uso de armazenamento</string>
     <string name="dashboard_data_modules">MÓDULOS DE DADOS</string>
     <string name="dashboard_diag_prefix">Diagnóstico: %1$s</string>
     <string name="dashboard_disconnected">Desconectado</string>
@@ -468,7 +468,7 @@
     <string name="dashboard_history">Histórico</string>
     <string name="dashboard_history_recorded">%1$d backups gravados com SHA-256</string>
     <string name="dashboard_history_title">Histórico de Backups</string>
-    <string name="dashboard_io_disk">I/O DISCO</string>
+    <string name="dashboard_io_disk">Velocidade de gravação</string>
     <string name="dashboard_key_derivation">Derivação de Chave</string>
     <string name="dashboard_latest_backup">Último Backup</string>
     <string name="dashboard_local_storage_data">Armazenamento Local (/data)</string>
@@ -490,11 +490,11 @@
     <string name="dashboard_remaining">RESTANTE</string>
     <string name="dashboard_requesting_root">Solicitando privilégios de Root...</string>
     <string name="dashboard_restore_batch">Restaurar Lote</string>
-    <string name="dashboard_root_diag_desc">Verificação rigorosa de integridade e sandbox</string>
+    <string name="dashboard_root_diag_desc">Verificação de segurança e integridade do ambiente</string>
     <string name="dashboard_root_diag_title">Diagnóstico Root &amp; Ambiente</string>
     <string name="dashboard_root_pending">Permissão pendente</string>
     <string name="dashboard_root_status">Status de Root</string>
-    <string name="dashboard_root_strict">Modo Estrito (uid 0)</string>
+    <string name="dashboard_root_strict">Acesso total ativo</string>
     <string name="dashboard_root_user_mode">Modo Usuário (sem su)</string>
     <string name="dashboard_sandbox_default">Sandbox (Modo Padrão)</string>
     <string name="dashboard_section_bluetooth">Bluetooth</string>
@@ -823,10 +823,10 @@
     <string name="perm_unrestricted">Sem Restrições</string>
     <string name="permission_required_bluetooth">Permissão de Bluetooth necessária para listar dispositivos.</string>
     <string name="pipeline_step_1_sub">Preservados contextos uid:gid, capabilities e xattr</string>
-    <string name="pipeline_step_1_title">1. Snapshots &amp; Metadados SELinux</string>
+    <string name="pipeline_step_1_title">1. Preparação de dados e permissões</string>
     <string name="pipeline_step_2_sub">Executando checkpoint SQLite WAL com flock</string>
     <string name="pipeline_step_2_title">2. Dump de Bancos &amp; tar.zst</string>
-    <string name="pipeline_step_3_sub">AES-256-GCM derivado de chave segura de hardware</string>
+    <string name="pipeline_step_3_sub">AES-256-GCM derivado com proteção por hardware</string>
     <string name="pipeline_step_3_title">3. Hash SHA-256 &amp; Criptografia</string>
     <string name="pipeline_step_4_sub">Upload em streaming HTTP/2 com checksum MD5</string>
     <string name="pipeline_step_4_title">4. Espelho Google Drive API</string>
@@ -990,7 +990,7 @@
     <string name="settings_current_version">Versão Atual: v%1$s</string>
     <string name="settings_dns_desc">Verificar DNS privado, redes Wi-Fi salvas e consumo de internet</string>
     <string name="settings_dns_title">DNS, Wi-Fi e consumo de dados</string>
-    <string name="settings_flow_invariance">Invariância de Fluxo</string>
+    <string name="settings_flow_invariance">Estabilidade de execução</string>
     <string name="settings_integrity_val">Validação de Integridade</string>
     <string name="settings_language_choose">Escolha o idioma do aplicativo</string>
     <string name="settings_language_desc">Idioma de exibição do aplicativo</string>
@@ -1011,8 +1011,8 @@
     <string name="setup_cloud_backups_ready">Identificamos backups da sua conta Google prontos para restauração neste aparelho:</string>
     <string name="setup_connection_label">Conexão</string>
     <string name="setup_finish">CONCLUIR CONFIGURAÇÃO</string>
-    <string name="setup_flow_invariant_bullet">• O aplicativo respeita a invariância do Kotlin Flow e não fecha durante a alternância de abas.</string>
-    <string name="setup_flow_invariant_bullet2">• O aplicativo respeita a invariância do Kotlin Flow e não fecha durante operações.\n</string>
+    <string name="setup_flow_invariant_bullet">• O aplicativo opera de forma estável e segura durante todas as tarefas.</string>
+    <string name="setup_flow_invariant_bullet2">• O aplicativo opera de forma estável e segura durante todas as tarefas.\n</string>
     <string name="setup_frequency_label">Frequência</string>
     <string name="setup_gdrive_bullet">• Utiliza apenas Google Drive para armazenamento na nuvem.\n</string>
     <string name="setup_grant_all_files">CONCEDER ACESSO A TODOS OS ARQUIVOS</string>
@@ -1090,7 +1090,7 @@
     <string name="status_waiting">Aguardando</string>
     <string name="status_yes">Sim</string>
     <string name="stdout_copied">Stdout copiado para a área de transferência!</string>
-    <string name="stdout_daemon_console">stdout daemon console</string>
+    <string name="stdout_daemon_console">Registro de execução</string>
     <string name="storage_active_clean_session">Sessão Limpeza Ativa</string>
     <string name="storage_active_verification">Verificação ativa</string>
     <string name="storage_android_version">Versão do Android</string>
@@ -1337,9 +1337,108 @@
     <string name="action_refresh">Atualizar</string>
     <string name="view_details">Ver detalhes</string>
     <string name="logs_clear_title">Limpar Logs</string>
-    <string name="settings_crypto_engine_val">AES-256-GCM Hardware-Backed</string>
+    <string name="settings_crypto_engine_val">AES-256-GCM Proteção por hardware</string>
     <string name="settings_integrity_val_val">SHA-256 e MD5 Hash</string>
     <string name="settings_supported_cloud_val">Exclusivamente Google Drive</string>
-    <string name="settings_flow_invariance_val">Kotlin channelFlow Auditado</string>
+    <string name="settings_flow_invariance_val">Fluxo contínuo verificado</string>
     <string name="lang_english_default">Inglês (Padrão)</string>
+
+    <!-- ReSync v1.0.47 Strings -->
+    <string name="active_io_throughput">Velocidade de gravação</string>
+    <string name="active_eta_remaining">Tempo restante</string>
+    <string name="dashboard_status_ready">Status: Pronto</string>
+    <string name="storage_system_files">Arquivos do sistema</string>
+    <string name="btn_abort">Cancelar</string>
+
+    <!-- Cloud Labels 2.0 -->
+    <string name="label_status_active_target">Ativa (Destino)</string>
+    <string name="label_status_protected_readonly">Protegida (Somente leitura)</string>
+    <string name="label_status_viewing">Em visualização</string>
+    <string name="label_action_rename">Renomear</string>
+    <string name="label_action_protect">Proteger</string>
+    <string name="label_action_unprotect">Desproteger</string>
+    <string name="label_action_retention">Limite de cópias</string>
+    <string name="label_manage_title">Gerenciar Etiquetas</string>
+    <string name="label_switch_or_create">Trocar ou criar etiqueta</string>
+    <string name="label_action_view">Visualizar</string>
+    <string name="label_action_set_active">Definir como ativa</string>
+    <string name="label_btn_new">+ Nova etiqueta</string>
+    <string name="label_field_name">Nome amigável da etiqueta</string>
+    <string name="label_retention_unlimited">Ilimitado</string>
+    <string name="label_retention_copies">%1$d cópias</string>
+    <string name="label_retention_one">1 cópia</string>
+    <string name="label_crypto_compatible">Chave de criptografia compatível</string>
+    <string name="label_crypto_incompatible">Chave de criptografia diferente (Atenção)</string>
+    <string name="label_post_format_banner_title">Etiqueta na nuvem reconhecida</string>
+    <string name="label_post_format_banner_desc">Identificamos uma etiqueta na nuvem deste mesmo modelo (%1$s). Deseja vincular à existente ou criar uma nova?</string>
+    <string name="label_post_format_btn_link">Vincular à etiqueta existente</string>
+    <string name="label_post_format_btn_create">Criar nova etiqueta</string>
+    <string name="label_empty_category_prompt">Não há dados de %1$s nesta etiqueta. Deseja fazer o backup agora?</string>
+    <string name="label_empty_category_btn_backup">Fazer backup agora</string>
+    <string name="label_category_last_updated">Atualizado: %1$s</string>
+    <string name="label_verify_incomplete_title">Verificação de Arquivos Incompletos</string>
+    <string name="label_verify_incomplete_found">%1$d arquivos incompletos encontrados de envios interrompidos (%2$s).</string>
+    <string name="label_verify_incomplete_none">Nenhum arquivo incompleto encontrado. Todos os envios estão íntegros.</string>
+    <string name="label_verify_incomplete_btn_clean">Limpar arquivos incompletos</string>
+    <string name="label_delete_locked_error">Esta etiqueta está protegida contra alterações. Desative a proteção antes de excluir.</string>
+    <string name="label_delete_dialog_title">Excluir etiqueta</string>
+    <string name="label_delete_dialog_prompt">O que você deseja excluir da etiqueta \"%1$s\"?\n\nEspaço a ser liberado no Google Drive: %2$s.</string>
+    <string name="label_delete_opt_cloud_only">Somente da nuvem</string>
+    <string name="label_delete_opt_device_only">Somente do dispositivo</string>
+    <string name="label_delete_opt_both">Nuvem e dispositivo</string>
+    <string name="label_incompatible_restore_warning">Atenção: A chave de criptografia desta etiqueta não corresponde à chave atual deste dispositivo. A restauração pode falhar se a chave correta não estiver configurada.</string>
+    <string name="label_protected_backup_blocked">Esta etiqueta está protegida contra alterações. Desative a proteção para realizar novos backups.</string>
+
+    <!-- Cloud Queue Ergonomics -->
+    <string name="queue_btn_clear_completed">Limpar concluídos</string>
+    <string name="queue_priority_format">Prioridade: %1$d</string>
+    <string name="queue_status_completed">Concluído</string>
+    <string name="queue_status_uploading">Enviando</string>
+    <string name="queue_status_queued">Na fila</string>
+    <string name="queue_status_failed">Falha</string>
+    <string name="queue_action_retry">Tentar novamente</string>
+    <string name="queue_action_prioritize">Priorizar</string>
+    <string name="queue_action_remove">Remover</string>
+    <string name="queue_clear_completed">Limpar concluídos</string>
+    <string name="queue_status_running">Enviando</string>
+    <string name="queue_status_paused">Pausado</string>
+    <string name="queue_status_pending">Pendente</string>
+
+    <!-- Category Labels -->
+    <string name="category_messages">Mensagens</string>
+    <string name="category_calls">Chamadas</string>
+    <string name="category_folders">Pastas</string>
+    <string name="category_contacts">Contatos</string>
+
+    <!-- Cloud Labels 2.0 Extended -->
+    <string name="label_manager_title">Gerenciar Etiquetas</string>
+    <string name="label_new_button">+ Nova etiqueta</string>
+    <string name="label_delete_scope_title">Excluir etiqueta</string>
+    <string name="label_delete_scope_cloud_only">Somente da nuvem</string>
+    <string name="label_delete_scope_device_only">Somente do dispositivo</string>
+    <string name="label_delete_scope_both">Nuvem e dispositivo</string>
+    <string name="cloud_empty_category_prompt">Não há dados de %1$s nesta etiqueta. Deseja fazer o backup agora?</string>
+    <string name="cloud_backup_category_now">Fazer backup agora</string>
+    <string name="label_locked_backup_error">Esta etiqueta está protegida contra alterações. Desative a proteção para realizar novos backups.</string>
+    <string name="label_crypto_warning_title">Chave de criptografia diferente</string>
+    <string name="label_crypto_warning_desc">Atenção: A chave criptográfica desta etiqueta não coincide com a chave ativa deste dispositivo. A restauração pode falhar caso a chave correta não seja configurada.</string>
+    <string name="label_crypto_warning_proceed">Prosseguir assim mesmo</string>
+    <string name="label_clean_incomplete_button">Limpar arquivos incompletos</string>
+    <string name="label_incomplete_cleanup_success">%1$d arquivo(s) incompletos removidos com sucesso.</string>
+
+    <!-- Changelog v1.0.47 -->
+    <string name="changelog_title_v47">ReSync v1.0.47</string>
+    <string name="changelog_subtitle_v47">Linguagem clara na interface, Etiquetas 2.0 interativas e layout compacto da Fila</string>
+    <string name="changelog_v47_item1_title">Padronização de Linguagem Humana e Formal</string>
+    <string name="changelog_v47_item1_desc">Eliminação de jargões técnicos pesados em cards, diagnósticos e processos em segundo plano.</string>
+    <string name="changelog_v47_item2_title">Etiquetas 2.0 Interativas com Manifesto Modular</string>
+    <string name="changelog_v47_item2_desc">Gerenciamento de etiquetas com renomeação, proteção por cadeado, limite de cópias, cache local instantâneo e atualização modular por categoria.</string>
+    <string name="changelog_v47_item3_title">Layout Compacto e Ergonômico da Fila</string>
+    <string name="changelog_v47_item3_desc">Cards da fila compactos com até 5 itens visíveis, barras de progresso coloridas por status e botão de limpar concluídos em 1 toque.</string>
+    <string name="changelog_v47_p1_title">Linguagem Clara e Formal</string>
+    <string name="changelog_v47_p1_desc">Substituição completa de jargões técnicos por comunicação elegante, concisa e humana em todos os menus.</string>
+    <string name="changelog_v47_p2_title">Etiquetas 2.0 e Manifesto Modular</string>
+    <string name="changelog_v47_p2_desc">Gerenciamento interativo de etiquetas, proteção contra exclusão acidental, limites de retenção e atualização modular por categoria.</string>
+    <string name="changelog_v47_p3_title">Fila Compacta e Ergonômica</string>
+    <string name="changelog_v47_p3_desc">Layout otimizado com hierarquia visual em 3 linhas, barras de progresso contextuais e limpeza rápida com 1 toque.</string>
 </resources>

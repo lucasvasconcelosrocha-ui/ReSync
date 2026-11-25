@@ -43,6 +43,7 @@ import com.resync.app.data.room.CloudAccount as RoomCloudAccount
 import java.io.File
 import java.util.concurrent.ConcurrentLinkedQueue
 import com.resync.app.cloud.gdrive.CloudBackupCategoryHelper
+import com.resync.app.cloud.gdrive.LabelManifestManager
 
 enum class GoogleDriveState {
     NOT_CONNECTED,   // ⚪ Não conectado
@@ -208,6 +209,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _cloudLabelComponentSummary = MutableStateFlow(LabelComponentsSummary())
     val cloudLabelComponentSummary: StateFlow<LabelComponentsSummary> = _cloudLabelComponentSummary.asStateFlow()
 
+    val labelManifestManager by lazy { LabelManifestManager(context, gdriveProvider.oAuthManager, gdriveProvider.driveFileManager) }
+
+    private val _activeLabelManifest = MutableStateFlow<LabelManifest?>(null)
+    val activeLabelManifest: StateFlow<LabelManifest?> = _activeLabelManifest.asStateFlow()
+
+    private val _allDiscoveredManifests = MutableStateFlow<List<LabelManifest>>(emptyList())
+    val allDiscoveredManifests: StateFlow<List<LabelManifest>> = _allDiscoveredManifests.asStateFlow()
+
     private val _remoteCategorySummaries = MutableStateFlow<Map<String, CloudBackupCategoryHelper.CategorySummary>>(emptyMap())
     val remoteCategorySummaries: StateFlow<Map<String, CloudBackupCategoryHelper.CategorySummary>> = _remoteCategorySummaries.asStateFlow()
 
@@ -347,6 +356,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             if (matchingFiles.isEmpty()) {
+                val email = targetEmail ?: _activeAccountEmail.value
+                val emptyManifest = labelManifestManager.loadOrCreateManifest(
+                    labelId = effectiveLabel,
+                    displayName = null,
+                    remoteFiles = emptyList(),
+                    accountEmail = email
+                )
+                _activeLabelManifest.value = emptyManifest
                 _cloudLabelComponentSummary.value = LabelComponentsSummary()
                 _remoteCategorySummaries.value = emptyMap()
                 return@launch
@@ -443,7 +460,156 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     _remoteCategorySummaries.value = summariesMap
                     _cloudLabelComponentSummary.value = computeCombined(summariesMap)
                 }
+
+                // Carrega ou atualiza o manifesto estruturado LabelManifest (Etiquetas 2.0)
+                val loadedManifest = labelManifestManager.loadOrCreateManifest(
+                    labelId = effectiveLabel,
+                    displayName = null,
+                    remoteFiles = matchingFiles,
+                    accountEmail = email
+                )
+                _activeLabelManifest.value = loadedManifest
+            } else {
+                val loadedManifest = labelManifestManager.loadOrCreateManifest(
+                    labelId = effectiveLabel,
+                    displayName = null,
+                    remoteFiles = matchingFiles,
+                    accountEmail = null
+                )
+                _activeLabelManifest.value = loadedManifest
             }
+        }
+    }
+
+    fun renameLabelDisplayName(labelId: String, newDisplayName: String, onFinished: (Boolean) -> Unit = {}) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val trimmedName = newDisplayName.trim()
+            if (trimmedName.isBlank()) return@launch
+            val current = _activeLabelManifest.value ?: labelManifestManager.getLocalManifest(labelId)
+            val updated = (current ?: LabelManifest.createDefault(labelId)).copy(
+                displayName = trimmedName,
+                updatedAt = System.currentTimeMillis()
+            )
+            val res = labelManifestManager.saveManifest(updated, _activeAccountEmail.value)
+            _activeLabelManifest.value = updated
+            loadAllDiscoveredManifests(_savedDeviceLabels.value, _remoteDriveBackups.value)
+            withContext(Dispatchers.Main) {
+                onFinished(res.isSuccess)
+            }
+        }
+    }
+
+    fun toggleLabelLock(labelId: String, onFinished: (Boolean) -> Unit = {}) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val current = _activeLabelManifest.value ?: labelManifestManager.getLocalManifest(labelId) ?: return@launch
+            val updated = current.copy(
+                isLocked = !current.isLocked,
+                updatedAt = System.currentTimeMillis()
+            )
+            val res = labelManifestManager.saveManifest(updated, _activeAccountEmail.value)
+            _activeLabelManifest.value = updated
+            loadAllDiscoveredManifests(_savedDeviceLabels.value, _remoteDriveBackups.value)
+            withContext(Dispatchers.Main) {
+                onFinished(updated.isLocked)
+            }
+        }
+    }
+
+    fun setLabelRetentionCount(labelId: String, count: Int, onFinished: (Boolean) -> Unit = {}) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val current = _activeLabelManifest.value ?: labelManifestManager.getLocalManifest(labelId) ?: return@launch
+            val updated = current.copy(
+                retentionCount = count.coerceIn(0, 3),
+                updatedAt = System.currentTimeMillis()
+            )
+            val res = labelManifestManager.saveManifest(updated, _activeAccountEmail.value)
+            _activeLabelManifest.value = updated
+            loadAllDiscoveredManifests(_savedDeviceLabels.value, _remoteDriveBackups.value)
+            withContext(Dispatchers.Main) {
+                onFinished(res.isSuccess)
+            }
+        }
+    }
+
+    fun detectIncompleteLabelFiles(labelId: String): LabelManifestManager.IncompleteFilesAudit {
+        return labelManifestManager.detectIncompleteFiles(labelId, _remoteDriveBackups.value)
+    }
+
+    fun cleanupIncompleteFilesForLabel(labelId: String, onFinished: (Int) -> Unit = {}) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val audit = detectIncompleteLabelFiles(labelId)
+            val cleaned = labelManifestManager.cleanupIncompleteFiles(audit.incompleteFiles, _activeAccountEmail.value)
+            refreshActiveAccountData(_activeAccountEmail.value, isManual = true)
+            withContext(Dispatchers.Main) {
+                onFinished(cleaned)
+            }
+        }
+    }
+
+    fun deleteLabelWithScope(labelId: String, scope: LabelDeleteScope, onFinished: (Int) -> Unit = {}) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val trimmed = labelId.trim()
+            val manifest = _activeLabelManifest.value ?: labelManifestManager.getLocalManifest(trimmed)
+            if (manifest?.isLocked == true) {
+                withContext(Dispatchers.Main) {
+                    onFinished(-1) // -1 indica bloqueio por proteção
+                }
+                return@launch
+            }
+
+            var deletedRemoteCount = 0
+            val activeEmail = _activeAccountEmail.value
+
+            if (scope == LabelDeleteScope.CLOUD_ONLY || scope == LabelDeleteScope.BOTH) {
+                val targets = _remoteDriveBackups.value.filter {
+                    it.appProperties["deviceLabel"]?.trim()?.equals(trimmed, ignoreCase = true) == true ||
+                    (trimmed.isNotBlank() && it.name.contains(trimmed, ignoreCase = true)) ||
+                    it.name.contains(LabelManifestManager.getSafeLabelId(trimmed))
+                }
+                for (item in targets) {
+                    val res = gdriveProvider.cloudBackupRepository.deleteRemoteBackup(item.id, activeEmail)
+                    if (res.isSuccess) deletedRemoteCount++
+                }
+            }
+
+            if (scope == LabelDeleteScope.DEVICE_ONLY || scope == LabelDeleteScope.BOTH) {
+                labelManifestManager.deleteLocalManifest(trimmed)
+                val remaining = _savedDeviceLabels.value.filterNot { it.equals(trimmed, ignoreCase = true) }
+                val defaultLabel = com.resync.app.util.FormatUtils.getDeviceIdentifier(context)
+                val fallback = remaining.firstOrNull() ?: defaultLabel
+                val finalLabels = (remaining + fallback).distinct().sorted()
+                _savedDeviceLabels.value = finalLabels
+                prefs.edit().putStringSet("saved_device_labels_set", finalLabels.toSet()).apply()
+
+                if (_selectedViewLabel.value.equals(trimmed, ignoreCase = true)) {
+                    _selectedViewLabel.value = fallback
+                    prefs.edit().putString("selected_view_label", fallback).apply()
+                }
+                if (_customDeviceLabel.value.equals(trimmed, ignoreCase = true)) {
+                    _customDeviceLabel.value = fallback
+                    prefs.edit().putString("custom_device_label", fallback).apply()
+                }
+                loadCloudLabelComponentSummary(fallback)
+            } else {
+                loadCloudLabelComponentSummary(trimmed)
+            }
+
+            refreshActiveAccountData(activeEmail, isManual = true)
+            withContext(Dispatchers.Main) {
+                onFinished(deletedRemoteCount)
+            }
+        }
+    }
+
+    fun loadAllDiscoveredManifests(labels: List<String>, remoteFiles: List<com.resync.app.cloud.gdrive.DriveFileMetadata>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val list = mutableListOf<LabelManifest>()
+            val email = _activeAccountEmail.value
+            for (lbl in labels) {
+                val m = labelManifestManager.loadOrCreateManifest(lbl, remoteFiles = remoteFiles, accountEmail = email)
+                list.add(m)
+            }
+            _allDiscoveredManifests.value = list
         }
     }
 

@@ -28,7 +28,7 @@
     <string name="account_language">Language</string>
     <string name="account_link_account">Link account</string>
     <string name="account_logger_desc">Event log, diagnostics, and operation history</string>
-    <string name="account_logger_title">Logger</string>
+    <string name="account_logger_title">Logs</string>
     <string name="account_logout">Sign out</string>
     <string name="account_logout_confirm_msg">Do you want to disconnect account %1$s from Google Drive?</string>
     <string name="account_logout_confirm_title">Sign out of account?</string>
@@ -69,14 +69,14 @@
     <string name="active_flow_realtime">Real-time stream</string>
     <string name="active_not_configured">Not configured</string>
     <string name="active_options">Options</string>
-    <string name="active_pipeline_title">Atomic Execution Pipeline</string>
+    <string name="active_pipeline_title">Process steps</string>
     <string name="active_protected_background">Protected Background</string>
-    <string name="active_protected_background_desc">You can safely exit the app. The foreground service will continue writing with wakelock and root priority.</string>
+    <string name="active_protected_background_desc">You can safely leave the app. The process will continue in the background with system priority.</string>
     <string name="active_queued">Queued</string>
     <string name="active_review">Review</string>
     <string name="active_status_active">Active</string>
     <string name="active_step1_desc">Preserved uid:gid contexts, capabilities, and xattr</string>
-    <string name="active_step1_title">1. Snapshots &amp; SELinux Metadata</string>
+    <string name="active_step1_title">1. Preparing data and permissions</string>
     <string name="active_step2_active">%1$d%% ACTIVE</string>
     <string name="active_step2_desc">Executing SQLite WAL checkpoint with flock</string>
     <string name="active_step2_title">2. Database Dump &amp; tar.zst</string>
@@ -90,12 +90,12 @@
     <string name="active_steps_count">%1$d Steps</string>
     <string name="active_synced">Synchronized</string>
     <string name="active_tar_level3">tar.zst (Level 3)</string>
-    <string name="active_thermal_battery">Thermal / Battery</string>
+    <string name="active_thermal_battery">Temp &amp; Battery</string>
     <string name="active_thermal_high">ELEVATED</string>
     <string name="active_thermal_normal">NORMAL</string>
     <string name="active_uploading_cloud">Uploading to Cloud</string>
     <string name="active_waiting">Waiting</string>
-    <string name="active_wakelock_active">WAKELOCK ACTIVE</string>
+    <string name="active_wakelock_active">Active background</string>
     <string name="add_another_account">Add another account</string>
     <string name="all_apps_up_to_date">All apps are up to date</string>
     <string name="all_processes_finished">All previous processes were completed. The system is idle and ready for new tasks.</string>
@@ -359,13 +359,13 @@
     <string name="choose_drive_account">Choose Google Drive account</string>
     <string name="cloud_account_connected_success">Google Drive account connected successfully!</string>
     <string name="cloud_account_selection_cancelled">Account selection cancelled.</string>
-    <string name="cloud_active_partitions_count">%1$d active partitions</string>
+    <string name="cloud_active_partitions_count">%1$d saved categories</string>
     <string name="cloud_added_backups_toast">%1$d backup(s) added to upload queue!</string>
     <string name="cloud_app_closed_last_time">App closed unexpectedly last time</string>
     <string name="cloud_auth_error_title">Configuration / Authentication Error</string>
     <string name="cloud_auth_failed_desc">Failed to authenticate with Google Drive.</string>
     <string name="cloud_auto_sync_active">Automatic synchronization active</string>
-    <string name="cloud_auto_sync_desc">Safe execution via background WorkManager</string>
+    <string name="cloud_auto_sync_desc">Automatic background sync</string>
     <string name="cloud_auto_sync_title">Automatic Synchronization (Free)</string>
     <string name="cloud_available_space">Available space</string>
     <string name="cloud_check_net_perm">Check your internet connection and grant necessary permissions in consent screen.</string>
@@ -457,7 +457,7 @@
     <string name="dashboard_apk_scheme_valid">V2/V3 APK Scheme Valid</string>
     <string name="dashboard_apps_installed_count">%1$d installed</string>
     <string name="dashboard_cloud_backups">Cloud Backups</string>
-    <string name="dashboard_data_allocation">Data Allocation</string>
+    <string name="dashboard_data_allocation">Storage usage</string>
     <string name="dashboard_data_modules">DATA MODULES</string>
     <string name="dashboard_diag_prefix">Diagnostics: %1$s</string>
     <string name="dashboard_disconnected">Disconnected</string>
@@ -468,7 +468,7 @@
     <string name="dashboard_history">History</string>
     <string name="dashboard_history_recorded">%1$d backups recorded with SHA-256</string>
     <string name="dashboard_history_title">Backup History</string>
-    <string name="dashboard_io_disk">DISK I/O</string>
+    <string name="dashboard_io_disk">Transfer speed</string>
     <string name="dashboard_key_derivation">Key Derivation</string>
     <string name="dashboard_latest_backup">Latest Backup</string>
     <string name="dashboard_local_storage_data">Local Storage (/data)</string>
@@ -490,11 +490,11 @@
     <string name="dashboard_remaining">REMAINING</string>
     <string name="dashboard_requesting_root">Requesting Root privileges...</string>
     <string name="dashboard_restore_batch">Restore Batch</string>
-    <string name="dashboard_root_diag_desc">Strict integrity and sandbox verification</string>
+    <string name="dashboard_root_diag_desc">Environment security and integrity check</string>
     <string name="dashboard_root_diag_title">Root &amp; Environment Diagnostics</string>
     <string name="dashboard_root_pending">Pending permission</string>
     <string name="dashboard_root_status">Root Status</string>
-    <string name="dashboard_root_strict">Strict Mode (uid 0)</string>
+    <string name="dashboard_root_strict">Full access active</string>
     <string name="dashboard_root_user_mode">User Mode (no su)</string>
     <string name="dashboard_sandbox_default">Sandbox (Default Mode)</string>
     <string name="dashboard_section_bluetooth">Bluetooth</string>
@@ -823,10 +823,10 @@
     <string name="perm_unrestricted">Unrestricted</string>
     <string name="permission_required_bluetooth">Bluetooth permission required to list devices.</string>
     <string name="pipeline_step_1_sub">Preserved contexts uid:gid, capabilities, and xattr</string>
-    <string name="pipeline_step_1_title">1. SELinux Snapshots &amp; Metadata</string>
+    <string name="pipeline_step_1_title">1. Preparing data and permissions</string>
     <string name="pipeline_step_2_sub">Executing SQLite WAL checkpoint with flock</string>
     <string name="pipeline_step_2_title">2. Database Dump &amp; tar.zst</string>
-    <string name="pipeline_step_3_sub">Hardware-backed AES-256-GCM secure key derivation</string>
+    <string name="pipeline_step_3_sub">Hardware-protected AES-256-GCM secure key derivation</string>
     <string name="pipeline_step_3_title">3. SHA-256 Hash &amp; Encryption</string>
     <string name="pipeline_step_4_sub">HTTP/2 streaming upload with MD5 checksum</string>
     <string name="pipeline_step_4_title">4. Google Drive API Mirror</string>
@@ -990,7 +990,7 @@
     <string name="settings_current_version">Current Version: v%1$s</string>
     <string name="settings_dns_desc">Check private DNS, saved Wi-Fi networks, and internet usage</string>
     <string name="settings_dns_title">DNS, Wi-Fi, and data usage</string>
-    <string name="settings_flow_invariance">Flow Invariance</string>
+    <string name="settings_flow_invariance">Execution stability</string>
     <string name="settings_integrity_val">Integrity Validation</string>
     <string name="settings_language_choose">Choose the app language</string>
     <string name="settings_language_desc">Application display language</string>
@@ -1011,8 +1011,8 @@
     <string name="setup_cloud_backups_ready">We identified backups from your Google account ready for restoration on this device:</string>
     <string name="setup_connection_label">Connection</string>
     <string name="setup_finish">FINISH SETUP</string>
-    <string name="setup_flow_invariant_bullet">• The app respects Kotlin Flow invariance and does not crash during tab navigation.</string>
-    <string name="setup_flow_invariant_bullet2">• The app respects Kotlin Flow invariance and does not crash during operations.\n</string>
+    <string name="setup_flow_invariant_bullet">• The app operates safely and reliably during all tasks.</string>
+    <string name="setup_flow_invariant_bullet2">• The app operates safely and reliably during all tasks.\n</string>
     <string name="setup_frequency_label">Frequency</string>
     <string name="setup_gdrive_bullet">• Uses Google Drive exclusively for secure cloud storage.</string>
     <string name="setup_grant_all_files">GRANT FULL FILES ACCESS</string>
@@ -1090,7 +1090,7 @@
     <string name="status_waiting">Waiting</string>
     <string name="status_yes">Yes</string>
     <string name="stdout_copied">Stdout copied to clipboard!</string>
-    <string name="stdout_daemon_console">stdout daemon console</string>
+    <string name="stdout_daemon_console">Execution log</string>
     <string name="storage_active_clean_session">Active Cleaning Session</string>
     <string name="storage_active_verification">Active verification</string>
     <string name="storage_android_version">Android Version</string>
@@ -1337,9 +1337,108 @@
     <string name="action_refresh">Refresh</string>
     <string name="view_details">View details</string>
     <string name="logs_clear_title">Clear Logs</string>
-    <string name="settings_crypto_engine_val">AES-256-GCM Hardware-Backed</string>
+    <string name="settings_crypto_engine_val">AES-256-GCM Hardware-protected</string>
     <string name="settings_integrity_val_val">SHA-256 and MD5 Hash</string>
     <string name="settings_supported_cloud_val">Exclusively Google Drive</string>
-    <string name="settings_flow_invariance_val">Audited Kotlin channelFlow</string>
+    <string name="settings_flow_invariance_val">Verified continuous flow</string>
     <string name="lang_english_default">English (Default)</string>
+
+    <!-- ReSync v1.0.47 Strings -->
+    <string name="active_io_throughput">Transfer speed</string>
+    <string name="active_eta_remaining">Time remaining</string>
+    <string name="dashboard_status_ready">Status: Ready</string>
+    <string name="storage_system_files">System files</string>
+    <string name="btn_abort">Cancel</string>
+
+    <!-- Cloud Labels 2.0 -->
+    <string name="label_status_active_target">Active (Target)</string>
+    <string name="label_status_protected_readonly">Protected (Read-only)</string>
+    <string name="label_status_viewing">Viewing</string>
+    <string name="label_action_rename">Rename</string>
+    <string name="label_action_protect">Protect</string>
+    <string name="label_action_unprotect">Unprotect</string>
+    <string name="label_action_retention">Retention limit</string>
+    <string name="label_manage_title">Manage Labels</string>
+    <string name="label_switch_or_create">Switch or create label</string>
+    <string name="label_action_view">View</string>
+    <string name="label_action_set_active">Set as active</string>
+    <string name="label_btn_new">+ New label</string>
+    <string name="label_field_name">Friendly label name</string>
+    <string name="label_retention_unlimited">Unlimited</string>
+    <string name="label_retention_copies">%1$d copies</string>
+    <string name="label_retention_one">1 copy</string>
+    <string name="label_crypto_compatible">Compatible encryption key</string>
+    <string name="label_crypto_incompatible">Different encryption key (Warning)</string>
+    <string name="label_post_format_banner_title">Existing cloud label recognized</string>
+    <string name="label_post_format_banner_desc">We found a cloud label matching this device (%1$s). Would you like to link to it or create a new one?</string>
+    <string name="label_post_format_btn_link">Link to existing label</string>
+    <string name="label_post_format_btn_create">Create new label</string>
+    <string name="label_empty_category_prompt">There is no %1$s data in this label. Would you like to backup now?</string>
+    <string name="label_empty_category_btn_backup">Backup now</string>
+    <string name="label_category_last_updated">Updated: %1$s</string>
+    <string name="label_verify_incomplete_title">Incomplete Files Check</string>
+    <string name="label_verify_incomplete_found">%1$d incomplete files found from interrupted uploads (%2$s).</string>
+    <string name="label_verify_incomplete_none">No incomplete files found. All remote files are intact.</string>
+    <string name="label_verify_incomplete_btn_clean">Clean incomplete files</string>
+    <string name="label_delete_locked_error">This label is protected against modifications. Disable protection first to delete it.</string>
+    <string name="label_delete_dialog_title">Delete label</string>
+    <string name="label_delete_dialog_prompt">What would you like to delete for label \"%1$s\"?\n\nSpace to be freed on Google Drive: %2$s.</string>
+    <string name="label_delete_opt_cloud_only">Cloud only</string>
+    <string name="label_delete_opt_device_only">Device only</string>
+    <string name="label_delete_opt_both">Cloud and device</string>
+    <string name="label_incompatible_restore_warning">Warning: The encryption key of this label does not match the active key on this device. Restoration may fail if the correct key is not configured.</string>
+    <string name="label_protected_backup_blocked">This label is protected against modifications. Unprotect it to perform new backups.</string>
+
+    <!-- Cloud Queue Ergonomics -->
+    <string name="queue_btn_clear_completed">Clear completed</string>
+    <string name="queue_priority_format">Priority: %1$d</string>
+    <string name="queue_status_completed">Completed</string>
+    <string name="queue_status_uploading">Uploading</string>
+    <string name="queue_status_queued">Queued</string>
+    <string name="queue_status_failed">Failed</string>
+    <string name="queue_action_retry">Retry</string>
+    <string name="queue_action_prioritize">Prioritize</string>
+    <string name="queue_action_remove">Remove</string>
+    <string name="queue_clear_completed">Clear completed</string>
+    <string name="queue_status_running">Uploading</string>
+    <string name="queue_status_paused">Paused</string>
+    <string name="queue_status_pending">Pending</string>
+
+    <!-- Category Labels -->
+    <string name="category_messages">Messages</string>
+    <string name="category_calls">Calls</string>
+    <string name="category_folders">Folders</string>
+    <string name="category_contacts">Contacts</string>
+
+    <!-- Cloud Labels 2.0 Extended -->
+    <string name="label_manager_title">Manage Labels</string>
+    <string name="label_new_button">+ New label</string>
+    <string name="label_delete_scope_title">Delete label</string>
+    <string name="label_delete_scope_cloud_only">Cloud only</string>
+    <string name="label_delete_scope_device_only">Device only</string>
+    <string name="label_delete_scope_both">Cloud and device</string>
+    <string name="cloud_empty_category_prompt">There is no %1$s data in this label. Would you like to backup now?</string>
+    <string name="cloud_backup_category_now">Backup now</string>
+    <string name="label_locked_backup_error">This label is protected against modifications. Unprotect it to perform new backups.</string>
+    <string name="label_crypto_warning_title">Different encryption key</string>
+    <string name="label_crypto_warning_desc">Warning: The encryption key of this label does not match the active key on this device. Restoration may fail if the correct key is not configured.</string>
+    <string name="label_crypto_warning_proceed">Proceed anyway</string>
+    <string name="label_clean_incomplete_button">Clean incomplete files</string>
+    <string name="label_incomplete_cleanup_success">%1$d incomplete file(s) removed.</string>
+
+    <!-- Changelog v1.0.47 -->
+    <string name="changelog_title_v47">ReSync v1.0.47</string>
+    <string name="changelog_subtitle_v47">Clear interface language, Interactive Labels 2.0 &amp; Compact Queue layout</string>
+    <string name="changelog_v47_item1_title">Human and Clear Interface Language</string>
+    <string name="changelog_v47_item1_desc">Eliminated engineering jargon across cards, diagnostics, and background processes in English and Portuguese.</string>
+    <string name="changelog_v47_item2_title">Interactive Labels 2.0 with Modular Manifest</string>
+    <string name="changelog_v47_item2_desc">Manage labels with rename, lock protection, retention count limits, instant local cache, and independent per-category updates.</string>
+    <string name="changelog_v47_item3_title">Compact Queue Layout &amp; Ergonomics</string>
+    <string name="changelog_v47_item3_desc">Compact queue items fitting 4-5 per screen with clear status badges, color-coded progress bar, and one-tap clear completed.</string>
+    <string name="changelog_v47_p1_title">Clear and Formal Interface Language</string>
+    <string name="changelog_v47_p1_desc">Eliminated engineering jargon across cards, diagnostics, and background processes.</string>
+    <string name="changelog_v47_p2_title">Interactive Labels 2.0 with Modular Manifest</string>
+    <string name="changelog_v47_p2_desc">Manage labels with rename, lock protection, retention count limits, instant local cache, and independent per-category updates.</string>
+    <string name="changelog_v47_p3_title">Compact Queue Layout &amp; Ergonomics</string>
+    <string name="changelog_v47_p3_desc">Compact queue items fitting 4-5 per screen with clear status badges, color-coded progress bar, and one-tap clear completed.</string>
 </resources>

@@ -805,7 +805,7 @@ fun ActiveBackupsScreen(
                     // Box 1: I/O Throughput
                     PerformanceBentoBox(
                         modifier = Modifier.weight(1f),
-                        label = "I/O Throughput",
+                        label = stringResource(R.string.active_io_throughput),
                         tag = "R/W",
                         tagColor = Color(0xFF38BDF8),
                         mainValue = "$speedMbStr MB/s",
@@ -834,7 +834,7 @@ fun ActiveBackupsScreen(
                     val elapsedStr = if (elapsedSeconds > 0L) FormatUtils.formatShortEta(elapsedSeconds) + " decorrido" else "--"
                     PerformanceBentoBox(
                         modifier = Modifier.weight(1f),
-                        label = "ETA Restante",
+                        label = stringResource(R.string.active_eta_remaining),
                         tag = remainingEtaStr,
                         tagColor = TextSecondary,
                         mainValue = elapsedStr,

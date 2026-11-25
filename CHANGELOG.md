@@ -4,6 +4,33 @@ Todas as mudanças notáveis deste projeto são documentadas neste arquivo.
 
 ---
 
+## [1.0.47] - 2026-11-25
+
+### 🗣️ Padronização de Linguagem Humana e Formal
+- **Eliminação de Jargões Técnicos:** Revisão integral de todos os textos exibidos ao usuário em Compose e nos arquivos de recursos (`values/strings.xml`, `values-en/strings.xml`, `values-pt-rBR/strings.xml`, `values-pt/strings.xml`). Jargões como *Snapshots & Metadados SELinux*, *Pipeline Atômico de Execução*, *WAKELOCK ATIVO*, *I/O Throughput*, *ETA Restante*, *Térmico / Bateria*, *stdout daemon console*, *STATUS // OCIOSO* e *partições ativas* foram substituídos por expressões humanas, claras, concisas e formais (*Preparação de dados e permissões*, *Etapas do processo*, *Execução contínua*, *Velocidade de gravação*, *Tempo restante*, *Temperatura e bateria*, *Registro de execução*, *Status: Pronto* e *categorias salvas*).
+- **Consistência Bilíngue:** Sincronização 100% simétrica entre os recursos em Inglês (padrão) e Português do Brasil, preservando termos técnicos universais (*ReSync*, *Root*, *Google Drive*, *Wi-Fi*, *Bluetooth*, *DNS*, *SMS*, *MMS*, *AES-256*, *SHA-256*, *APK*) e todos os especificadores de formatação.
+
+### 🏷️ Etiquetas 2.0 e Manifesto Modular (`LabelManifest`)
+- **Manifesto Remoto e Cache Local:** Implementação do modelo `LabelManifest` persistido como `label_manifest_<safeLabelId>.json` no Google Drive e em cache JSON local para carregamento instantâneo. Inclui identificador imutável, nome amigável editável (`displayName`), especificações do dispositivo, status de proteção (`isLocked`), política de retenção (`retentionCount`), fingerprint criptográfico SHA-256 e mapa de partições com ponteiros atômicos.
+- **Atualização Modular Atômica:** Backups completos ou parciais agora atualizam exclusivamente as categorias envolvidas no envio com integridade verificada, mantendo intactas as demais partições.
+- **Retrocompatibilidade e Migração Automática:** Detecção e migração automática de etiquetas e backups legados baseados em `.index.json` sem qualquer perda de dados históricos.
+- **Gerenciamento Interativo:**
+  - Card Bento com ações rápidas para renomear nome amigável, proteger/desproteger contra gravações ou exclusão acidental e configurar política de retenção de cópias (1, 2, 3 cópias ou Ilimitado).
+  - ModalBottomSheet de gerenciamento completo de etiquetas com reconhecimento de dispositivos pós-formatação (oferecendo vincular a etiqueta existente ou criar nova).
+  - 8 cards interativos de componentes que refletem dados reais em tempo real, alertam sobre incompatibilidade de chave criptográfica e oferecem atalho amigável para backup imediato de categorias vazias.
+  - Auditoria e limpeza segura de arquivos incompletos/órfãos decorrentes de envios interrompidos.
+  - Diálogo de exclusão segura com 3 escopos bem definidos: *Somente da nuvem*, *Somente do dispositivo* ou *Nuvem e dispositivo*.
+
+### 📋 Fila de Sincronização Compacta e Ergonômica
+- **Hierarquia Visual em 3 Linhas:** Redesenho completo do `SyncQueueCard` com altura compacta adaptativa, permitindo a visualização de 4 a 5 itens simultâneos por tela sem rolagem excessiva.
+- **Linha 1:** Ícone de status compacto, nome legível do arquivo em até 2 linhas e selo discreto de status (*Pendente*, *Enviando*, *Concluído*, *Falha*).
+- **Linha 2:** Barra de progresso fina (4dp) com cantos arredondados e cores contextuais (verde, azul, vermelho, âmbar).
+- **Linha 3:** Tamanho transferido/total, prioridade e botões de ação em formato de texto compacto. O botão *Priorizar* é automaticamente ocultado após a conclusão do envio.
+- **Cabeçalho de Limpeza Rápida:** Botão de ação rápida no topo da fila para limpar todos os envios concluídos com apenas um toque.
+- **Espaçamento e Navegação:** Ajuste de padding inferior para `104.dp`, eliminando qualquer sobreposição com barras de navegação do sistema.
+
+---
+
 ## [1.0.46] - 2026-11-23
 
 ### ☁️ FAB de Upload com Posicionamento Perfeito e Auto-Hide no Scroll

@@ -1190,7 +1190,7 @@ fun StorageDetailsScreen(
                                     color = Color(0xFF64748B).copy(alpha = 0.12f),
                                     border = BorderStroke(0.5.dp, Color(0xFF64748B).copy(alpha = 0.35f))
                                 ) {
-                                    Text("Kernel/Base", fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF94A3B8), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+                                    Text(stringResource(R.string.storage_system_files), fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF94A3B8), modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
                                 }
                             }
                             Spacer(modifier = Modifier.height(12.dp))

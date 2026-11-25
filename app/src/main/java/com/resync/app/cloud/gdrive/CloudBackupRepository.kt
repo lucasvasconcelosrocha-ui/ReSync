@@ -57,6 +57,18 @@ class CloudBackupRepository(
             return@withContext Result.failure(IllegalArgumentException(err))
         }
 
+        // 0. Check if label is locked (Read-Only protection)
+        val currentLabel = context.getSharedPreferences("swiftvault_prefs", Context.MODE_PRIVATE)
+            .getString("custom_device_label", null) ?: com.resync.app.util.FormatUtils.getDeviceIdentifier(context)
+        val manifestMgr = LabelManifestManager(context, oAuthManager, driveFileManager)
+        val existingManifest = manifestMgr.getLocalManifest(currentLabel) ?: manifestMgr.fetchRemoteManifest(currentLabel, accountEmail)
+        if (existingManifest != null && existingManifest.isLocked) {
+            val lockedErr = "A etiqueta '$currentLabel' está protegida contra alterações (somente leitura). Novos envios estão bloqueados."
+            dbHelper.insertLog(LogLevel.WARN, "GoogleDrive", lockedErr)
+            onProgress(UploadProgressInfo("Falha", 0, localFile.length(), 0f, 0f, 0, isFinished = true, error = lockedErr))
+            return@withContext Result.failure(IllegalStateException(lockedErr))
+        }
+
         // 1. Check storage quota
         onProgress(UploadProgressInfo("Preparando backup...", 0, localFile.length(), 0.02f, 0f, 0))
         val quotaResult = driveFileManager.getStorageQuota(accountEmail)
@@ -93,9 +105,6 @@ class CloudBackupRepository(
         val targetFolderId = hierarchy?.backupsFolderId ?: hierarchy?.rootFolderId
 
         // 3. Resumable Upload
-        val currentLabel = context.getSharedPreferences("swiftvault_prefs", Context.MODE_PRIVATE)
-            .getString("custom_device_label", null) ?: com.resync.app.util.FormatUtils.getDeviceIdentifier(context)
-
         val categoryProps = CloudBackupCategoryHelper.inspectLocalFile(context, localFile, backupRecord.title)
 
         val appProps = mutableMapOf(
@@ -184,6 +193,7 @@ class CloudBackupRepository(
         }
 
         // 4.1 Enviar índice complementar (svb_XXXX.index.json) para consulta rápida sem baixar o container
+        var sidecarIndexId: String? = null
         try {
             val baseName = localFile.nameWithoutExtension
             val localSidecar = File(localFile.parentFile, "$baseName.index.json")
@@ -194,10 +204,43 @@ class CloudBackupRepository(
             }
             val indexJson = com.google.gson.Gson().toJson(manifest)
             val indexName = "$baseName.index.json"
-            driveFileManager.uploadIndexJson(indexName, indexJson, targetFolderId, accountEmail)
+            sidecarIndexId = driveFileManager.uploadIndexJson(indexName, indexJson, targetFolderId, accountEmail).getOrNull()
             dbHelper.insertLog(LogLevel.INFO, "GoogleDrive", "Índice complementar sincronizado: $indexName")
         } catch (e: Exception) {
             dbHelper.insertLog(LogLevel.WARN, "GoogleDrive", "Aviso ao salvar índice complementar: ${e.message}")
+        }
+
+        // 4.2 Atualização Modular por Categoria (Commit Atômico do LabelManifest)
+        try {
+            val catSummary = CloudBackupCategoryHelper.extractCategorySummaryFromLocalFile(localFile)
+            val updatedManifest = manifestMgr.updateModularCategoryAtomic(
+                labelId = currentLabel,
+                categorySummary = catSummary,
+                backupFile = verifiedFile,
+                indexFileId = sidecarIndexId,
+                accountEmail = accountEmail,
+                targetFolderId = targetFolderId
+            )
+
+            // 4.3 Pruning segundo a política de retenção da etiqueta
+            if (updatedManifest.retentionCount in 1..3 && !updatedManifest.isLocked) {
+                val allRemoteRes = driveFileManager.listRemoteBackups(targetFolderId)
+                if (allRemoteRes.isSuccess) {
+                    val labelBackups = allRemoteRes.getOrDefault(emptyList()).filter { f ->
+                        !f.name.endsWith(".json") && f.appProperties["deviceLabel"]?.trim()?.equals(currentLabel, ignoreCase = true) == true
+                    }.sortedByDescending { it.modifiedTime.coerceAtLeast(it.createdTime) }
+
+                    if (labelBackups.size > updatedManifest.retentionCount) {
+                        val excess = labelBackups.drop(updatedManifest.retentionCount)
+                        for (oldFile in excess) {
+                            driveFileManager.deleteFile(oldFile.id, accountEmail)
+                            dbHelper.insertLog(LogLevel.INFO, "GoogleDrive", "Backup antigo removido conforme retenção (${updatedManifest.retentionCount}): ${oldFile.name}")
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            dbHelper.insertLog(LogLevel.WARN, "GoogleDrive", "Aviso ao atualizar manifesto modular da etiqueta: ${e.message}")
         }
 
         // 5. Update local record with SINGLE SOURCE OF TRUTH: SYNCED

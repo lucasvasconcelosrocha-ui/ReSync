@@ -19,11 +19,11 @@ android {
     val vCode = (System.getenv("VERSION_CODE")
         ?: project.findProperty("versionCode")?.toString()
         ?: versionProperties.getProperty("versionCode")
-        ?: "46").toInt()
+        ?: "47").toInt()
     val vName = System.getenv("VERSION_NAME")
         ?: project.findProperty("versionName")?.toString()
         ?: versionProperties.getProperty("versionName")
-        ?: "1.0.46"
+        ?: "1.0.47"
 
     defaultConfig {
         applicationId = "com.resync.app"
@@ -78,7 +78,12 @@ android {
                 keyAlias = alias
                 keyPassword = keyPass
             } else {
-                throw GradleException("Credenciais de assinatura de release ausentes ou incompletas! Defina KEYSTORE_PASSWORD e KEY_PASSWORD via variáveis de ambiente/GitHub Secrets ou no arquivo keystore.properties.")
+                val isBuildingRelease = gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
+                if (isBuildingRelease) {
+                    throw GradleException("Credenciais de assinatura de release ausentes ou incompletas! Defina KEYSTORE_PASSWORD e KEY_PASSWORD via variáveis de ambiente/GitHub Secrets ou no arquivo keystore.properties.")
+                } else {
+                    logger.warn("⚠️ AVISO: Credenciais de assinatura de release ausentes em ambiente local. Chave de release ignorada para tarefas de debug.")
+                }
             }
         }
     }
@@ -92,7 +97,9 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("release")
+            if (signingConfigs.getByName("release").storeFile != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

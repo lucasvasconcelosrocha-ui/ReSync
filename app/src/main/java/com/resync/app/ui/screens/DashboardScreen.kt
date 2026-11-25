@@ -959,7 +959,7 @@ fun DashboardScreen(
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = "Abortar",
+                                        text = stringResource(R.string.btn_abort),
                                         fontSize = 11.sp,
                                         color = Color.White,
                                         fontWeight = FontWeight.Bold
@@ -1024,7 +1024,7 @@ fun DashboardScreen(
                                     modifier = Modifier.padding(end = 6.dp)
                                 )
                                 Text(
-                                    text = "STATUS // OCIOSO",
+                                    text = stringResource(R.string.dashboard_status_ready),
                                     color = Color.White,
                                     fontSize = 12.5.sp,
                                     fontWeight = FontWeight.Bold,
@@ -2463,20 +2463,20 @@ private fun ChangelogModal(
             Spacer(modifier = Modifier.height(10.dp))
 
             Text(
-                text = stringResource(R.string.changelog_title),
+                text = stringResource(R.string.changelog_title_v47),
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 color = TextPrimary
             )
             Text(
-                text = stringResource(R.string.changelog_subtitle_v38),
+                text = stringResource(R.string.changelog_subtitle_v47),
                 fontSize = 12.5.sp,
                 color = TextSecondary
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Scrollable Bento Pillars (v1.0.38 - 5 Pillars)
+            // Scrollable Bento Pillars (v1.0.47 - 3 Pillars)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -2484,52 +2484,32 @@ private fun ChangelogModal(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Pilar 1: English as Default & 100% Localization
+                // Pilar 1: Linguagem Clara e Formal
                 ChangelogPillarCard(
-                    icon = Icons.Default.Language,
+                    icon = Icons.Default.Chat,
                     accentColor = Color(0xFF38BDF8),
-                    title = stringResource(R.string.changelog_i18n_v38_title),
-                    description = stringResource(R.string.changelog_i18n_v38_desc),
+                    title = stringResource(R.string.changelog_v47_p1_title),
+                    description = stringResource(R.string.changelog_v47_p1_desc),
                     cardBg = bentoCard,
                     borderColor = bentoBorder
                 )
 
-                // Pilar 2: App Individual Restore Bugfix & State Machine
+                // Pilar 2: Etiquetas 2.0 e Manifesto Modular
                 ChangelogPillarCard(
-                    icon = Icons.Default.Refresh,
+                    icon = Icons.Default.Label,
                     accentColor = Color(0xFF00FF88),
-                    title = stringResource(R.string.changelog_restore_v38_title),
-                    description = stringResource(R.string.changelog_restore_v38_desc),
+                    title = stringResource(R.string.changelog_v47_p2_title),
+                    description = stringResource(R.string.changelog_v47_p2_desc),
                     cardBg = bentoCard,
                     borderColor = bentoBorder
                 )
 
-                // Pilar 3: Futuristic Completion Orb & Smart Bottom Bar
+                // Pilar 3: Fila Compacta e Ergonômica
                 ChangelogPillarCard(
-                    icon = Icons.Default.PlayArrow,
-                    accentColor = Color(0xFF00E5FF),
-                    title = stringResource(R.string.changelog_futuristic_v38_title),
-                    description = stringResource(R.string.changelog_futuristic_v38_desc),
-                    cardBg = bentoCard,
-                    borderColor = bentoBorder
-                )
-
-                // Pilar 4: Backup Console Overhaul & Real-Time Neon Badge
-                ChangelogPillarCard(
-                    icon = Icons.Default.Code,
+                    icon = Icons.Default.FilterList,
                     accentColor = Color(0xFFA855F7),
-                    title = stringResource(R.string.changelog_console_v38_title),
-                    description = stringResource(R.string.changelog_console_v38_desc),
-                    cardBg = bentoCard,
-                    borderColor = bentoBorder
-                )
-
-                // Pilar 5: Official Telegram Community Integration
-                ChangelogPillarCard(
-                    icon = Icons.Default.Send,
-                    accentColor = Color(0xFF229ED9),
-                    title = stringResource(R.string.changelog_telegram_v38_title),
-                    description = stringResource(R.string.changelog_telegram_v38_desc),
+                    title = stringResource(R.string.changelog_v47_p3_title),
+                    description = stringResource(R.string.changelog_v47_p3_desc),
                     cardBg = bentoCard,
                     borderColor = bentoBorder
                 )
