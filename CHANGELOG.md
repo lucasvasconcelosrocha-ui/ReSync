@@ -4,6 +4,25 @@ Todas as mudanças notáveis deste projeto são documentadas neste arquivo.
 
 ---
 
+## [1.0.48] - 2026-11-25
+
+### 📐 Altura 100% Uniforme nos 8 Cards de Componentes da Etiqueta
+- **Medição Intrínseca e Grid Perfeito:** Aplicação de `Modifier.height(IntrinsicSize.Max)` em cada linha do grid de 2 colunas e `Modifier.weight(1f).fillMaxHeight().heightIn(min = 96.dp)` em todos os 8 cards de categorias (`Aplicativos`, `Mensagens`, `Chamadas`, `Pastas`, `Bluetooth`, `DNS`, `Wi-Fi`, `Contatos`).
+- **Simetria Visual em 3 Linhas:** Padronização estrutural contendo exatamente 3 linhas por card (Título, Contador com Unidade e Data/Hora da última atualização ou selo discreto *Sem backup* com opacidade reduzida). Alinhamento vertical centralizado e truncamento com reticências (`TextOverflow.Ellipsis`), eliminando qualquer variação de altura ou vão desigual entre as colunas.
+
+### ✂️ Otimização dos Botões de Ação da Etiqueta
+- **Rótulos Concisos e Anti-Clipping:** Encurtamento do botão principal para *Trocar etiqueta* (PT-BR) / *Switch label* (EN), com altura uniforme fixa de `40.dp`, `contentPadding` otimizado (`horizontal = 8.dp`), `maxLines = 1` e `softWrap = false`.
+- **Eliminação de Cortes em Telas Estreitas:** Espaçamento balanceado (`Arrangement.spacedBy(8.dp)`) entre os 3 botões da barra inferior do card da etiqueta ativa, garantindo legibilidade perfeita mesmo em dispositivos de tela compacta.
+
+### 🗑️ Exclusão Segura e Sem Sobreposição de Controles
+- **Linha de Exclusão Dedicada:** Substituição de concatenações extensas pelo rótulo conciso *Excluir etiqueta atual* (PT-BR) / *Delete current label* (EN) em linha centralizada com padding horizontal generoso.
+- **Isolamento de Controles Flutuantes:** Espaçamento amplo garantindo que o botão flutuante de ações (FAB) e as barras do sistema nunca ocultem o botão de exclusão ou opções inferiores.
+
+### 🏷️ Cabeçalho Equilibrado de Componentes
+- **Distribuição Proporcional:** Configuração da coluna de título e subtítulo com `Modifier.weight(1f)` e espaçamento horizontal de `12.dp` em relação ao selo indicador de categorias ativas, assegurando alinhamento vertical impecável e sem aperto visual.
+
+---
+
 ## [1.0.47] - 2026-11-25
 
 ### 🗣️ Padronização de Linguagem Humana e Formal

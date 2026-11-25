@@ -1375,17 +1375,25 @@ fun CloudSyncCenterScreen(
                                             viewModel.loadAllDiscoveredManifests(savedDeviceLabels, remoteList)
                                             showLabelManagerModal = true
                                         },
-                                        modifier = Modifier.weight(1f).heightIn(min = 44.dp),
+                                        modifier = Modifier.weight(1f).height(40.dp),
                                         shape = RoundedCornerShape(10.dp),
                                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                                         colors = ButtonDefaults.outlinedButtonColors(
                                             contentColor = primaryAccent
                                         ),
-                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                                     ) {
                                         Icon(Icons.Default.SwapHoriz, contentDescription = null, modifier = Modifier.size(16.dp), tint = primaryAccent)
                                         Spacer(modifier = Modifier.width(6.dp))
-                                        Text(stringResource(R.string.label_switch_or_create), fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = primaryAccent, maxLines = 1, softWrap = false)
+                                        Text(
+                                            text = stringResource(R.string.label_switch_or_create),
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = primaryAccent,
+                                            maxLines = 1,
+                                            softWrap = false,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
                                     }
 
                                     OutlinedButton(
@@ -1393,14 +1401,25 @@ fun CloudSyncCenterScreen(
                                             incompleteAuditResult = viewModel.detectIncompleteLabelFiles(effectiveViewLabel)
                                             showIncompleteFilesDialog = true
                                         },
-                                        modifier = Modifier.heightIn(min = 44.dp),
+                                        modifier = Modifier.height(40.dp),
                                         shape = RoundedCornerShape(10.dp),
                                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                        colors = ButtonDefaults.outlinedButtonColors(
+                                            contentColor = primaryAccent
+                                        ),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
                                     ) {
                                         Icon(Icons.Default.Verified, contentDescription = null, modifier = Modifier.size(15.dp), tint = primaryAccent)
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Verificar", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = primaryAccent)
+                                        Text(
+                                            text = stringResource(R.string.btn_verify),
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = primaryAccent,
+                                            maxLines = 1,
+                                            softWrap = false,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
                                     }
 
                                     OutlinedButton(
@@ -1412,11 +1431,11 @@ fun CloudSyncCenterScreen(
                                                 showDeleteLabelScopeDialog = true
                                             }
                                         },
-                                        modifier = Modifier.heightIn(min = 44.dp),
+                                        modifier = Modifier.height(40.dp),
                                         shape = RoundedCornerShape(10.dp),
                                         border = BorderStroke(1.dp, if (labelIsLocked) TextMuted.copy(alpha = 0.3f) else StatusError.copy(alpha = 0.5f)),
                                         colors = ButtonDefaults.outlinedButtonColors(contentColor = if (labelIsLocked) TextMuted else StatusError),
-                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
                                     ) {
                                         Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(15.dp), tint = if (labelIsLocked) TextMuted else StatusError)
                                     }
@@ -1454,32 +1473,39 @@ fun CloudSyncCenterScreen(
                         Column(modifier = Modifier.fillMaxWidth()) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        text = "Componentes da Etiqueta",
+                                        text = stringResource(R.string.cloud_label_components_title),
                                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                                        color = MaterialTheme.colorScheme.onSurface
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
                                         text = stringResource(R.string.cloud_tap_inspect_restore),
                                         fontSize = 11.5.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                                 Surface(
                                     shape = RoundedCornerShape(6.dp),
                                     color = primaryAccent.copy(alpha = 0.12f),
-                                    border = BorderStroke(1.dp, primaryAccent.copy(alpha = 0.3f))
+                                    border = BorderStroke(1.dp, primaryAccent.copy(alpha = 0.3f)),
+                                    modifier = Modifier.wrapContentSize()
                                 ) {
                                     Text(
                                         text = stringResource(R.string.cloud_active_partitions_count, activePartitionsCount),
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = primaryAccent,
+                                        maxLines = 1,
+                                        softWrap = false,
                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                                     )
                                 }
@@ -1491,17 +1517,21 @@ fun CloudSyncCenterScreen(
                             val chunkedPartitions = categoryItems.chunked(2)
                             Column(
                                 modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 chunkedPartitions.forEach { pair ->
                                     Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(IntrinsicSize.Max),
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                                     ) {
                                         pair.forEach { item ->
                                             Card(
                                                 modifier = Modifier
                                                     .weight(1f)
+                                                    .fillMaxHeight()
+                                                    .heightIn(min = 96.dp)
                                                     .clip(RoundedCornerShape(12.dp))
                                                     .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
                                                     .clickable {
@@ -1521,6 +1551,7 @@ fun CloudSyncCenterScreen(
                                                 Row(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
+                                                        .fillMaxHeight()
                                                         .padding(horizontal = 12.dp, vertical = 12.dp),
                                                     verticalAlignment = Alignment.CenterVertically
                                                 ) {
@@ -1534,7 +1565,10 @@ fun CloudSyncCenterScreen(
                                                         Icon(item.icon, contentDescription = null, tint = item.color, modifier = Modifier.size(18.dp))
                                                     }
                                                     Spacer(modifier = Modifier.width(10.dp))
-                                                    Column(modifier = Modifier.weight(1f)) {
+                                                    Column(
+                                                        modifier = Modifier.weight(1f),
+                                                        verticalArrangement = Arrangement.Center
+                                                    ) {
                                                         Text(
                                                             text = item.name,
                                                             fontSize = 13.sp,
@@ -1543,21 +1577,32 @@ fun CloudSyncCenterScreen(
                                                             maxLines = 1,
                                                             overflow = TextOverflow.Ellipsis
                                                         )
-                                                        Spacer(modifier = Modifier.height(1.dp))
+                                                        Spacer(modifier = Modifier.height(2.dp))
                                                         Text(
                                                             text = "${item.count} ${item.unit}",
                                                             fontSize = 10.5.sp,
                                                             color = if (item.count == 0) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f) else item.color,
                                                             maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis,
                                                             fontWeight = FontWeight.Medium
                                                         )
+                                                        Spacer(modifier = Modifier.height(2.dp))
                                                         if (item.updatedAt > 0L) {
                                                             val formattedDate = SimpleDateFormat("dd/MM HH:mm", Locale.getDefault()).format(Date(item.updatedAt))
                                                             Text(
                                                                 text = formattedDate,
                                                                 fontSize = 9.sp,
                                                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                                                maxLines = 1
+                                                                maxLines = 1,
+                                                                overflow = TextOverflow.Ellipsis
+                                                            )
+                                                        } else {
+                                                            Text(
+                                                                text = stringResource(R.string.cloud_no_backup_short),
+                                                                fontSize = 9.sp,
+                                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
+                                                                maxLines = 1,
+                                                                overflow = TextOverflow.Ellipsis
                                                             )
                                                         }
                                                     }
@@ -1578,25 +1623,36 @@ fun CloudSyncCenterScreen(
                             }
 
                             Spacer(modifier = Modifier.height(10.dp))
-                            TextButton(
-                                onClick = {
-                                    if (labelIsLocked) {
-                                        context.showSafeToast(context.getString(R.string.label_delete_locked_error))
-                                    } else {
-                                        labelToDelete = effectiveViewLabel
-                                        showDeleteLabelScopeDialog = true
-                                    }
-                                },
-                                modifier = Modifier.align(Alignment.CenterHorizontally),
-                                enabled = !isDeletingLabelBackups
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = StatusError.copy(alpha = 0.7f), modifier = Modifier.size(15.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    "Excluir etiqueta \"$effectiveViewLabel\" e backups",
-                                    fontSize = 11.sp,
-                                    color = StatusError.copy(alpha = 0.8f)
-                                )
+                                TextButton(
+                                    onClick = {
+                                        if (labelIsLocked) {
+                                            context.showSafeToast(context.getString(R.string.label_delete_locked_error))
+                                        } else {
+                                            labelToDelete = effectiveViewLabel
+                                            showDeleteLabelScopeDialog = true
+                                        }
+                                    },
+                                    enabled = !isDeletingLabelBackups,
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = StatusError.copy(alpha = 0.75f), modifier = Modifier.size(15.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = stringResource(R.string.label_delete_current),
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = StatusError.copy(alpha = 0.85f),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
                             }
                         }
 

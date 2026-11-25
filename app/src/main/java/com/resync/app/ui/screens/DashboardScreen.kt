@@ -2463,20 +2463,20 @@ private fun ChangelogModal(
             Spacer(modifier = Modifier.height(10.dp))
 
             Text(
-                text = stringResource(R.string.changelog_title_v47),
+                text = stringResource(R.string.changelog_title_v48),
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 color = TextPrimary
             )
             Text(
-                text = stringResource(R.string.changelog_subtitle_v47),
+                text = stringResource(R.string.changelog_subtitle_v48),
                 fontSize = 12.5.sp,
                 color = TextSecondary
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Scrollable Bento Pillars (v1.0.47 - 3 Pillars)
+            // Scrollable Bento Pillars (v1.0.48 - 3 Pillars)
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -2484,32 +2484,32 @@ private fun ChangelogModal(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Pilar 1: Linguagem Clara e Formal
+                // Pilar 1: Cards de Categorias 100% Uniformes
                 ChangelogPillarCard(
-                    icon = Icons.Default.Chat,
+                    icon = Icons.Default.GridView,
                     accentColor = Color(0xFF38BDF8),
-                    title = stringResource(R.string.changelog_v47_p1_title),
-                    description = stringResource(R.string.changelog_v47_p1_desc),
+                    title = stringResource(R.string.changelog_v48_p1_title),
+                    description = stringResource(R.string.changelog_v48_p1_desc),
                     cardBg = bentoCard,
                     borderColor = bentoBorder
                 )
 
-                // Pilar 2: Etiquetas 2.0 e Manifesto Modular
+                // Pilar 2: Botões da Barra Sem Textos Cortados
                 ChangelogPillarCard(
-                    icon = Icons.Default.Label,
+                    icon = Icons.Default.SwapHoriz,
                     accentColor = Color(0xFF00FF88),
-                    title = stringResource(R.string.changelog_v47_p2_title),
-                    description = stringResource(R.string.changelog_v47_p2_desc),
+                    title = stringResource(R.string.changelog_v48_p2_title),
+                    description = stringResource(R.string.changelog_v48_p2_desc),
                     cardBg = bentoCard,
                     borderColor = bentoBorder
                 )
 
-                // Pilar 3: Fila Compacta e Ergonômica
+                // Pilar 3: Exclusão Segura e Sem Sobreposição
                 ChangelogPillarCard(
-                    icon = Icons.Default.FilterList,
+                    icon = Icons.Default.DeleteOutline,
                     accentColor = Color(0xFFA855F7),
-                    title = stringResource(R.string.changelog_v47_p3_title),
-                    description = stringResource(R.string.changelog_v47_p3_desc),
+                    title = stringResource(R.string.changelog_v48_p3_title),
+                    description = stringResource(R.string.changelog_v48_p3_desc),
                     cardBg = bentoCard,
                     borderColor = bentoBorder
                 )

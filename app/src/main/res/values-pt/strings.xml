@@ -1359,7 +1359,11 @@
     <string name="label_action_unprotect">Desproteger</string>
     <string name="label_action_retention">Limite de cópias</string>
     <string name="label_manage_title">Gerenciar Etiquetas</string>
-    <string name="label_switch_or_create">Trocar ou criar etiqueta</string>
+    <string name="label_switch_or_create">Trocar etiqueta</string>
+    <string name="btn_verify">Verificar</string>
+    <string name="label_delete_current">Excluir etiqueta atual</string>
+    <string name="cloud_no_backup_short">Sem backup</string>
+    <string name="cloud_label_components_title">Componentes da Etiqueta</string>
     <string name="label_action_view">Visualizar</string>
     <string name="label_action_set_active">Definir como ativa</string>
     <string name="label_btn_new">+ Nova etiqueta</string>
@@ -1441,4 +1445,14 @@
     <string name="changelog_v47_p2_desc">Gerenciamento interativo de etiquetas, proteção contra exclusão acidental, limites de retenção e atualização modular por categoria.</string>
     <string name="changelog_v47_p3_title">Fila Compacta e Ergonômica</string>
     <string name="changelog_v47_p3_desc">Layout otimizado com hierarquia visual em 3 linhas, barras de progresso contextuais e limpeza rápida com 1 toque.</string>
+
+    <!-- Changelog v1.0.48 -->
+    <string name="changelog_title_v48">ReSync v1.0.48</string>
+    <string name="changelog_subtitle_v48">Altura uniforme dos cards e alinhamento visual na aba Nuvem</string>
+    <string name="changelog_v48_p1_title">Cards de Categorias 100% Uniformes</string>
+    <string name="changelog_v48_p1_desc">Medição intrínseca de altura, 3 linhas simétricas e layout equilibrado entre as duas colunas dos 8 cards.</string>
+    <string name="changelog_v48_p2_title">Botões da Barra Sem Textos Cortados</string>
+    <string name="changelog_v48_p2_desc">Rótulos concisos, altura uniforme de 40dp e padding otimizado para evitar cortes em telas estreitas.</string>
+    <string name="changelog_v48_p3_title">Exclusão Segura e Sem Sobreposição</string>
+    <string name="changelog_v48_p3_desc">Botão de exclusão com rótulo curto, ponto único e espaçamento garantindo que o FAB nunca o encubra.</string>
 </resources>

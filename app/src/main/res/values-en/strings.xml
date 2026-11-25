@@ -1359,7 +1359,11 @@
     <string name="label_action_unprotect">Unprotect</string>
     <string name="label_action_retention">Retention limit</string>
     <string name="label_manage_title">Manage Labels</string>
-    <string name="label_switch_or_create">Switch or create label</string>
+    <string name="label_switch_or_create">Switch label</string>
+    <string name="btn_verify">Verify</string>
+    <string name="label_delete_current">Delete current label</string>
+    <string name="cloud_no_backup_short">No backup</string>
+    <string name="cloud_label_components_title">Label Components</string>
     <string name="label_action_view">View</string>
     <string name="label_action_set_active">Set as active</string>
     <string name="label_btn_new">+ New label</string>
@@ -1441,4 +1445,14 @@
     <string name="changelog_v47_p2_desc">Manage labels with rename, lock protection, retention count limits, instant local cache, and independent per-category updates.</string>
     <string name="changelog_v47_p3_title">Compact Queue Layout &amp; Ergonomics</string>
     <string name="changelog_v47_p3_desc">Compact queue items fitting 4-5 per screen with clear status badges, color-coded progress bar, and one-tap clear completed.</string>
+
+    <!-- Changelog v1.0.48 -->
+    <string name="changelog_title_v48">ReSync v1.0.48</string>
+    <string name="changelog_subtitle_v48">Uniform Category Cards &amp; Visual Alignment in Cloud Tab</string>
+    <string name="changelog_v48_p1_title">100% Uniform Category Cards</string>
+    <string name="changelog_v48_p1_desc">Intrinsic height measurement, 3 symmetrical text lines, and balanced layout across all 8 category cards.</string>
+    <string name="changelog_v48_p2_title">Unclipped Action Buttons</string>
+    <string name="changelog_v48_p2_desc">Concise button labels, 40dp uniform height, and optimized padding preventing text clipping on narrow screens.</string>
+    <string name="changelog_v48_p3_title">Safe &amp; Unobstructed Deletion</string>
+    <string name="changelog_v48_p3_desc">Clear, dedicated label deletion button with full spacing avoiding any overlap with the floating action button.</string>
 </resources>
