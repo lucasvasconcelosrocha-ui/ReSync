@@ -235,13 +235,28 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release delete "$TAG_NAME" --yes || true
-          gh release create "$TAG_NAME" \
-            "ReSync-${TAG_NAME}.apk" \
-            "ReSync-${TAG_NAME}.apk.sha256" \
-            "version.json" \
-            --title "ReSync ${TAG_NAME}" \
-            --notes-file "release_notes.md"
+          MAX_ATTEMPTS=3
+          for i in $(seq 1 $MAX_ATTEMPTS); do
+            echo "Tentativa $i de $MAX_ATTEMPTS para criar a release no GitHub..."
+            gh release delete "$TAG_NAME" --yes || true
+            if gh release create "$TAG_NAME" \
+              "ReSync-${TAG_NAME}.apk" \
+              "ReSync-${TAG_NAME}.apk.sha256" \
+              "version.json" \
+              --title "ReSync ${TAG_NAME}" \
+              --notes-file "release_notes.md"; then
+              echo "Release $TAG_NAME criada com sucesso!"
+              break
+            fi
+
+            if [ $i -lt $MAX_ATTEMPTS ]; then
+              echo "Aviso: Falha ao criar a release (possível erro HTTP 5xx/502 da API do GitHub). Aguardando 15s antes da tentativa $((i + 1))..."
+              sleep 15
+            else
+              echo "Erro: Falha persistente ao criar a release após $MAX_ATTEMPTS tentativas."
+              exit 1
+            fi
+          done
 
       - name: Clean Up Keystore
         if: always()
