@@ -231,18 +231,51 @@ jobs:
           echo "=== version.json ==="
           cat version.json
 
+      - name: Upload APK and Checksums to Workflow Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ReSync-${{ env.TAG_NAME }}-release
+          path: |
+            ReSync-${{ env.TAG_NAME }}.apk
+            ReSync-${{ env.TAG_NAME }}.apk.sha256
+            version.json
+          retention-days: 7
+
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # 1) Exclui release existente apenas uma vez se já existir
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            echo "Release $TAG_NAME já existente encontrada. Excluindo antes de recriar..."
+            gh release delete "$TAG_NAME" --yes || true
+          fi
+
+          # 2) Garante que release_notes.md seja UTF-8 válido e truncado em tamanho seguro (<= 60 KB)
+          if [ ! -f "release_notes.md" ] || [ ! -s "release_notes.md" ]; then
+            echo "ReSync ${TAG_NAME}" > release_notes.md
+          else
+            python3 - << 'EOF'
+          import os
+          p = "release_notes.md"
+          if os.path.exists(p):
+              with open(p, "rb") as f:
+                  raw = f.read()
+              text = raw.decode("utf-8", errors="replace")
+              encoded = text.encode("utf-8")
+              if len(encoded) > 60000:
+                  print(f"Truncando release_notes.md de {len(encoded)} bytes para 60 KB...")
+                  encoded = encoded[:60000].decode("utf-8", errors="ignore").encode("utf-8")
+              with open(p, "wb") as f:
+                  f.write(encoded)
+          EOF
+          fi
+
+          # 3) Criação da release sem arquivos com retry (até 3 tentativas)
           MAX_ATTEMPTS=3
           for i in $(seq 1 $MAX_ATTEMPTS); do
-            echo "Tentativa $i de $MAX_ATTEMPTS para criar a release no GitHub..."
-            gh release delete "$TAG_NAME" --yes || true
+            echo "Tentativa $i de $MAX_ATTEMPTS para criar a release $TAG_NAME no GitHub..."
             if gh release create "$TAG_NAME" \
-              "ReSync-${TAG_NAME}.apk" \
-              "ReSync-${TAG_NAME}.apk.sha256" \
-              "version.json" \
               --title "ReSync ${TAG_NAME}" \
               --notes-file "release_notes.md"; then
               echo "Release $TAG_NAME criada com sucesso!"
@@ -250,10 +283,41 @@ jobs:
             fi
 
             if [ $i -lt $MAX_ATTEMPTS ]; then
-              echo "Aviso: Falha ao criar a release (possível erro HTTP 5xx/502 da API do GitHub). Aguardando 15s antes da tentativa $((i + 1))..."
+              echo "Aviso: Falha ao criar a release (possível erro HTTP 5xx/502). Aguardando 15s antes da tentativa $((i + 1))..."
               sleep 15
             else
               echo "Erro: Falha persistente ao criar a release após $MAX_ATTEMPTS tentativas."
+              GH_DEBUG=api gh release view "$TAG_NAME" || true
+              exit 1
+            fi
+          done
+
+      - name: Upload Release Assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RELEASE_FILES=(
+            "ReSync-${TAG_NAME}.apk"
+            "ReSync-${TAG_NAME}.apk.sha256"
+            "version.json"
+          )
+
+          DELAYS=(15 30 45)
+          MAX_ATTEMPTS=4
+          for i in $(seq 1 $MAX_ATTEMPTS); do
+            echo "Tentativa $i de $MAX_ATTEMPTS para enviar arquivos para a release $TAG_NAME..."
+            if gh release upload "$TAG_NAME" "${RELEASE_FILES[@]}" --clobber; then
+              echo "Todos os arquivos foram enviados com sucesso para a release $TAG_NAME!"
+              break
+            fi
+
+            if [ $i -lt $MAX_ATTEMPTS ]; then
+              DELAY=${DELAYS[$((i - 1))]}
+              echo "Aviso: Falha no upload dos arquivos (possível erro HTTP 5xx/502). Aguardando ${DELAY}s antes da tentativa $((i + 1))..."
+              sleep "$DELAY"
+            else
+              echo "Erro: Falha persistente no upload após $MAX_ATTEMPTS tentativas. Executando com GH_DEBUG=api para diagnóstico detalhado:"
+              GH_DEBUG=api gh release upload "$TAG_NAME" "${RELEASE_FILES[@]}" --clobber || true
               exit 1
             fi
           done
